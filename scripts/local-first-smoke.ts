@@ -6,6 +6,8 @@ import { microstripImpedance, suggestMicrostripWidth } from '../src/local/pcb';
 // Passive RF power conservation, relative to an ideal Thevenin source.
 const matched=optimizeImpedanceMatch({frequencyMHz:100,sourceOhms:50,loadOhms:50});
 assert.equal(matched.baselineDeliveredPowerFraction,1);
+assert.equal(matched.recommended,false,
+  'Do not recommend adding loss to an already ideal 50Ω matched connection.');
 assert.ok(matched.best.centerDeliveredPowerFraction<=1+1e-9);
 assert.ok(matched.best.centerDeliveredPowerFraction>=0);
 assert.ok(matched.tested>=200);
