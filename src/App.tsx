@@ -2776,6 +2776,8 @@ const HouseView = ({
   });
   const [sitePresetKey, setSitePresetKey] = useState('bendigo');
   const [siteOptimization, setSiteOptimization] = useState<SiteGeometryOptimizationResult | null>(null);
+  // Replayable design exploration without exposing another panel of knobs.
+  const [siteDesignSeed, setSiteDesignSeed] = useState(481516);
   const [siteOptimizationError, setSiteOptimizationError] = useState('');
   const [siteOptimizationRunning, setSiteOptimizationRunning] = useState(false);
   const [siteOptimizationApplied, setSiteOptimizationApplied] = useState(false);
@@ -3621,6 +3623,7 @@ const HouseView = ({
     setCoupledSiteFlowError('');
     try {
       const siteRequest = {
+          seed: siteDesignSeed,
           location: {
             name: siteOptimizationInputs.name,
             latitudeDeg: siteOptimizationInputs.latitudeDeg,
@@ -3898,7 +3901,7 @@ const HouseView = ({
     if (activePanel !== 'system' || rooms.length === 0) return;
     // Indoor target, design life, hazard requirements and every site field
     // must invalidate previous coupled results, not only latitude and area.
-    const key = JSON.stringify({ site: siteOptimizationInputs, rooms: systemRoomGeometryKey });
+    const key = JSON.stringify({ site: siteOptimizationInputs, seed: siteDesignSeed, rooms: systemRoomGeometryKey });
     if (systemAutoKeyRef.current === key) return;
     // Debounce successive changes rather than racing costly 1,800-form sweeps.
     const timer = window.setTimeout(() => {
@@ -3909,7 +3912,7 @@ const HouseView = ({
       void runSystemEvidence();
     }, 220);
     return () => window.clearTimeout(timer);
-  }, [activePanel, systemRoomGeometryKey, siteOptimizationInputs]);
+  }, [activePanel, systemRoomGeometryKey, siteOptimizationInputs, siteDesignSeed]);
 
   const selectedAirflowRoom = rooms.find(room => room.id === selectedAirflowRoomId) || rooms[0] || null;
   const selectedHeightProfile = thermalGrid?.heightProfiles?.find(profile => profile.roomId === selectedAirflowRoom?.id) || null;
@@ -4202,6 +4205,7 @@ const HouseView = ({
                     </select>
                     <button onClick={() => useCurrentLocationForSystem(false)} className="px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-[8px] font-bold text-cyan-200 uppercase">Use my location</button>
                     <button onClick={() => { systemAutoKeyRef.current = ''; void runSiteOptimization(); void runWholeHouseOptimization(); void runSystemEvidence(); }} disabled={siteOptimizationRunning || wholeHouseOptimizationRunning} className="px-3 py-2 rounded-lg bg-emerald-500 text-black disabled:bg-gray-700 disabled:text-gray-500 text-[8px] font-black uppercase">{siteOptimizationRunning || wholeHouseOptimizationRunning ? 'Sweeping…' : 'Re-run automatic sweep'}</button>
+                    <button onClick={() => setSiteDesignSeed(seed => (seed + 7919) % 2147483647)} disabled={siteOptimizationRunning || wholeHouseOptimizationRunning} className="px-3 py-2 rounded-lg border border-cyan-500/35 text-cyan-100 bg-cyan-500/10 disabled:opacity-40 text-[8px] font-black uppercase">Explore another design</button>
                     <button onClick={downloadSystemReport} disabled={!siteOptimization || !wholeHouseOptimization} className="px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-[8px] font-bold text-purple-200 uppercase disabled:opacity-40">Download JSON</button>
                     <button onClick={downloadSystemTextBrief} disabled={!wholeHouseOptimization} className="px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-[8px] font-bold text-cyan-200 uppercase disabled:opacity-40">Decision brief (.txt)</button>
                   </div>
@@ -4256,6 +4260,23 @@ const HouseView = ({
                             <div className="p-2 rounded-lg bg-black/30"><div className="text-[8px] text-gray-400">Lifecycle energy</div><strong className="text-[11px] text-cyan-200">{fmt(joint.selected.energy.totalLifecycleKWh)} kWh</strong></div>
                             <div className="p-2 rounded-lg bg-black/30"><div className="text-[8px] text-gray-400">Benefit vs site-only choice</div><strong className="text-[11px] text-cyan-200">{joint.lifecycleSavingsVsSiteOnlyChoiceKWh === null ? 'Not comparable' : `${fmt(joint.lifecycleSavingsVsSiteOnlyChoiceKWh)} kWh`}</strong></div>
                           </div>}
+                          {joint.selected && (() => {
+                            const polygons = joint.selected.site.footprintPolygons;
+                            const points = polygons.flat();
+                            const xs = points.map(point => point.x);
+                            const ys = points.map(point => point.y);
+                            const minX = Math.min(...xs);
+                            const minY = Math.min(...ys);
+                            const width = Math.max(1, Math.max(...xs) - minX);
+                            const height = Math.max(1, Math.max(...ys) - minY);
+                            return <div className="rounded-lg border border-cyan-500/20 bg-black/35 px-3 py-2">
+                              <div className="text-[8px] uppercase tracking-wider text-cyan-200 mb-1">Selected joint footprint · schematic, not surveyed</div>
+                              <svg role="img" aria-label="Selected joint building footprint geometry" viewBox={`${minX - 1} ${minY - 1} ${width + 2} ${height + 2}`} className="w-full h-[170px]">
+                                {polygons.map((polygon, index) => <polygon key={index} points={polygon.map(point => `${point.x},${point.y}`).join(' ')} fill="rgba(34,211,238,0.13)" stroke="rgb(103,232,249)" strokeWidth="0.15" />)}
+                              </svg>
+                              <div className="text-[8px] text-gray-400">{joint.selected.site.design.floorAreaM2.toFixed(1)} m² · orientation {joint.selected.site.design.orientationDeg.toFixed(0)}° · generated room areas adjusted to conserve floor area. Actual adjacency unverified.</div>
+                            </div>;
+                          })()}
                           <div className="space-y-1">
                             {joint.ranked.slice(0, 4).map((candidate, index) =>
                               <div key={index} className="flex flex-wrap gap-2 items-center justify-between border-t border-white/10 pt-1.5 text-[9px]">
