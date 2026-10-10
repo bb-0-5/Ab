@@ -38,7 +38,7 @@ export function buildWholeHouseDecisionBrief(result: WholeHouseOptimizationResul
     '',
     'DWELLING COMPARISON (ASSUMED EMBODIED FACTORS)',
     ...sorted.map((row, i) =>
-      `${i + 1}. ${row.label}: ${fmt(row.annualOperationalKWh)} kWh/year operational; ${fmt(row.lifecycleEnergyKWh)} kWh lifecycle; building factor ${fmt(row.embodiedKWhPerM2)} kWh/m2 [${row.embodiedEvidence.confidence}]`),
+      `${i + 1}. ${row.label}: ${fmt(row.annualOperationalKWh)} kWh/year operational; ${fmt(row.lifecycleEnergyKWh)} kWh lifecycle; gate ${row.feasible ? 'PASS' : 'FAIL'}; building factor ${fmt(row.embodiedKWhPerM2)} kWh/m2 [${row.embodiedEvidence.confidence}]`),
     '',
     'AUTOMATIC SEARCH COVERAGE',
     ...Object.entries(result.searchCoverage).map(([id, entry]) =>
