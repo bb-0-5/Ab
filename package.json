@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "start": "tsx server.ts",
+    "dev": "vite --host 0.0.0.0",
+    "start": "vite preview --host 0.0.0.0 --port 4173",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
@@ -26,10 +26,11 @@
     "test:weather": "tsx scripts/hourly-weather-smoke.ts",
     "test:site-weather": "tsx scripts/site-weather-parity-smoke.ts",
     "site-context:import": "tsx scripts/import-site-context.ts",
-    "test:all": "npm run lint && npm run test:sims && npm run test:optimizer && npm run test:site && npm run test:existing-home && npm run test:hvac-cycle && npm run test:adaptive-wall && npm run test:height-airflow && npm run test:airflow-network && npm run test:whole-house && npm run test:coupled-site && npm run test:one-page && npm run test:physics-validation && npm run test:site-context && npm run test:weather && npm run test:site-weather && npm run test:shared-site-model && npm run test:panel-coupling && npm run test:evidence-sources && npm run build",
+    "test:all": "npm run lint && npm run test:sims && npm run test:optimizer && npm run test:site && npm run test:existing-home && npm run test:hvac-cycle && npm run test:adaptive-wall && npm run test:height-airflow && npm run test:airflow-network && npm run test:whole-house && npm run test:coupled-site && npm run test:one-page && npm run test:physics-validation && npm run test:site-context && npm run test:weather && npm run test:site-weather && npm run test:shared-site-model && npm run test:panel-coupling && npm run test:evidence-sources && npm run test:local && npm run build",
     "test:shared-site-model": "tsx scripts/shared-site-model-smoke.ts",
     "test:panel-coupling": "tsx scripts/panel-coupling-smoke.ts",
-    "test:evidence-sources": "tsx scripts/evidence-sources-smoke.ts"
+    "test:evidence-sources": "tsx scripts/evidence-sources-smoke.ts",
+    "test:local": "tsx scripts/local-first-smoke.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
