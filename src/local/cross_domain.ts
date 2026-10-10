@@ -40,6 +40,7 @@ export interface Probe {
 export interface MaterialReport {
  condition:OperatingCondition;task:Task;targetDescription:string;
  totalCandidates:number;passingCandidates:number;
+ environmentHeatTransfer:ReturnType<typeof screenEnvironmentHeatExchange>;
  selected:MaterialOption|null;alternatives:MaterialOption[];
  unmetRequirements:string[];discoveries:Discovery[];crossDomain:Probe[];
  limitations:string[];
@@ -83,6 +84,35 @@ export function checkCondition(c:OperatingCondition):string|null {
   return 'No validated air-current model at this very low gas pressure.';
  return null;
 }
+/**
+ * Regime-specific dimensional illustration for 15 K surface-to-medium ΔT.
+ *  - vacuum: radiative flux σ ε [(T+15)^4 − T^4] (no convection)
+ *  - gas/liquid: h ΔT, illustrative heat-transfer coefficients depend on
+ *    flow speed, NOT CFD, Reynolds, Nusselt or phase-correct correlations.
+ * Surface temperature and emissivity are assumed; no energy credit is used
+ * to rank materials without independent performance data.
+ */
+export function screenEnvironmentHeatExchange(condition:OperatingCondition){
+ const issue=checkCondition(condition);
+ if(issue)return {regime:'unsupported' as const,
+   coefficientWm2K:null,heatFluxWm2:null,method:issue};
+ const deltaK=15,ambient=condition.temperatureK;
+ if(condition.medium==='vacuum'){
+  const sigma=5.670374419e-8,emissivity=.5;
+  return {regime:'thermal_radiation_only' as const,
+   coefficientWm2K:null,
+   heatFluxWm2:emissivity*sigma*((ambient+deltaK)**4-ambient**4),
+   method:'Black-body radiation times assumed emissivity 0.5 for +15 K surface; NO vacuum convection; view factor 1, no phase/evaporation model.'};
+ }
+ const h=condition.medium==='water'
+   ?120+80*Math.sqrt(condition.flowSpeedMs)
+   :5+8*Math.sqrt(condition.flowSpeedMs);
+ return {regime:condition.medium==='water'?'illustrative_water_convection' as const:
+   'illustrative_air_convection' as const,
+   coefficientWm2K:h,heatFluxWm2:h*deltaK,
+   method:'Only a heuristic heat-transfer coefficient versus flow speed. Not a validated Nusselt correlation, turbulence model or actual channel geometry.'};
+}
+
 export function defaultCondition(medium:Medium):OperatingCondition{
  return {medium,temperatureK:medium==='vacuum'?300:295,
   pressurePa:medium==='vacuum'?0.001:101325,
@@ -204,6 +234,7 @@ export function screenMembrane(c:OperatingCondition,task:Task,prior:Discovery[]=
    task==='thermal_barrier'?'Minimise thermal conduction':
     'Allow channel flow without unacceptable losses',
   totalCandidates:options.length,passingCandidates:passing.length,
+  environmentHeatTransfer:screenEnvironmentHeatExchange(c),
   selected:passing[0]||null,alternatives:options,
   unmetRequirements:conditionIssue?[conditionIssue]:
    passing.length?['Mechanical stress, assembly geometry, oxidation/corrosion and material certification not evaluated.']:
