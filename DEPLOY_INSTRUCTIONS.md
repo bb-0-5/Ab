@@ -22,19 +22,21 @@ Connect the GitHub repository `bb-0-5/Ab` to Cloudflare Pages; set:
 - output directory: `dist`
 - no runtime environment variables needed for device-only operation
 
-Before linking `abovebound.org`, verify a `*.pages.dev` preview:
+Before any further production changes, verify the `abovebound.pages.dev` deployment:
 single page loads, Worker script loads, building/impedance/probability
 runs finish and local history reloads across refresh. Then install the
 owner-only Supabase migration in the correct, intentionally selected
 project and test two separate authenticated identities.
 
-**Do not point the apex hostname to Pages while the old Cloudflare Tunnel
-is the only working production origin.** Plan DNS cutover after backups.
-The previous app's Docker volume `discovery_memory.json` is NOT
-automatically migrated. Export it and independently verify records
-before retiring AWS. Removing AWS-oriented files from this repository
-does not stop or delete any cloud resources, routes or billable volumes.
-Stop/retire those separately after successful static deployment.
+**Cutover status (2026-10-11 Melbourne):** The Pages Git build succeeded,
+`www.abovebound.org` was marked active by Pages, and both public hostname
+DNS records were pointed at `abovebound.pages.dev`. The apex certificate
+validation may take more time. This is a DNS cutover only; the previous app's
+Docker volume `discovery_memory.json` is NOT migrated. Export and check
+legacy records before terminating the old AWS origin. Removing AWS-oriented
+files from this repository does not stop or delete cloud resources, routes,
+or billable volumes. Old Tunnel target:
+`07e7a1e0-a9f8-44d9-92e0-3b36dccf44ae.cfargotunnel.com`.
 
 ## Security
 Only publishable Supabase keys are accepted in the optional cloud UI;
