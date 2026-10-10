@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import BuildingProgress from './BuildingProgress';
 import EvidenceVisualizer from './EvidenceVisualizer';
+import ResearchBoard from './ResearchBoard';
 import {advanceSeed,addBuildingRun,buildingKey,loadCampaign,saveCampaign,weatherFingerprint,
  type BuildingCampaign,type BuildingRun} from './building_campaign';
 import type { MatchReport } from './impedance';
@@ -269,6 +270,16 @@ export default function LocalApp(){
   start('building',{seed:seeds[0]});
  };
  const reseed=()=>{const next=campaign.nextSeed;setSeed(next);start('building',{seed:next});};
+ const runResearch=(next:Goal)=>{
+  stop();setGoal(next);setResult(null);setResultGoal(null);
+  setStatus(`Checking ${next} constraints using this device…`);
+  // React first changes the visible domain; the next task starts after paint
+  // with the current controls and the new goal rather than stale state.
+  setTimeout(()=>{if(selectionRef.current.goal===next){
+   const input=next==='building'?{seed:loadCampaign(selectionRef.current.key,seed).nextSeed}:undefined;
+   startRef.current(next,input);
+  }},30);
+ };
  const uploadFile=async(e:React.ChangeEvent<HTMLInputElement>)=>{
   const file=e.target.files?.[0];if(!file)return;
   if(file.size>5*1024*1024){setStatus('Choose an EPW under 5 MB.');return;}
@@ -688,6 +699,8 @@ export default function LocalApp(){
        setStatus('Select constraints, then run the calculation.');}}/>
     </div>
    </details>
+   <ResearchBoard history={history} findings={findings}
+    working={working} active={goal} onRun={runResearch}/>
    <details className="rounded-2xl border border-white/10 bg-[#0b1720] p-5">
     <summary className="cursor-pointer text-sm font-bold text-cyan-100">Show the cross-domain system map · conceptual view</summary>
     <p className="mt-2 text-xs text-slate-400">This optional view illustrates links between domains. It is not a measured CFD, electrical or chemical field.</p>
