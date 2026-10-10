@@ -4003,8 +4003,9 @@ const HouseView = ({
           every panel. Panels previously held their own copies, so their
           "% lifecycle saving" headlines were computed over different horizons
           and shown side by side as if comparable. */}
-      <div className="mb-4 rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-3">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+      <details className="mb-4 rounded-lg border border-cyan-500/15 bg-cyan-500/[0.02] p-3">
+        <summary className="cursor-pointer text-[10px] text-gray-400">Advanced model settings and shared assumptions</summary>
+        <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="text-[10px] font-black uppercase tracking-wider text-cyan-300">
             Shared site model &bull; applies to every panel
           </div>
@@ -4063,9 +4064,9 @@ const HouseView = ({
             </div>
           </div>
         )}
-      </div>
+      </details>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className={activePanel === 'system' ? 'hidden' : 'flex items-center justify-between mb-6'}>
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center border border-emerald-500/30">
             <Box size={24} className="text-emerald-400" />
