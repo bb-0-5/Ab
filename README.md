@@ -43,6 +43,35 @@ unit/sign/conservation/repeatability checks. Passing these checks qualifies the 
 for comparative screening only; it does not mean the model has passed ASHRAE Standard
 140, BESTEST, certified CFD, an energy rating or building approval.
 
+## What the automatic Whole System recommendation actually means
+
+The optimizer now distributes any bounded candidate budget **evenly across all
+four dwelling archetypes**, instead of silently using the entire short budget on
+detached houses. The API reports how many alternatives were evaluated and passed
+the project-defined comfort/noise/airflow constraints for each form.
+
+It also includes an **81-case embodied-energy assumption stress test**: each
+dwelling type's unsourced construction-energy allowance is independently set to
+75%, 100% or 125% of its current provisional figure (3⁴ combinations). The
+reported winning-archetype counts tell you whether the selected first-place
+dwelling depends on those choices. These are deliberately chosen WHAT-IF
+perturbations, **not statistical uncertainty ranges or probabilities**.
+
+The Whole System page shows a clear warning when the winner changes across the
+scenarios or when some dwelling types have no feasible candidate. The JSON
+download includes coverage and stress data, and the new **Decision brief (.txt)**
+button produces a readable, reproducible comparison with limits and needed
+evidence. Neither output is a real-world building recommendation, thermal
+certificate or construction approval.
+
+For a genuinely actionable optimisation, the remaining work is substantial:
+obtain exact property geometry and hour-by-hour local weather; replace unverified
+structure allowances with comparable EPD-based bills of quantities; model real
+apartment adjacency and occupancy; and compare thermal/airflow performance against
+independent reference cases. An apparent win that disappears when assumed
+manufacturing factors change is a finding about the assumptions, **not** a
+verified energy saving.
+
 ## Room and airflow lifecycle optimizer
 
 Open **House → Lifecycle Optimize** to choose a real V12 room and search its room
