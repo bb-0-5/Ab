@@ -12,7 +12,7 @@ import { runExistingHomeAutopilot } from "./src/lib/existing_home_autopilot";
 import { optimizeHvacCycle, type HvacCycleStrategy } from "./src/lib/hvac_cycle_optimizer";
 import { discoverAdaptiveWall, type AdaptiveWallStrategy } from "./src/lib/adaptive_wall_optimizer";
 import { optimizeRoomLifecycle } from "./src/lib/room_lifecycle_optimizer";
-import { optimizeSiteGeometry, evaluateSiteHouseDesign, evaluateSiteReference, SITE_LOCATION_PRESETS, type SiteHouseDesign, type SiteGeometryOptimizationInput } from "./src/lib/site_geometry_optimizer";
+import { optimizeSiteGeometry, evaluateSiteHouseDesign, evaluateSiteReference, assertSiteDesignWellFormed, SITE_LOCATION_PRESETS, type SiteHouseDesign, type SiteGeometryOptimizationInput } from "./src/lib/site_geometry_optimizer";
 import { screenCoupledSiteAirflow, searchCoupledSiteMechanicalPortfolio } from "./src/lib/site_whole_house_coupling";
 import { optimizeWholeHouseSystem } from "./src/lib/whole_house_optimizer";
 import { runBuildingPhysicsValidation, type BuildingPhysicsValidationReport } from "./src/lib/building_physics_validation";
@@ -771,6 +771,7 @@ async function startServer() {
       // geometry. Artificially energy-hungry baselines must not create fake
       // lifecycle savings.
       const baseline = evaluateSiteReference(siteInput);
+      assertSiteDesignWellFormed(req.body.proposedDesign);
       const best = evaluateSiteHouseDesign(req.body.proposedDesign, siteInput);
       const location = { ...SITE_LOCATION_PRESETS.custom, ...(siteInput.location || {}) };
       const coupled = screenCoupledSiteAirflow({ location, baseline, best }, {
@@ -783,8 +784,10 @@ async function startServer() {
       const submitted = Array.isArray(req.body?.candidateDesigns)
         ? req.body.candidateDesigns.slice(0, 12)
         : [];
-      const candidates = submitted.map((design: SiteHouseDesign) =>
-        evaluateSiteHouseDesign(design, siteInput));
+      const candidates = submitted.map((design: unknown) => {
+        assertSiteDesignWellFormed(design);
+        return evaluateSiteHouseDesign(design, siteInput);
+      });
       const jointSearch = searchCoupledSiteMechanicalPortfolio(
         { location, baseline, best }, candidates, {
           lifecycleYears: siteInput.lifecycleYears,
