@@ -8,6 +8,7 @@ import { optimizeSiteGeometry, SITE_LOCATION_PRESETS, type SiteGeometryOptimizat
 import { screenCoupledSiteAirflow, searchCoupledSiteMechanicalPortfolio } from '../lib/site_whole_house_coupling';
 import { parseEpwTemperatureProfile, weatherStationDistanceKm } from '../lib/hourly_weather';
 import { optimizeImpedanceMatch } from './impedance';
+import { optimizeFabricationPortfolio, type CostumeGoal } from './fabrication';
 import { optimizeRouteSelectivity } from './selectivity';
 import { calibrateKnownYields,parseKnownYieldsCSV,screenHypotheticalBarriers } from './kinetics';
 import {
@@ -26,7 +27,11 @@ type ChemistryRequest=SharedRequest&{id:number;mode:'chemistry';minimumAcceptedF
   knownYieldsCSV?:string;reactionId?:string;
   condition?:OperatingCondition;timeS?:number};
 type MembraneRequest=SharedRequest&{id:number;mode:'membrane';condition:OperatingCondition;task:Task};
-type WorkerRequest=BuildRequest|CircuitRequest|ChemistryRequest|MembraneRequest;
+type SuitRequest=SharedRequest&{id:number;mode:'suit';
+  condition:OperatingCondition;printGoal:CostumeGoal;partWidthMm:number;partLengthMm:number;
+  printerBedXmm:number;printerBedYmm:number;budgetAUD:number;filamentPriceAUDkg:number;
+  minSectionIndexMm4:number};
+type WorkerRequest=BuildRequest|CircuitRequest|ChemistryRequest|MembraneRequest|SuitRequest;
 const context=self as unknown as DedicatedWorkerGlobalScope;
 context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
  const request=e.data;
@@ -35,6 +40,30 @@ context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
   const prior=Array.isArray(request.discoveries)?request.discoveries.slice(0,24).filter(
    d=>d&&typeof d==='object'&&typeof d.id==='string'&&d.condition&&!checkCondition(d.condition)
   ):[];
+  if(request.mode==='suit'){
+    if(checkCondition(request.condition))throw Error(checkCondition(request.condition)||'Invalid suit operating conditions.');
+    const printable=optimizeFabricationPortfolio({
+      goal:request.printGoal,widthMm:request.partWidthMm,lengthMm:request.partLengthMm,
+      printerBedXmm:request.printerBedXmm,printerBedYmm:request.printerBedYmm,
+      budgetAUD:request.budgetAUD,filamentPriceAUDkg:request.filamentPriceAUDkg,
+      minimumRibWidthMm:8,minimumSectionIndexMm4:request.minSectionIndexMm4,
+      ambientTemperatureK:request.condition.temperatureK,
+    });
+    const complete=request.condition.medium==='air'?printable:{
+      ...printable,selected:null,feasibleForDecorativePrint:false,
+      missingConstraints:[...printable.missingConstraints,
+        'This FDM costume panel workflow does not validate printed polymer fabrication or operating suitability in vacuum/water.'],
+    };
+    const visualNeed=membraneNeed(request.condition,'heat_spreader');
+    const crossDomain=[...prior,visualNeed].slice(0,20).flatMap(d=>probeDiscovery(d,request.condition));
+    context.postMessage({id:request.id,kind:'result',mode:'suit',result:{
+      ...complete,condition:request.condition,
+      discoveries:[visualNeed],crossDomain,
+      useCaseSweep:searchDiscoveryUseCases([...prior,visualNeed],12),
+      priorDiscoveriesTested:prior.length,
+    }});
+    return;
+  }
   if(request.mode==='membrane'){
    const report=screenMembrane(request.condition,request.task,prior);
    const useCaseSweep=searchDiscoveryUseCases([...prior,...report.discoveries].slice(0,16),12);
