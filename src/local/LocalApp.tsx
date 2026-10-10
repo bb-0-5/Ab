@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import BuildingProgress from './BuildingProgress';
+import {advanceSeed,addBuildingRun,buildingKey,loadCampaign,saveCampaign,weatherFingerprint,
+ type BuildingCampaign,type BuildingRun} from './building_campaign';
 import type { MatchReport } from './impedance';
 import { panelSTL, type FabResult } from './fabrication';
 import UnifiedOverlay, {type VisualGoal,type VisualMetrics} from './UnifiedOverlay';
@@ -39,7 +42,10 @@ type BuildingResult={
     heatRecoveryPercent:number;annualElectricityKWh:number;lifecycleKWh:number;
     manufacturedKWh:number;geometry:Array<Array<{x:number;y:number}>>;feasible:boolean};
   comparisonSupported:boolean;qualifiesAsImprovement:boolean;
-  savingsVsBaselineKWh:number|null;explanation:string;limitations:string[];
+  savingsVsBaselineKWh:number|null;baselineLifecycleKWh?:number;
+  scenarios?:Array<{form:string;areaM2:number;annualElectricalKWh:number;
+   totalLifecycleKWh:number;airflowControl:string;heatRecoveryEfficiency:number;eligible:boolean}>;
+  explanation:string;limitations:string[];
 };
 type Result=BuildingResult|MatchReport|ChemistryResult|MaterialReport|FabResult;
 type WorkerMessage={id:number;kind:'progress'|'error'|'result';mode?:Goal;message?:string;error?:string;result?:Result};
@@ -118,19 +124,31 @@ export default function LocalApp(){
  const [status,setStatus]=useState('Ready to optimise on this device.');
  const [working,setWorking]=useState(false);
  const [history,setHistory]=useState<MemoryEntry[]>(()=>loadDeviceResults());
+ const [campaign,setCampaign]=useState<BuildingCampaign>(()=>
+  loadCampaign(buildingKey('melbourne',130,22,'preset'),481516));
+ const [batch,setBatch]=useState({total:0,completed:0});
+ const queueRef=useRef<number[]>([]);
+ const startRef=useRef<(mode:Goal,overrides?:{seed?:number})=>void>(()=>{});
+ const selectionRef=useRef({key:'',goal:'building' as Goal});
+ const mountedKeyRef=useRef(false);
  const [cloudUrl,setCloudUrl]=useState(()=>cloudConfig()?.url||'');
  const [cloudKey,setCloudKey]=useState(()=>cloudConfig()?.publishableKey||'');
  const [cloudStatus,setCloudStatus]=useState(isCloudConnected()?'Cloud session stored locally.':'Not connected; device memory only.');
  const [cloudOn,setCloudOn]=useState(isCloudConnected());
  const worker=useRef<Worker|null>(null);
  const requestId=useRef(0);
+ const weatherId=useMemo(()=>weatherFingerprint(epwText),[epwText]);
+ const searchKey=buildingKey(preset,area,temperature,weatherId);
+ selectionRef.current={key:searchKey,goal};
  const start=useCallback((mode:Goal,overrides?:{seed?:number})=>{
   worker.current?.terminate();
   const instance=new Worker(new URL('./compute.worker.ts',import.meta.url),{type:'module'});
   worker.current=instance;
   const id=++requestId.current;
+  const runSeed=overrides?.seed??seed;
+  const runKey=buildingKey(preset,area,temperature,weatherId);
   setWorking(true);setStatus('Starting a local calculation…');
-  setResult(null);setResultGoal(null);
+  // Keep the last completed result visible while the next search runs.
   const condition:OperatingCondition={medium,temperatureK:operatingK,pressurePa,flowSpeedMs:airflow};
   const prior=extractDiscoveriesFromHistory(loadDeviceResults(),24);
   const input:Record<string,string|number>=mode==='building'
@@ -149,11 +167,24 @@ export default function LocalApp(){
    if(m.id!==requestId.current)return;
    if(m.kind==='progress'){setStatus(m.message||'Evaluating candidates…');return;}
    setWorking(false);
-   if(m.kind==='error'){setStatus(m.error||'Calculation failed.');return;}
+   if(m.kind==='error'){
+    queueRef.current=[];setBatch({total:0,completed:0});
+    setStatus(m.error||'Calculation failed.');return;
+   }
    if(!m.result)return;
    const value=m.result;
-   setResult(value);setResultGoal(mode);
-   setStatus('Completed locally. No server performed this calculation.');
+   const stillSelected=selectionRef.current.goal===mode
+    &&(mode!=='building'||selectionRef.current.key===runKey);
+   if(mode==='building'){
+    const updated=addBuildingRun(loadCampaign(runKey,runSeed),
+     value as BuildingRun,runSeed,new Date().toISOString());
+    saveCampaign(updated);
+    if(stillSelected)setCampaign(updated);
+   }
+   if(stillSelected){
+    setResult(value);setResultGoal(mode);
+    setStatus('Trial complete. Results were screened on this device.');
+   }
    const name=mode==='building'
     ?`${LOCALES[preset]||preset} · ${area} m² · seed ${overrides?.seed??seed}`
     :mode==='circuits'?`${frequency} MHz · ${source} → ${load} Ω`
@@ -164,9 +195,19 @@ export default function LocalApp(){
     id:crypto.randomUUID(),mode,label:name,input,
     savedAt:new Date().toISOString(),result:value,
    };
-   setHistory(saveDeviceResult(entry));
-   if(cloudOn){void uploadCloud(entry).catch(err=>setCloudStatus(
-    'Result saved on device, but cloud backup failed: '+(err instanceof Error?err.message:String(err))));}
+   if(stillSelected){
+    setHistory(saveDeviceResult(entry));
+    if(cloudOn){void uploadCloud(entry).catch(err=>setCloudStatus(
+     'Result saved on device, but cloud backup failed: '+(err instanceof Error?err.message:String(err))));}
+   }
+   if(mode==='building'&&stillSelected&&queueRef.current.length){
+    const next=queueRef.current.shift()!;
+    setBatch(p=>({...p,completed:p.completed+1}));
+    setTimeout(()=>{if(selectionRef.current.key===runKey
+      &&selectionRef.current.goal==='building')startRef.current('building',{seed:next});},80);
+   }else if(mode==='building'){
+    setBatch(p=>p.total?{...p,completed:Math.min(p.total,p.completed+1)}:p);
+   }
   };
   instance.onerror=e=>{if(id!==requestId.current)return;setWorking(false);
    setStatus('Local worker error: '+(e.message||'Failed to load computation.'))};
@@ -175,11 +216,37 @@ export default function LocalApp(){
     ...((mode==='chemistry'||mode==='membrane'||mode==='suit')?{condition}:{}),
     ...(mode==='chemistry'&&knownYieldsCSV?{knownYieldsCSV}:{}),
   });
- },[preset,area,temperature,seed,frequency,source,load,minimumAccepted,epwText,cloudOn,
+ },[preset,area,temperature,seed,frequency,source,load,minimumAccepted,epwText,weatherId,cloudOn,
    medium,operatingK,pressurePa,airflow,membraneTask,knownYieldsCSV,reactionId,durationS,
    partWidthMm,partLengthMm,printerBedXmm,printerBedYmm,filamentCostAUDkg,printBudgetAUD,minimumSectionIndexMm4]);
- useEffect(()=>{start('building');return()=>worker.current?.terminate();},[]); // initial simulation only
- const reseed=()=>{const next=(seed+7919)%2147483647;setSeed(next);start('building',{seed:next});};
+ startRef.current=start;
+ // One initial design; extra trials are bounded so mobile visitors control CPU use.
+ useEffect(()=>{startRef.current('building');return()=>{
+  queueRef.current=[];requestId.current++;worker.current?.terminate();
+ };},[]);
+ useEffect(()=>{
+  if(!mountedKeyRef.current){mountedKeyRef.current=true;return;}
+  queueRef.current=[];setBatch({total:0,completed:0});
+  setCampaign(loadCampaign(searchKey,seed));
+  if(selectionRef.current.goal==='building'){
+   worker.current?.terminate();requestId.current++;setWorking(false);
+   setResult(null);setResultGoal(null);
+   setStatus('Design inputs changed. Run a new comparison for these conditions.');
+  }
+ },[searchKey]);
+ const stop=()=>{
+  queueRef.current=[];requestId.current++;worker.current?.terminate();
+  setWorking(false);setBatch({total:0,completed:0});
+  setStatus('Stopped. Your completed designs remain stored on this device.');
+ };
+ const continueBuilding=()=>{
+  if(working)return;
+  const seeds:number[]=[];let next=campaign.nextSeed;
+  for(let i=0;i<5;i++){seeds.push(next);next=advanceSeed(next);}
+  queueRef.current=seeds.slice(1);setBatch({total:5,completed:0});
+  start('building',{seed:seeds[0]});
+ };
+ const reseed=()=>{const next=campaign.nextSeed;setSeed(next);start('building',{seed:next});};
  const uploadFile=async(e:React.ChangeEvent<HTMLInputElement>)=>{
   const file=e.target.files?.[0];if(!file)return;
   if(file.size>5*1024*1024){setStatus('Choose an EPW under 5 MB.');return;}
@@ -281,15 +348,15 @@ export default function LocalApp(){
      Describe the goal. Let your computer explore the configurations.
     </h2>
     <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-300">
-     Physics-informed screening for building designs and passive RF interfaces;
-     a separate probability demonstration tests when eliminating unwanted pathways
-     helps selectivity but hurts throughput. No remote calculation server.
+     Choose a problem, compare feasible designs and keep improving the result.
+     Your device performs the calculations; every result shows what was tested,
+     what is uncertain, and what evidence would make it more realistic.
     </p>
     <div className="mt-6 flex flex-wrap items-end gap-3">
      <label className="block w-full max-w-sm text-xs text-slate-300">
       What are we optimising?
       <select aria-label="Optimisation goal" value={goal}
-       onChange={e=>{setGoal(e.target.value as Goal);setResult(null);setResultGoal(null)}}
+       onChange={e=>{stop();setGoal(e.target.value as Goal);setResult(null);setResultGoal(null)}}
        className="mt-2 w-full rounded-xl border border-slate-600 bg-[#0a1821] p-3 text-sm text-white">
        <option value="building">A building — solar, shape and ventilation</option>
        <option value="circuits">An electronic interface — passive impedance matching</option>
@@ -584,6 +651,22 @@ export default function LocalApp(){
      {!result&&!working&&<p className="mt-3 text-sm text-slate-400">Choose a domain and run a sweep. Results are saved locally, even without an account.</p>}
    </section>
 
+   <details className="rounded-2xl border border-white/10 bg-[#0b1720] p-5">
+    <summary className="cursor-pointer text-sm font-bold text-cyan-100">
+     Explore the connected simulations · illustrative system map
+    </summary>
+    <p className="mt-2 text-xs text-slate-400">A conceptual network, not a measured physical field. Select a node to switch to its own calculations.</p>
+    <div className="mt-4">
+     <UnifiedOverlay goal={goal} condition={operatingCondition} findings={findings}
+      metrics={visualMetrics} budgetAUD={printBudgetAUD}
+      frontier={selectedSuit?.alternatives.map(x=>({
+       cost:x.estimatedTotalCostAUD,section:x.sectionIndexMm4,
+       acceptable:x.printable,material:x.material,
+      }))||[]}
+      onSelectGoal={next=>{stop();setGoal(next);setResult(null);setResultGoal(null);
+       setStatus('Select constraints, then run the calculation.');}}/>
+    </div>
+   </details>
    <section className="rounded-2xl border border-white/10 bg-[#0b1720] p-5">
     <details>
      <summary className="cursor-pointer text-sm font-semibold text-cyan-100">Shared discovery memory · {findings.length} hypotheses / {history.length} local runs</summary>
