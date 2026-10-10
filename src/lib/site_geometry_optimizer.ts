@@ -793,6 +793,36 @@ export function evaluateSiteHouseDesign(design: SiteHouseDesign, rawInput: SiteG
  * baseline encoded by the current site input. Never accept a browser-posted
  * arbitrary "baseline" whose inflated energy could manufacture savings.
  */
+/**
+ * Public HTTP geometry input guard. This is structural validation, NOT code
+ * compliance or a surveyed-building check. Prevent NaN/infinite or malicious
+ * exotic geometry values from contaminating a supposedly numeric ranking.
+ */
+export function assertSiteDesignWellFormed(value: unknown): asserts value is SiteHouseDesign {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Site design must be an object.');
+  }
+  const d = value as Record<string, unknown>;
+  if (!['rectangle', 'elongated', 'l_shape', 'courtyard'].includes(String(d.form))
+    || !['braced_timber', 'reinforced_masonry', 'steel_frame'].includes(String(d.structuralSystem))
+    || !['standard', 'enhanced', 'hardened'].includes(String(d.resilientShell))) {
+    throw new Error('Site geometry has an unsupported form, structure or resilience shell.');
+  }
+  const limits: Record<string, [number, number]> = {
+    orientationDeg: [0, 360], floorAreaM2: [30, 600],
+    widthM: [1, 200], depthM: [1, 300], ceilingHeightM: [2, 5],
+    wingRatio: [0.2, 0.8], eaveEquatorM: [0, 3], eaveOtherM: [0, 3],
+    roofPitchDeg: [0, 65], equatorGlazingRatio: [0, 0.6],
+    otherGlazingRatio: [0, 0.6], floorElevationM: [0, 8],
+  };
+  for (const [field, [low, high]] of Object.entries(limits)) {
+    if (typeof d[field] !== 'number' || !Number.isFinite(d[field])
+      || (d[field] as number) < low || (d[field] as number) > high) {
+      throw new Error(`Site design has invalid ${field}.`);
+    }
+  }
+}
+
 export function evaluateSiteReference(rawInput: SiteGeometryOptimizationInput): EvaluatedSiteHouseDesign {
   const input = normalizeInput(rawInput);
   return evaluateNormalized(input.baseline, input, buildSolarSamples(input.location));
