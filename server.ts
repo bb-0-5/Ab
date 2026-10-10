@@ -16,6 +16,7 @@ import { optimizeSiteGeometry, type SiteHouseDesign } from "./src/lib/site_geome
 import { optimizeWholeHouseSystem } from "./src/lib/whole_house_optimizer";
 import { runBuildingPhysicsValidation, type BuildingPhysicsValidationReport } from "./src/lib/building_physics_validation";
 import { buildAutomaticSiteContext, makeSiteContextCacheKey, type GeoJsonFeatureCollection } from "./src/lib/site_context";
+import { parseEpwTemperatureProfile, weatherStationDistanceKm, type EpwTemperatureProfile } from "./src/lib/hourly_weather";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,6 +24,47 @@ const DATA_DIR = path.resolve(process.env.DATA_DIR || __dirname);
 const MEMORY_FILE = path.join(DATA_DIR, "discovery_memory.json");
 const SITE_CONTEXT_DIR = path.join(DATA_DIR, "site-context");
 const BUNDLED_SITE_CONTEXT_DIR = path.join(__dirname, "site-context-cache");
+const MAX_EPW_STATION_DISTANCE_KM = 75;
+
+// Only an operator-supplied local file is eligible; HTTP requests cannot
+// choose a path or supply synthetic hourly temperatures. The cache invalidates
+// when a site operator replaces the file. No weather file is committed.
+let cachedEpw: { filePath: string; mtimeMs: number; size: number; profile: EpwTemperatureProfile } | null = null;
+function hourlyWeatherForSite(location: { latitudeDeg: number; longitudeDeg: number }): {
+  profile: EpwTemperatureProfile | null;
+  stationDistanceKm: number | null;
+  fallbackReason?: string;
+} {
+  const configuredFile = process.env.ABOVEBOUND_EPW_FILE?.trim();
+  if (!configuredFile) return { profile: null, stationDistanceKm: null };
+  try {
+    const filePath = path.resolve(DATA_DIR, configuredFile);
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile() || stat.size > 5_000_000) {
+      return { profile: null, stationDistanceKm: null, fallbackReason: 'EPW file is missing or over 5 MB.' };
+    }
+    if (!cachedEpw || cachedEpw.filePath !== filePath || cachedEpw.mtimeMs !== stat.mtimeMs || cachedEpw.size !== stat.size) {
+      const profile = parseEpwTemperatureProfile(fs.readFileSync(filePath, 'utf8'));
+      cachedEpw = { filePath, mtimeMs: stat.mtimeMs, size: stat.size, profile };
+    }
+    const profile = cachedEpw.profile;
+    const stationDistanceKm = weatherStationDistanceKm(
+      profile.stationLatitudeDeg, profile.stationLongitudeDeg,
+      location.latitudeDeg, location.longitudeDeg,
+    );
+    if (stationDistanceKm > MAX_EPW_STATION_DISTANCE_KM) {
+      return {
+        profile: null,
+        stationDistanceKm,
+        fallbackReason: `Configured EPW station is ${Math.round(stationDistanceKm)} km from the requested site (75 km screening limit).`,
+      };
+    }
+    return { profile, stationDistanceKm };
+  } catch {
+    // A corrupt configured file must not masquerade as valid hourly evidence.
+    return { profile: null, stationDistanceKm: null, fallbackReason: 'Configured EPW could not be read or validated.' };
+  }
+}
 const MAX_MEMORY_NODES = 2048;
 const MAX_DISCOVERY_LOG = 500;
 const MAX_ANONYMOUS_WORKSPACES = 5000;
@@ -730,9 +772,19 @@ async function startServer() {
         cachedGeoJson: cachedGeoJsonForLocation(location.latitudeDeg, location.longitudeDeg),
         searchRadiusM: 120,
       });
+      const weather = hourlyWeatherForSite(location);
       const result = optimizeWholeHouseSystem({
         ...(req.body || {}),
         location,
+        // Never accept client-supplied temperature vectors, source claims or
+        // fallback text; only the validated operator-controlled file is used.
+        hourlyOutdoorTemperaturesC: weather.profile?.outdoorTemperaturesC,
+        hourlyWeatherSource: weather.profile ? {
+          stationName: weather.profile.stationName,
+          source: weather.profile.source,
+          stationDistanceKm: weather.stationDistanceKm!,
+        } : undefined,
+        weatherFallbackReason: weather.fallbackReason,
         siteObstruction: siteContext.neighbours.length ? {
           summerShadePotentialPercent: siteContext.solarObstruction.summerShadePotentialPercent,
           winterSolarAccessPercent: siteContext.solarObstruction.winterSolarAccessPercent,
@@ -752,6 +804,7 @@ async function startServer() {
           winningControl: result.best.configuration.control,
           lifecycleEnergySavedPercent: result.improvement.lifecycleEnergySavedPercent,
           annualOperationalEnergySavedKWh: result.improvement.annualOperationalEnergySavedKWh,
+          weatherMode: result.weatherContext.mode,
         },
         state: { input: req.body || {}, result },
       });
