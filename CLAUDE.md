@@ -74,6 +74,17 @@ release `20260826-074205`.
 - `Dockerfile`, `compose.yaml`, `DEPLOY_INSTRUCTIONS.md`: AWS EC2 + Docker + Cloudflare
   Tunnel deployment.
 
+## Joint selection iteration
+
+The site optimizer returns `feasibleShortlist` (at most 12 feasible,
+equivalent-area diverse examples). The linked site/airflow server route
+re-evaluates all received geometry using current site inputs, runs
+`searchCoupledSiteMechanicalPortfolio` with balanced airflow controls and
+returns `jointSearch` in the result. This is a bounded reranking of a
+geometry portfolio (not global co-optimisation). Keep server validation,
+no-overlap lifecycle accounting and the UI distinction between site-only
+rendered geometry and joint selected geometry.
+
 ## New coupled screening boundary
 
 The House → Whole System page now requests
