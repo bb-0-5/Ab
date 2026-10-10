@@ -33,6 +33,8 @@ export interface MatchReport {
  baselineDeliveredPowerFraction:number;
  best:MatchCandidate;
  tested:number;
+ recommended:boolean;
+ recommendationReason:string;
  microstripExample:MicrostripExample;
  limitations:string[];
 }
@@ -112,6 +114,10 @@ export function optimizeImpedanceMatch(input:{frequencyMHz:number;sourceOhms:num
  if(!best)throw new Error('No passive candidate generated.');
  return {requested:{frequencyMHz,sourceOhms:rs,loadOhms:rl,bandFraction:bandwidth},
   baselineDeliveredPowerFraction:baseline,best,tested,
+  recommended:best.bandAveragePowerFraction>baseline+0.005,
+  recommendationReason:best.bandAveragePowerFraction>baseline+0.005
+    ? 'Screened L network transfers more average power than a direct resistive termination under assumed component Q and bandwidth.'
+    : 'Do not add an L matching network: none of the tested parts beats the direct connection under these assumptions.',
   microstripExample:suggestMicrostripWidth(rs>=20&&rs<=150?rs:50),
   limitations:[
    '2-element L matching with assumed constant component Q=40 (L) and Q=80 (C); E12 values are examples, not rated parts.',
