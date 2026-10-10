@@ -151,6 +151,11 @@ export interface SiteGeometryOptimizationResult {
   best: EvaluatedSiteHouseDesign;
   sunPath: SunPathPoint[];
   candidatesEvaluated: number;
+  /**
+   * Small, deterministic, feasible and roughly equivalent-area portfolio for
+   * downstream coupled mechanical search. Not an exhaustive Pareto frontier.
+   */
+  feasibleShortlist: EvaluatedSiteHouseDesign[];
   improvement: {
     qualifiesAsImprovement: boolean;
     annualOperationalEnergySavedKWh: number;
@@ -805,25 +810,58 @@ export function optimizeSiteGeometry(rawInput: SiteGeometryOptimizationInput = {
   const baseline = evaluateNormalized(input.baseline, input, samples);
   let best: EvaluatedSiteHouseDesign | null = baseline.feasible ? baseline : null;
   let candidatesEvaluated = 1;
-
-  for (const learnedDesign of input.learnedDesigns) {
-    const candidate = evaluateNormalized(learnedDesign, input, samples);
-    candidatesEvaluated++;
+  const shortlistByForm = new Map<HouseForm, EvaluatedSiteHouseDesign[]>();
+  const shortlistLimitPerForm = 3;
+  const baselineAreaM2 = baseline.design.floorAreaM2;
+  const consider = (candidate: EvaluatedSiteHouseDesign) => {
     if (candidate.feasible && (!best || candidate.score < best.score)) best = candidate;
+    // The mechanical objective must compare roughly equal-service dwellings,
+    // not award a "saving" for simply shrinking the home by 20%.
+    if (!candidate.feasible || Math.abs(candidate.design.floorAreaM2 - baselineAreaM2)
+      > baselineAreaM2 * 0.05) return;
+    const id = candidate.design.form;
+    const group = shortlistByForm.get(id) || [];
+    // Keep distinct configurations rather than 3 copies of the same local
+    // optimum. Buckets are a breadth heuristic, not a physical constraint.
+    const fingerprint = [
+      Math.round(candidate.design.floorAreaM2 / 2),
+      Math.round(candidate.design.orientationDeg / 10),
+      Math.round(candidate.design.eaveEquatorM * 5),
+      Math.round(candidate.design.equatorGlazingRatio * 20),
+    ].join(':');
+    const oldIndex = group.findIndex(previous => [
+      Math.round(previous.design.floorAreaM2 / 2),
+      Math.round(previous.design.orientationDeg / 10),
+      Math.round(previous.design.eaveEquatorM * 5),
+      Math.round(previous.design.equatorGlazingRatio * 20),
+    ].join(':') === fingerprint);
+    if (oldIndex >= 0) {
+      if (group[oldIndex].score <= candidate.score) return;
+      group.splice(oldIndex, 1);
+    }
+    group.push(candidate);
+    group.sort((a, b) => a.score - b.score);
+    if (group.length > shortlistLimitPerForm) group.pop();
+    shortlistByForm.set(id, group);
+  };
+  consider(baseline);
+  for (const learnedDesign of input.learnedDesigns) {
+    consider(evaluateNormalized(learnedDesign, input, samples));
+    candidatesEvaluated++;
   }
 
   for (let i = 0; i < input.iterations; i++) {
-    const candidate = evaluateNormalized(randomDesign(input, rng), input, samples);
+    consider(evaluateNormalized(randomDesign(input, rng), input, samples));
     candidatesEvaluated++;
-    if (candidate.feasible && (!best || candidate.score < best.score)) best = candidate;
   }
   if (!best) best = baseline;
   const refinementIterations = Math.max(300, Math.round(input.iterations * 0.25));
   for (let i = 0; i < refinementIterations; i++) {
-    const candidate = evaluateNormalized(mutateDesign(best.design, input, rng), input, samples);
+    consider(evaluateNormalized(mutateDesign(best.design, input, rng), input, samples));
     candidatesEvaluated++;
-    if (candidate.feasible && candidate.score < best.score) best = candidate;
   }
+  const feasibleShortlist = (['rectangle', 'elongated', 'l_shape', 'courtyard'] as HouseForm[])
+    .flatMap(form => shortlistByForm.get(form) || []);
 
   const lifecycleEnergySavedKWh = baseline.totalLifecycleEnergyKWh - best.totalLifecycleEnergyKWh;
   const annualOperationalEnergySavedKWh = baseline.operational.annualTotalKWh - best.operational.annualTotalKWh;
@@ -847,6 +885,7 @@ export function optimizeSiteGeometry(rawInput: SiteGeometryOptimizationInput = {
     best,
     sunPath: sunPathSummary(input.location),
     candidatesEvaluated,
+    feasibleShortlist,
     improvement: {
       qualifiesAsImprovement,
       annualOperationalEnergySavedKWh: round(annualOperationalEnergySavedKWh, 1),
@@ -862,6 +901,7 @@ export function optimizeSiteGeometry(rawInput: SiteGeometryOptimizationInput = {
       'Self-shadowing uses ray intersections between façade samples and the generated L-shape or courtyard footprint; eave shading is calculated separately from sun altitude and façade incidence.',
       'Hazard and code fields are preliminary hard constraints supplied by the user or a screening preset. A certifier must confirm the planning scheme, NCC edition, site classification, BAL, flood level, wind region and engineering loads.',
       'Manufacturing energy covers envelope, glazing, roof, eaves, foundation, structural reinforcement and geometry complexity. Product EPD values should replace generic factors before construction.',
+      'The feasible shortlist keeps at most three geometrically distinct same-area examples per form, selected by the SITE objective; it is a deliberately bounded source for downstream mechanical reranking, not an exhaustive Pareto frontier.',
     ],
   };
 }
