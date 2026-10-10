@@ -69,6 +69,19 @@ context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
    const discoveries=[...proposeMaterialDiscoveries(condition),...proposeIsotopeHypotheses(condition)];
    let calibration=null,barrierScreen=null;
    let calibrationStatus='No observed yield CSV supplied; all probability outcomes are hypothetical, not calibrated.';
+   // Persist a previously fitted reaction-specific kinetic model in a typed
+   // discovery. Reuse only if the held-out benchmark beats a naive constant
+   // predictor and temperature/medium are inside the original evidence.
+   const previousFit=prior.find(d=>d.kind==='kinetic_fit'
+     &&d.kinetics?.reactionId===(request.reactionId||'')
+     &&d.kinetics.environment===condition.medium
+     &&d.kinetics.gate==='passes_baseline'
+     &&condition.temperatureK>=d.kinetics.temperatureRangeK[0]
+     &&condition.temperatureK<=d.kinetics.temperatureRangeK[1]);
+   if(!request.knownYieldsCSV&&previousFit?.kinetics){
+    calibration=previousFit.kinetics;
+    calibrationStatus=`Reused saved ${calibration.reactionId} empirical fit; held-out MAE ${(calibration.holdoutMAE*100).toFixed(2)} percentage points. No new observations were added.`;
+   }
    if(request.knownYieldsCSV){
     const observations=parseKnownYieldsCSV(request.knownYieldsCSV);
     const reactionId=request.reactionId||observations[0]?.reactionId;
@@ -78,11 +91,16 @@ context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
       Math.max(0,request.timeS??3600));
     calibrationStatus=`Held-out MAE ${(calibration.holdoutMAE*100).toFixed(1)} percentage points across ${calibration.holdoutCount} observations; ${calibration.gate}.`;
     discoveries.push({id:`kinetics:${reactionId}:${condition.medium}`,
-      kind:'kinetic_fit',producer:'chemistry',label:`Calibrated effective kinetics: ${reactionId}`,
+      kind:'kinetic_fit',producer:'chemistry',label:`Effective kinetics fit: ${reactionId}`,
       createdAt:'measured_yield_fit_v1',
-      evidence:'measured_user_data',source:calibration.sourceRecords.join(' | ').slice(0,220),
-      condition});
+      evidence:calibration.gate==='passes_baseline'?'measured_user_data':'hypothesis',
+      source:calibration.sourceRecords.join(' | ').slice(0,220),
+      kinetics:calibration,condition});
    }
+   // Replayed calibration is needed for the new time horizon, but can never
+   // turn a previous fit into a verified catalyst or physical intervention.
+   if(calibration&&!barrierScreen)barrierScreen=screenHypotheticalBarriers(
+     calibration,condition.temperatureK,Math.max(0,request.timeS??3600));
    const crossDomain=[...discoveries,...prior].slice(0,20).flatMap(x=>probeDiscovery(x,condition));
    const useCaseSweep=searchDiscoveryUseCases([...discoveries,...prior],12);
    // Every V5 membrane request stored in device memory becomes a fresh
