@@ -6,6 +6,8 @@
  * qualified PCB design. No active power conversion is simulated.
  */
 
+import { suggestMicrostripWidth, type MicrostripExample } from './pcb';
+
 type Complex = { re: number; im: number };
 const c=(re:number,im=0):Complex=>({re,im});
 const add=(a:Complex,b:Complex):Complex=>c(a.re+b.re,a.im+b.im);
@@ -31,6 +33,7 @@ export interface MatchReport {
  baselineDeliveredPowerFraction:number;
  best:MatchCandidate;
  tested:number;
+ microstripExample:MicrostripExample;
  limitations:string[];
 }
 function parts():PassivePart[]{
@@ -109,6 +112,7 @@ export function optimizeImpedanceMatch(input:{frequencyMHz:number;sourceOhms:num
  if(!best)throw new Error('No passive candidate generated.');
  return {requested:{frequencyMHz,sourceOhms:rs,loadOhms:rl,bandFraction:bandwidth},
   baselineDeliveredPowerFraction:baseline,best,tested,
+  microstripExample:suggestMicrostripWidth(rs>=20&&rs<=150?rs:50),
   limitations:[
    '2-element L matching with assumed constant component Q=40 (L) and Q=80 (C); E12 values are examples, not rated parts.',
    'Reported power is delivered fraction relative to available Thevenin source power. Matching cannot create energy.',
