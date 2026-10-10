@@ -40,6 +40,8 @@ assert.ok(first.best.totalLifecycleEnergyKWh <= first.baseline.totalLifecycleEne
 assert.ok(first.best.solar.summerShadePercent >= 0 && first.best.solar.summerShadePercent <= 100, 'summer shade must be a percentage');
 assert.ok(first.best.solar.winterSolarAccessPercent >= 0 && first.best.solar.winterSolarAccessPercent <= 100, 'winter access must be a percentage');
 assert.deepEqual(first.best, repeated.best, 'site search must be deterministic for a fixed seed');
+assert.equal(first.searchSeed, input.seed, 'Search seed must be exported for exact replay.');
+assert.deepEqual(first.feasibleShortlist, repeated.feasibleShortlist, 'Shortlists must exactly replay for a fixed seed.');
 
 const courtyard: SiteHouseDesign = {
   form: 'courtyard', orientationDeg: 90, floorAreaM2: 130,
