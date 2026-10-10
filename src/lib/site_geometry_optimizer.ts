@@ -150,6 +150,7 @@ export interface SiteGeometryOptimizationResult {
   baseline: EvaluatedSiteHouseDesign;
   best: EvaluatedSiteHouseDesign;
   sunPath: SunPathPoint[];
+  searchSeed: number;
   candidatesEvaluated: number;
   /**
    * Small, deterministic, feasible and roughly equivalent-area portfolio for
@@ -884,6 +885,7 @@ export function optimizeSiteGeometry(rawInput: SiteGeometryOptimizationInput = {
     baseline,
     best,
     sunPath: sunPathSummary(input.location),
+    searchSeed: input.seed,
     candidatesEvaluated,
     feasibleShortlist,
     improvement: {
