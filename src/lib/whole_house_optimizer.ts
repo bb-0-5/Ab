@@ -19,6 +19,12 @@ export interface WholeHouseOptimizerInput {
   lifecycleYears?: number;
   hvacCop?: number;
   maximumCandidates?: number;
+  /**
+   * Restrict this optional sub-sweep to one dwelling archetype when evaluating
+   * a specific pre-designed dwelling. The normal Whole System comparison
+   * still searches all four archetypes with balanced coverage.
+   */
+  fixedArchetype?: DwellingArchetype;
   /** Parsed from an operator-controlled EPW on the SERVER, never the browser. */
   hourlyOutdoorTemperaturesC?: number[];
   hourlyWeatherSource?: {
@@ -642,7 +648,9 @@ export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}
   const targetTempC = clamp(Number(rawInput.targetTempC) || 22, 15, 30);
   const maximumCandidates = clamp(Math.round(Number(rawInput.maximumCandidates) || 432), 48, 1200);
   const configurations: WholeHouseConfiguration[] = [];
-  const archetypes = Object.keys(DWELLING_ARCHETYPES) as DwellingArchetype[];
+  const archetypes: DwellingArchetype[] = rawInput.fixedArchetype && DWELLING_ARCHETYPES[rawInput.fixedArchetype]
+    ? [rawInput.fixedArchetype]
+    : Object.keys(DWELLING_ARCHETYPES) as DwellingArchetype[];
   const controls: AirflowControlStrategy[] = ['balanced_rooms', 'transfer_to_wet_rooms', 'demand_zoned'];
   const openings = [120, 220, 360];
   const diameters = [125, 160, 200];

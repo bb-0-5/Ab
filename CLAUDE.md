@@ -74,6 +74,22 @@ release `20260826-074205`.
 - `Dockerfile`, `compose.yaml`, `DEPLOY_INSTRUCTIONS.md`: AWS EC2 + Docker + Cloudflare
   Tunnel deployment.
 
+## New coupled screening boundary
+
+The House → Whole System page now requests
+`POST /api/house/optimize-site-airflow` after the site form search finishes.
+`src/lib/site_whole_house_coupling.ts` uses the server-recomputed site
+baseline/proposed designs and their generated room surrogate to screen a
+detached-house mechanical airflow alternative under independent model
+constraints. The combined report counts site geometry/solar/fabric/manufacture
+once and adds only mechanical ventilation/fans/hardware from Whole System.
+**It does not jointly search site geometry and HVAC, solve hourly dynamics,
+apply EPW to Site + Shadow, prove apartment adjacency or certify savings.**
+
+Its tests live in `scripts/site-whole-coupling-smoke.ts`; run
+`npm run test:coupled-site` alongside the full suite. Retain both the
+area-equivalence gate and accounting partition in future changes.
+
 ## Current verified state
 
 - `npm run test:all` passes on Node 22.

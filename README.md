@@ -98,6 +98,55 @@ solver, a calibrated site weather model or ASHRAE 140 validation.
 To run deterministic parser, station-distance and optimiser coupling checks:
 `npm run test:weather`. No weather data is needed for normal operation.
 
+## Linked site form + mechanical airflow screening
+
+**House → Whole System** now includes a second, separately labelled screen
+underneath the 3D building: **Site geometry → actual room layout → airflow**.
+The original full four-archetype comparison remains available separately.
+
+The site optimizer first chooses a geometrical form and room sketch. The new
+server route `POST /api/house/optimize-site-airflow` independently
+**re-evaluates** the submitted baseline and proposed site designs using the
+same input constraints, derives appropriately scaled room/ceiling geometry,
+and optimizes *only a detached-house mechanical ventilation strategy*
+for that generated layout. It compares:
+
+```text
+annual = site engine's envelope + solar annual electricity
+         (without optional natural-ventilation cooling credit)
+       + mechanical ventilation annual electricity
+       + mechanical fan annual electricity
+
+manufacturing = site engine's construction allowance
+              + mechanical duct/openings/HRV/controls allowance
+
+lifecycle = annual * selected years + manufacturing
+```
+
+To avoid double counting, generic building manufacture and fabric/solar
+terms from the four-archetype Whole System model are **not added**. It uses
+the **same preset 18°C balance-temperature degree-day basis** for both
+submodels, even when a separate EPW file is configured (Site + Shadow is
+not hourly yet). The added flow affects mechanical fan/ventilation only;
+this is **not a jointly optimised geometry/HVAC search**. No claim is
+made that this is an actual architectural floor plan, that generated room
+boundaries are observed, or that the simplified solar and mechanical
+models have been validated together.
+
+Site-generated sketch rooms are rescaled uniformly to conserve the
+site model's declared floor area, and the interface labels them surrogate
+room geometry. A comparison fails the claimed-improvement gate if the
+proposed design changes floor area by over **5%** or either subsystem
+fails its project-defined feasibility checks. Saved JSON includes the
+full linked evaluation and the separately selected airflow configuration.
+The API does not trust client-posted energy/feasibility numbers;
+it recomputes both geometries on the server.
+
+Run `npm run test:coupled-site` for the deterministic geometry, area,
+energy accounting, original four-archetype sweep and comparison-gate
+regressions. Proper joint optimization would next need calibrated thermal
+dynamics, actual drawing/CAD adjacency and measured material EPDs.
+
 ## Room and airflow lifecycle optimizer
 
 Open **House → Lifecycle Optimize** to choose a real V12 room and search its room

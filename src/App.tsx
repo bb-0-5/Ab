@@ -72,6 +72,7 @@ import type { AdaptiveWallOptimizationResult } from './lib/adaptive_wall_optimiz
 import type { HeightAirflowProfile, HeightAirflowSweepResult } from './lib/height_airflow';
 import { AdaptiveWallCutaway3D, EarthSiteHouse3D, HeightAirflowCutaway3D, HouseAirflowNetwork3D, SoftwareSimulationFallback } from './components/HousePhysics3D';
 import type { WholeHouseOptimizationResult } from './lib/whole_house_optimizer';
+import type { CoupledSiteFlowResult } from './lib/site_whole_house_coupling';
 import { buildWholeHouseDecisionBrief } from './lib/whole_house_decision_brief';
 import type { BuildingPhysicsValidationReport } from './lib/building_physics_validation';
 import type { AutomaticSiteContextResult } from './lib/site_context';
@@ -2778,6 +2779,9 @@ const HouseView = ({
   const [siteOptimizationError, setSiteOptimizationError] = useState('');
   const [siteOptimizationRunning, setSiteOptimizationRunning] = useState(false);
   const [siteOptimizationApplied, setSiteOptimizationApplied] = useState(false);
+  const [coupledSiteFlow, setCoupledSiteFlow] = useState<CoupledSiteFlowResult | null>(null);
+  const [coupledSiteFlowRunning, setCoupledSiteFlowRunning] = useState(false);
+  const [coupledSiteFlowError, setCoupledSiteFlowError] = useState('');
   const [wholeHouseOptimization, setWholeHouseOptimization] = useState<WholeHouseOptimizationResult | null>(null);
   const [wholeHouseOptimizationRunning, setWholeHouseOptimizationRunning] = useState(false);
   const [wholeHouseOptimizationError, setWholeHouseOptimizationError] = useState('');
@@ -2785,6 +2789,11 @@ const HouseView = ({
   const [physicsValidation, setPhysicsValidation] = useState<BuildingPhysicsValidationReport | null>(null);
   const [systemEvidenceError, setSystemEvidenceError] = useState('');
   const systemAutoKeyRef = useRef('');
+  // Discard slow/out-of-order responses when users change a site during a run.
+  const siteRunSequenceRef = useRef(0);
+  const coupledRunSequenceRef = useRef(0);
+  const wholeRunSequenceRef = useRef(0);
+  const evidenceRunSequenceRef = useRef(0);
   const systemLocationAttemptedRef = useRef(false);
   const [autopilotPresetKey, setAutopilotPresetKey] = useState('bendigo');
   const [autopilotResult, setAutopilotResult] = useState<ExistingHomeAutopilotResult | null>(null);
@@ -3603,14 +3612,15 @@ const HouseView = ({
   };
 
   const runSiteOptimization = async () => {
+    const runId = ++siteRunSequenceRef.current;
+    ++coupledRunSequenceRef.current;
     setSiteOptimizationRunning(true);
     setSiteOptimizationError('');
     setSiteOptimizationApplied(false);
+    setCoupledSiteFlow(null);
+    setCoupledSiteFlowError('');
     try {
-      const response = await memoryFetch('/api/house/optimize-site', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const siteRequest = {
           location: {
             name: siteOptimizationInputs.name,
             latitudeDeg: siteOptimizationInputs.latitudeDeg,
@@ -3641,20 +3651,65 @@ const HouseView = ({
             maxUnsupportedSpanM: siteOptimizationInputs.maxUnsupportedSpanM,
             minimumSetbackM: siteOptimizationInputs.minimumSetbackM,
           },
-        }),
+        };
+      const response = await memoryFetch('/api/house/optimize-site', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(siteRequest),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Site optimization failed.');
+      if (runId !== siteRunSequenceRef.current) return;
       setSiteOptimization(payload as SiteGeometryOptimizationResult);
+      // Evaluate the accepted site form against the SAME room geometry,
+      // independently of the separate four-archetype typology comparison.
+      if (activePanel === 'system') {
+        void runCoupledSiteAirflow(payload as SiteGeometryOptimizationResult, siteRequest, runId);
+      }
     } catch (error) {
-      setSiteOptimizationError(error instanceof Error ? error.message : 'Site optimization failed.');
+      if (runId === siteRunSequenceRef.current) {
+        setSiteOptimizationError(error instanceof Error ? error.message : 'Site optimization failed.');
+      }
     } finally {
-      setSiteOptimizationRunning(false);
+      if (runId === siteRunSequenceRef.current) setSiteOptimizationRunning(false);
+    }
+  };
+
+  const runCoupledSiteAirflow = async (
+    result: SiteGeometryOptimizationResult,
+    siteInput: Record<string, unknown>,
+    siteRunId: number,
+  ) => {
+    if (siteRunId !== siteRunSequenceRef.current) return;
+    const runId = ++coupledRunSequenceRef.current;
+    setCoupledSiteFlowRunning(true);
+    setCoupledSiteFlowError('');
+    try {
+      const response = await memoryFetch('/api/house/optimize-site-airflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          siteInput,
+          baselineDesign: result.baseline.design,
+          proposedDesign: result.best.design,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Site + airflow screen failed.');
+      if (runId !== coupledRunSequenceRef.current || siteRunId !== siteRunSequenceRef.current) return;
+      setCoupledSiteFlow(payload as CoupledSiteFlowResult);
+    } catch (error) {
+      if (runId === coupledRunSequenceRef.current) {
+        setCoupledSiteFlowError(error instanceof Error ? error.message : 'Site + airflow screen failed.');
+      }
+    } finally {
+      if (runId === coupledRunSequenceRef.current) setCoupledSiteFlowRunning(false);
     }
   };
 
   const runWholeHouseOptimization = async () => {
     if (!rooms.length) return;
+    const runId = ++wholeRunSequenceRef.current;
     setWholeHouseOptimizationRunning(true);
     setWholeHouseOptimizationError('');
     try {
@@ -3681,15 +3736,19 @@ const HouseView = ({
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Whole-house optimization failed.');
+      if (runId !== wholeRunSequenceRef.current) return;
       setWholeHouseOptimization(payload as WholeHouseOptimizationResult);
     } catch (error) {
-      setWholeHouseOptimizationError(error instanceof Error ? error.message : 'Whole-house optimization failed.');
+      if (runId === wholeRunSequenceRef.current) {
+        setWholeHouseOptimizationError(error instanceof Error ? error.message : 'Whole-house optimization failed.');
+      }
     } finally {
-      setWholeHouseOptimizationRunning(false);
+      if (runId === wholeRunSequenceRef.current) setWholeHouseOptimizationRunning(false);
     }
   };
 
   const runSystemEvidence = async () => {
+    const runId = ++evidenceRunSequenceRef.current;
     setSystemEvidenceError('');
     const location = {
       name: siteOptimizationInputs.name,
@@ -3713,10 +3772,13 @@ const HouseView = ({
       const [contextPayload, validationPayload] = await Promise.all([contextResponse.json(), validationResponse.json()]);
       if (!contextResponse.ok) throw new Error(contextPayload.error || 'Site evidence could not be loaded.');
       if (!validationResponse.ok) throw new Error(validationPayload.error || 'Physics validation could not be loaded.');
+      if (runId !== evidenceRunSequenceRef.current) return;
       setSiteContext(contextPayload as AutomaticSiteContextResult);
       setPhysicsValidation(validationPayload as BuildingPhysicsValidationReport);
     } catch (error) {
-      setSystemEvidenceError(error instanceof Error ? error.message : 'System evidence could not be loaded.');
+      if (runId === evidenceRunSequenceRef.current) {
+        setSystemEvidenceError(error instanceof Error ? error.message : 'System evidence could not be loaded.');
+      }
     }
   };
 
@@ -3738,6 +3800,7 @@ const HouseView = ({
       improvement: wholeHouseOptimization.improvement,
       searchCoverage: wholeHouseOptimization.searchCoverage,
       embodiedAssumptionStressTest: wholeHouseOptimization.embodiedAssumptionStressTest,
+      coupledSiteAirflowScreen: coupledSiteFlow,
       decisionBrief: buildWholeHouseDecisionBrief(wholeHouseOptimization),
       limitations: [
         'Not a building permit, energy rating, engineering certificate or substitute for a calibrated whole-building model.',
@@ -3825,16 +3888,27 @@ const HouseView = ({
     }).catch(() => undefined);
   }, [activePanel]);
 
+  // Stable geometric signature prevents engine-driven room-array identity
+  // churn from repeatedly cancelling the automatic site sweep.
+  const systemRoomGeometryKey = rooms.map(room =>
+    `${room.id}:${room.x}:${room.y}:${room.width}:${room.height}:${room.ceilingHeight}`).join('|');
+
   useEffect(() => {
     if (activePanel !== 'system' || rooms.length === 0) return;
-    const geometryKey = rooms.map(room => `${room.id}:${room.x}:${room.y}:${room.width}:${room.height}:${room.ceilingHeight}`).join('|');
-    const key = [siteOptimizationInputs.latitudeDeg, siteOptimizationInputs.longitudeDeg, siteOptimizationInputs.targetFloorAreaM2, geometryKey].join('::');
+    // Indoor target, design life, hazard requirements and every site field
+    // must invalidate previous coupled results, not only latitude and area.
+    const key = JSON.stringify({ site: siteOptimizationInputs, rooms: systemRoomGeometryKey });
     if (systemAutoKeyRef.current === key) return;
-    systemAutoKeyRef.current = key;
-    void runSiteOptimization();
-    void runWholeHouseOptimization();
-    void runSystemEvidence();
-  }, [activePanel, rooms, siteOptimizationInputs.latitudeDeg, siteOptimizationInputs.longitudeDeg, siteOptimizationInputs.targetFloorAreaM2]);
+    // Debounce successive changes rather than racing costly 1,800-form sweeps.
+    const timer = window.setTimeout(() => {
+      if (systemAutoKeyRef.current === key) return;
+      systemAutoKeyRef.current = key;
+      void runSiteOptimization();
+      void runWholeHouseOptimization();
+      void runSystemEvidence();
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [activePanel, systemRoomGeometryKey, siteOptimizationInputs]);
 
   const selectedAirflowRoom = rooms.find(room => room.id === selectedAirflowRoomId) || rooms[0] || null;
   const selectedHeightProfile = thermalGrid?.heightProfiles?.find(profile => profile.roomId === selectedAirflowRoom?.id) || null;
@@ -4154,6 +4228,38 @@ const HouseView = ({
                   siteContext={siteContext}
                   physicsValidation={physicsValidation}
                 />
+                <section aria-label="Geometry to airflow coupled screening" className="rounded-xl border border-cyan-500/25 bg-black/30 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-[11px] font-black text-cyan-200 uppercase tracking-widest">Site geometry → actual room layout → airflow</h3>
+                    <span className="text-[8px] font-mono text-gray-400">
+                      {coupledSiteFlowRunning ? 'Re-evaluating designs…' : coupledSiteFlow ? 'Linked screening complete' : 'Awaiting site design'}
+                    </span>
+                  </div>
+                  {coupledSiteFlowError && <p role="alert" className="mt-2 text-[10px] text-red-300">{coupledSiteFlowError}</p>}
+                  {coupledSiteFlow && (() => {
+                    const result = coupledSiteFlow;
+                    const fmt = (value: number) => Math.round(value).toLocaleString('en-AU');
+                    const accepted = result.decision.qualifiesAsImprovement;
+                    return <div className="mt-3 space-y-3">
+                      <p className={`rounded-lg border px-3 py-2 text-[10px] ${accepted ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200' : 'border-amber-500/35 bg-amber-500/10 text-amber-100'}`}>
+                        <strong>{accepted ? 'Linked design clears both screening gates.' : 'Not a supported net improvement.'}</strong> {result.decision.reason}
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[9px]">
+                        <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-gray-400">Baseline · annual</div><strong className="text-white">{fmt(result.baseline.energy.annualCombinedElectricalKWh)} kWh/y</strong></div>
+                        <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-gray-400">Proposed · annual</div><strong className="text-cyan-200">{fmt(result.proposed.energy.annualCombinedElectricalKWh)} kWh/y</strong></div>
+                        <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-gray-400">Proposed manufacture</div><strong className="text-white">{fmt(result.proposed.energy.combinedManufacturingKWh)} kWh</strong></div>
+                        <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-gray-400">Lifecycle difference</div><strong className={accepted ? 'text-emerald-300' : 'text-amber-300'}>{fmt(result.decision.lifecycleEnergySavingsKWh)} kWh</strong></div>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-[9px] text-gray-300 leading-relaxed">
+                        <div>{result.proposed.site.design.form.replaceAll('_', ' ')} · {result.proposed.rooms.length} generated rooms · {result.proposed.layout.scaledRoomAreaM2.toFixed(1)} m² modeled · {result.proposed.configurationsEvaluated} airflow cases</div>
+                        <div>{result.proposed.selectedAirflow.control.replaceAll('_', ' ')} · {result.proposed.selectedAirflow.designAirChangesPerHour.toFixed(2)} ACH · {Math.round(result.proposed.selectedAirflow.heatRecoveryEfficiency * 100)}% heat recovery</div>
+                        <div>Construction + envelope/solar calculated once in Site + Shadow; mechanical ventilation, fan electricity and hardware added separately. No apartment extrapolation.</div>
+                        <div>Natural-ventilation credit removed before mechanically supplied ventilation: {fmt(result.proposed.energy.naturalVentilationCreditRemovedElectricalKWh)} kWh/y. This prevents claiming both cooling strategies at once.</div>
+                        <div>Area difference {result.constraints.floorAreaDifferencePercent.toFixed(1)}%. {result.limitations[2]} {result.limitations[3]}</div>
+                      </div>
+                    </div>;
+                  })()}
+                </section>
               </motion.div>
             )}
             {activePanel === 'floorplan' && (
