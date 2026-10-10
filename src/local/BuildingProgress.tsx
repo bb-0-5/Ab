@@ -2,7 +2,7 @@ import type {BuildingCampaign,BuildingRun} from './building_campaign';
 
 const n=(value:number,digits=0)=>Number.isFinite(value)?value.toLocaleString('en-AU',{maximumFractionDigits:digits}):'—';
 type Props={campaign:BuildingCampaign;running:boolean;batch:{total:number;completed:number};
- current:BuildingRun|null;onContinue:()=>void;onStop:()=>void};
+ current:BuildingRun|null;onContinue:(count:number)=>void;onStop:()=>void};
 
 function Massing({best}:{best:NonNullable<BuildingRun['best']>}){
  const polys=best.geometry.filter(p=>p.length>=3&&p.every(q=>Number.isFinite(q.x)&&Number.isFinite(q.y)));
@@ -100,14 +100,16 @@ export default function BuildingProgress({campaign,running,batch,current,onConti
    <p className="text-sm text-slate-200">{campaign.viableRuns} of {campaign.attempts} runs found a passing design.
     {savings!==null?` Best run saves an estimated ${n(savings)} kWh against that run's reference over 30 years.`:
      ' There is no defensible savings claim against the reference yet.'}</p>
-   <p className="mt-1 text-xs text-slate-400">Campaigns are split by location, area, temperature and weather-file contents; results with different assumptions cannot compete.</p>
+   <p className="mt-1 text-xs text-slate-400">Campaigns are split by location, area, temperature and weather-file contents; results with different assumptions cannot compete. Longer searches consume this device’s CPU while the page is open, pause between trials when the tab is hidden, and can be stopped at any time.</p>
    {batch.total>0&&<div className="mt-3">
     <div className="mb-1 flex justify-between text-xs text-cyan-200"><span>Batch progress</span><span>{batch.completed} / {batch.total} completed</span></div>
     <progress className="h-2 w-full accent-cyan-400" value={batch.completed} max={batch.total}/>
    </div>}
    <div className="mt-3 flex flex-wrap gap-3">
-    <button type="button" onClick={onContinue} disabled={running}
-     className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 hover:bg-cyan-300 disabled:opacity-40">Continue optimisation · 5 new seeds</button>
+    <button type="button" onClick={()=>onContinue(5)} disabled={running}
+     className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 hover:bg-cyan-300 disabled:opacity-40">Explore 5 new designs</button>
+    <button type="button" onClick={()=>onContinue(25)} disabled={running}
+     className="rounded-xl border border-cyan-400/60 px-5 py-3 text-sm font-semibold text-cyan-100 disabled:opacity-40">Run 25 trials</button>
     {running&&<button type="button" onClick={onStop}
      className="rounded-xl border border-rose-300/40 px-5 py-3 text-sm font-bold text-rose-100">Stop search</button>}
    </div>
