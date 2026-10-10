@@ -5,6 +5,47 @@ lab: location/area → automatic building & HVAC search → one understandable
 result. Users can also select a **passive RF impedance match** or a
 **probability-path selectivity thought experiment**.
 
+## Ongoing optimisation & evidence-led interface
+
+The default screen now prioritises **actual computed outcomes** instead of a static
+cross-domain drawing. The conceptual overlay is still available in an optional
+disclosure, and the earlier V0–V13 source remains in the repository.
+
+- **Persistent building campaigns:** with the same location, area, balance
+  temperature and exact EPW file, the browser retains the lowest modeled
+  lifecycle-energy *feasible* candidate and its generated footprint. New seeds
+  cannot overwrite the incumbent with a worse or ineligible result. Tests
+  reject comparisons across mismatched input signatures. Per-seed trial counts,
+  footprint and mechanical-screen counts, a trend and the real ranked finalists
+  are shown; runs can be repeated in deliberate batches of 5 or 25. The tab
+  pauses between trials when hidden, and each trial can be cancelled.
+- **Real building geometry:** an isometric projection extrudes the actual
+  candidate footprint for visual inspection; height is arbitrary and clearly
+  labelled. It is not a surveyed 3D CAD building, structural analysis, or
+  a verified solar/shadow model. Nearby station EPW improves the temperature
+  inputs but does not replace hourly heat transfer or empirical calibration.
+- **Circuit confidence:** nominal frequency response is plotted from the
+  circuit equations at 21 frequencies. A finalist screen samples independent
+  ±5% L/C value deviations over five band frequencies, and rejects nominally
+  attractive networks whose sampled worst case fails to beat the unmatched
+  resistive reference. This is a sensitivity test, not a measured tolerance
+  distribution, IBIS, S-parameters, signal integrity or circuit-board design.
+- **Chemistry honesty:** absolute desired/undesired outcomes and discarded
+  feed are shown on a common original-input scale, so high *conditional*
+  selectivity cannot masquerade as increased yield.
+- **Fabrication realism:** the printable decorative STL can be inspected
+  interactively in 3D using the **actual exported mesh**, not the illustrated
+  full-body science-fiction outfit. Viewer loads only on user request,
+  releases GPU resources when closed and avoids continuous animation.
+- **Shared research board:** shows the last local run in each domain,
+  cross-domain probe counts, and honest evidence gaps. One-click follow-ups
+  run the corresponding browser worker; simulations don't continue when the
+  browser is closed and findings are never labelled measurements by default.
+
+For tests run `npm run test:all`, including `test:campaign` for comparable
+inputs and feasible-best logic. Cloud backup remains optional and independent
+of simulation. Legacy AWS saved results still require a separate export.
+
 ## How it works now
 
 - All computation runs in the user's browser, in a Web Worker that is
