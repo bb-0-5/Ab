@@ -280,6 +280,11 @@ export default function LocalApp(){
       <Metric label="Worst tested band point" value={`${fmt(selectedCircuit.best.worstBandPowerFraction*100,1)}%`}/>
       <Metric label="Combinations searched" value={fmt(selectedCircuit.tested)}/>
      </div>
+     <div className="mt-4 rounded-xl border border-cyan-700/30 bg-[#071f28] p-4 text-xs text-slate-300">
+      <strong className="text-cyan-200">Example motherboard-like outer-layer microstrip (NOT a measured board)</strong>
+      <p className="mt-2">A generic εr={fmt(selectedCircuit.microstripExample.dielectricConstant,1)} dielectric with {fmt(selectedCircuit.microstripExample.substrateHeightMm,2)} mm plane spacing would need about <strong className="text-white">{fmt(selectedCircuit.microstripExample.traceWidthMm,3)} mm</strong> track width for a calculated {fmt(selectedCircuit.microstripExample.targetOhms,1)} Ω single-ended line, about {fmt(selectedCircuit.microstripExample.propagationDelayPsPerMm,2)} ps/mm delay.</p>
+      <p className="mt-2 text-amber-200">Actual motherboard stackups require manufacturer specs, controlled-impedance coupons, termination and S-parameter/IBIS validation. This example is a quasi-static microstrip only, not a recommendation for DDR/PCIe routing.</p>
+     </div>
      <p className="mt-4 text-sm text-amber-200">Use an RF simulator, manufacturer models and impedance/VNA measurements before building real hardware. This simplified circuit model does not optimise a motherboard.</p>
      <details className="mt-3 text-xs text-slate-400"><summary className="cursor-pointer">Model assumptions</summary><ul className="mt-2 list-disc pl-5">{selectedCircuit.limitations.map((x,i)=><li key={i}>{x}</li>)}</ul></details>
     </>}
