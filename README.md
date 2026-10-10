@@ -98,6 +98,39 @@ solver, a calibrated site weather model or ASHRAE 140 validation.
 To run deterministic parser, station-distance and optimiser coupling checks:
 `npm run test:weather`. No weather data is needed for normal operation.
 
+## One-page design experience — no parameter tab maze
+
+The homepage now opens directly into **Automatic building design**, without
+the six-module tab ribbon, splash screen or the five-module House toolbar.
+Research labs remain available behind **Research tools**, not as primary
+navigation. The actual building design view is one page:
+
+- Choose an approximate location and desired floor area, or use device location.
+- The application **automatically** searches site orientation, footprint,
+  solar/shadow geometry, room layout, mechanical ventilation and heat
+  recovery. The user does **not** select every combination.
+- The first thing visible is a short, plain-language *Building design summary*:
+  selected form, floor area, air strategy, estimated annual electricity,
+  lifetime modeled energy and number of options screened. If no feasible
+  combination exists, the headline explicitly says so and suppresses bogus
+  performance figures. Screening caveats remain visible.
+- **Explore another design** advances the deterministic geometry seed to
+  sample a different portfolio automatically; repeated input/seed gives
+  repeatable results within the same saved-learning state.
+- 3D physics, intermediate candidate tables, technical evidence and
+  full machine-readable reports live behind expandable sections. They do
+  not crowd the default one-page presentation.
+
+Site optimization no longer waits for manual V12 simulation initialization
+or nonempty engine room arrays; the whole-system model can use its explicitly
+labelled default room surrogate until real plans are available.
+A single pass explores hundreds/thousands of constrained combinations,
+not every possible permutation. The counts in the summary are the evaluated
+sample, **not** a claim of complete design-space coverage.
+
+`npm run test:one-page` checks the human summary, refusal to invent outcomes
+when feasible options are absent, and deterministic replay.
+
 ## Automatic bounded geometry × HVAC portfolio search
 
 **Whole System** now runs a second-stage geometry × mechanical optimisation,

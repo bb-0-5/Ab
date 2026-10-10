@@ -74,6 +74,18 @@ release `20260826-074205`.
 - `Dockerfile`, `compose.yaml`, `DEPLOY_INSTRUCTIONS.md`: AWS EC2 + Docker + Cloudflare
   Tunnel deployment.
 
+## One-page user experience
+
+The app boots into `activeTab='house'`, with the initial splash disabled.
+House defaults to the **system** view; old research routes are behind a
+collapsed header menu and diagnostic views are under disclosure sections.
+Users select *site / floor area*, then read a plain-language result. The
+site/flow comparison runs automatically and does not require V12 room engine
+initialisation. Selecting **Explore another design** changes the reproducible
+site seed instead of exposing a giant list of manual optimizer parameters.
+`src/lib/building_design_summary.ts` must not imply screening is verified
+regulatory performance; see `scripts/building-design-summary-smoke.ts`.
+
 ## Joint selection iteration
 
 The site optimizer returns `feasibleShortlist` (at most 12 feasible,
