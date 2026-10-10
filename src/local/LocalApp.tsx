@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MatchReport } from './impedance';
+import { panelSTL, type FabResult } from './fabrication';
+import UnifiedOverlay, {type VisualGoal,type VisualMetrics} from './UnifiedOverlay';
 import type { RouteSelectivityResult } from './selectivity';
 import type { YieldCalibration } from './kinetics';
 import {
@@ -12,7 +14,7 @@ import {
   type MemoryEntry,
 } from './memory';
 
-type Goal='building'|'circuits'|'chemistry'|'membrane';
+type Goal=VisualGoal;
 type ChemistryResult=RouteSelectivityResult&{
  calibration:YieldCalibration|null;
  barrierScreen:null|{baseline:{targetFraction:number;sideFraction:number;eventProbability:number};
@@ -39,7 +41,7 @@ type BuildingResult={
   comparisonSupported:boolean;qualifiesAsImprovement:boolean;
   savingsVsBaselineKWh:number|null;explanation:string;limitations:string[];
 };
-type Result=BuildingResult|MatchReport|ChemistryResult|MaterialReport;
+type Result=BuildingResult|MatchReport|ChemistryResult|MaterialReport|FabResult;
 type WorkerMessage={id:number;kind:'progress'|'error'|'result';mode?:Goal;message?:string;error?:string;result?:Result};
 const LOCALES:{[key:string]:string}={
   melbourne:'Melbourne, Victoria',bendigo:'Bendigo, Victoria',
@@ -98,6 +100,13 @@ export default function LocalApp(){
  const [pressurePa,setPressurePa]=useState(101325);
  const [airflow,setAirflow]=useState(1);
  const [membraneTask,setMembraneTask]=useState<Task>('heat_spreader');
+ const [partWidthMm,setPartWidthMm]=useState(80);
+ const [partLengthMm,setPartLengthMm]=useState(135);
+ const [printerBedXmm,setPrinterBedXmm]=useState(220);
+ const [printerBedYmm,setPrinterBedYmm]=useState(220);
+ const [filamentCostAUDkg,setFilamentCostAUDkg]=useState(30);
+ const [printBudgetAUD,setPrintBudgetAUD]=useState(12);
+ const [minimumSectionIndexMm4,setMinimumSectionIndexMm4]=useState(90);
  const [knownYieldsCSV,setKnownYieldsCSV]=useState('');
  const [knownYieldsName,setKnownYieldsName]=useState('');
  const [reactionId,setReactionId]=useState('');
@@ -129,6 +138,11 @@ export default function LocalApp(){
    :mode==='circuits'?{frequencyMHz:frequency,sourceOhms:source,loadOhms:load}
    :mode==='chemistry'?{minimumAcceptedFraction:minimumAccepted,
       reactionId,timeS:durationS,medium,temperatureK:operatingK}
+   :mode==='suit'?{printGoal:'flight_suit_concept',
+     partWidthMm,partLengthMm,printerBedXmm,printerBedYmm,
+     budgetAUD:printBudgetAUD,filamentPriceAUDkg:filamentCostAUDkg,
+     minSectionIndexMm4:minimumSectionIndexMm4,
+     medium,temperatureK:operatingK,pressurePa}
    :{task:membraneTask,medium,temperatureK:operatingK,pressurePa};
   instance.onmessage=(e:MessageEvent<WorkerMessage>)=>{
    const m=e.data;
@@ -144,6 +158,7 @@ export default function LocalApp(){
     ?`${LOCALES[preset]||preset} · ${area} m² · seed ${overrides?.seed??seed}`
     :mode==='circuits'?`${frequency} MHz · ${source} → ${load} Ω`
      :mode==='membrane'?`${membraneTask} · ${medium} · ${operatingK} K`
+     :mode==='suit'?`3D printable suit concept · ${partWidthMm}×${partLengthMm} mm`
      :'Measured-yield / hypothetical chemistry exploration';
    const entry:MemoryEntry={
     id:crypto.randomUUID(),mode,label:name,input,
@@ -157,11 +172,12 @@ export default function LocalApp(){
    setStatus('Local worker error: '+(e.message||'Failed to load computation.'))};
   instance.postMessage({...input,id,mode,discoveries:prior,
     ...(mode==='building'&&epwText?{epwText}:{}),
-    ...((mode==='chemistry'||mode==='membrane')?{condition}:{}),
+    ...((mode==='chemistry'||mode==='membrane'||mode==='suit')?{condition}:{}),
     ...(mode==='chemistry'&&knownYieldsCSV?{knownYieldsCSV}:{}),
   });
  },[preset,area,temperature,seed,frequency,source,load,minimumAccepted,epwText,cloudOn,
-   medium,operatingK,pressurePa,airflow,membraneTask,knownYieldsCSV,reactionId,durationS]);
+   medium,operatingK,pressurePa,airflow,membraneTask,knownYieldsCSV,reactionId,durationS,
+   partWidthMm,partLengthMm,printerBedXmm,printerBedYmm,filamentCostAUDkg,printBudgetAUD,minimumSectionIndexMm4]);
  useEffect(()=>{start('building');return()=>worker.current?.terminate();},[]); // initial simulation only
  const reseed=()=>{const next=(seed+7919)%2147483647;setSeed(next);start('building',{seed:next});};
  const uploadFile=async(e:React.ChangeEvent<HTMLInputElement>)=>{
@@ -208,6 +224,7 @@ export default function LocalApp(){
  const selectedCircuit=resultGoal==='circuits'?result as MatchReport:null;
  const selectedChem=resultGoal==='chemistry'?result as ChemistryResult:null;
  const selectedMembrane=resultGoal==='membrane'?result as MaterialReport:null;
+ const selectedSuit=resultGoal==='suit'?result as FabResult:null;
  const findings=extractDiscoveriesFromHistory(history,24);
  const currentShared=(result||{}) as SharedResult;
 
