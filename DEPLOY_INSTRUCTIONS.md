@@ -124,6 +124,28 @@ Do not run more than one app replica against this file-based store. Before scali
 horizontally, move shared simulation state to Supabase/Postgres or another shared
 database and use a shared pub/sub layer for WebSocket broadcasts.
 
+## Optional offline EPW station climate
+
+Whole System can use operator-supplied hourly temperatures when the station
+coordinates are within 75 km of the selected site. The site/weather pairing is
+validated every run and rejected if timestamps are missing, duplicated or
+unordered, or if dry-bulb readings are missing/invalid.
+
+1. Obtain a legally usable EnergyPlus Weather (`.epw`) file for the location.
+   Check station provenance, actual weather years and how representative it is.
+2. Place it in the persistent `beyondbound-data` Docker volume at
+   `/app/data/weather/site.epw`. Do not commit the file or secret paths.
+3. Add `ABOVEBOUND_EPW_FILE=weather/site.epw` to `.env.production`.
+4. Rebuild/restart with `docker compose --env-file .env.production up -d --build`.
+5. Open Whole System and verify the climate badge and exported report say
+   `epw_hourly_temperature`; inspect the station distance and comparison.
+   When it says `preset_fitted_degree_days`, do not imply EPW was used.
+
+With no configured EPW, the app works exactly as before using the preset
+degree-day profile. A station within 75 km may still differ significantly in
+elevation, land cover and microclimate. This does NOT turn the separate
+Site + Shadow model into an hourly model or validate energy performance.
+
 ## 6. AWS research compute
 
 The current optimizer is a lightweight genetic search written in TypeScript. It

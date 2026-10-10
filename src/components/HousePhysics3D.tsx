@@ -1013,6 +1013,14 @@ export function EarthSiteHouse3D({
       <div className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/20"><div className="text-[7px] text-gray-500 uppercase">Shared envelope</div><div className="text-lg font-black text-purple-300">{archetype.sharedConditionedBoundaryPercent}%</div><div className="text-[7px] text-gray-600">conditioned boundaries</div></div>
       <div className="p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/20"><div className="text-[7px] text-gray-500 uppercase">Local sun now</div><div className="text-lg font-black text-yellow-200">{altitudeDeg > 0 ? `${altitudeDeg.toFixed(0)}°` : 'night'}</div><div className="text-[7px] text-gray-600">azimuth {azimuthDeg.toFixed(0)}°</div></div>
     </div>
+    {wholeHouse && (
+      <div className={`rounded-lg border px-3 py-2 text-[10px] ${wholeHouse.weatherContext.mode === 'epw_hourly_temperature' ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-100' : 'border-amber-500/25 bg-amber-500/5 text-amber-100'}`}>
+        <strong>Climate input:</strong> {wholeHouse.weatherContext.mode === 'epw_hourly_temperature'
+          ? `EPW hourly air temperatures · ${wholeHouse.weatherContext.stationName} · ${wholeHouse.weatherContext.weatherHours} hours · ${wholeHouse.weatherContext.stationDistanceKm?.toFixed(1)} km from chosen site`
+          : 'Screening preset · fitted daily temperatures (no hourly station data)'}
+        <div className="mt-1 opacity-80">{wholeHouse.weatherContext.note}</div>
+      </div>
+    )}
     {wholeHouse?.embodiedAssumptionStressTest.verdict === 'ranking_changes' && (
       <div role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[10px] text-amber-100">
         The model's first-place dwelling changes under illustrative embodied-energy assumptions. See the reliability check below the 3D view before relying on the ranking.

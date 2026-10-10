@@ -72,6 +72,32 @@ independent reference cases. An apparent win that disappears when assumed
 manufacturing factors change is a finding about the assumptions, **not** a
 verified energy saving.
 
+## Offline EPW hourly weather for Whole System
+
+An operator can now supply an **EnergyPlus Weather (EPW)** file instead of
+relying entirely on fitted preset climate degree days. Put an EPW on the
+running server under `DATA_DIR/weather/site.epw` and configure
+`ABOVEBOUND_EPW_FILE=weather/site.epw` in the production environment. The
+file is intentionally **not committed or browser-uploaded**. A verified
+8,760- or 8,784-hour EPW with valid, ordered timestamps and non-missing dry-bulb
+temperature values is required.
+
+Whole System uses the temperatures to integrate annual heating/cooling
+degree days at the requested balance setpoint, annualising leap years to
+365 days. It accepts the station only within **75 km** of the selected site.
+Missing/corrupt/distant weather is refused and the interface states that it
+fell back to the preset. The backend does not accept a user's forged weather
+vector or claimed weather source via the request body.
+
+This upgrade affects the Whole System envelope/ventilation heat-loss proxy,
+**not the separate Site + Shadow optimiser or simplified solar model**. EPW
+solar radiation is *not* treated as measured vertical-facade irradiance.
+It remains a reduced-order screening workflow, not an hourly building-thermal
+solver, a calibrated site weather model or ASHRAE 140 validation.
+
+To run deterministic parser, station-distance and optimiser coupling checks:
+`npm run test:weather`. No weather data is needed for normal operation.
+
 ## Room and airflow lifecycle optimizer
 
 Open **House → Lifecycle Optimize** to choose a real V12 room and search its room
