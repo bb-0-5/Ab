@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import {AmbientLight,Box3,Color,DirectionalLight,DoubleSide,GridHelper,
+import {AmbientLight,Color,DirectionalLight,DoubleSide,GridHelper,
  Mesh,MeshStandardMaterial,PerspectiveCamera,Scene,SRGBColorSpace,WebGLRenderer} from 'three';
 import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
 import {STLLoader} from 'three/examples/jsm/loaders/STLLoader.js';
@@ -33,9 +33,6 @@ export default function PrintablePreview({candidate}:{candidate:FabCandidate}){
 
    geometry=new STLLoader().parse(new TextEncoder().encode(panelSTL(candidate)).buffer as ArrayBuffer);
    geometry.computeVertexNormals();geometry.center();
-   const bounds=new Box3().setFromBufferAttribute(geometry.attributes.position);
-   const size=bounds.getSize({x:0,y:0,z:0} as never); // replaced below using a Vector3
-   void size;
    const scene=new Scene();
    const camera=new PerspectiveCamera(42,1,0.01,5000);
    // Actual physical dimensions are millimetres; no fake scale cues.
