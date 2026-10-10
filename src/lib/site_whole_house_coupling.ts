@@ -188,7 +188,21 @@ function evaluateCase(
     maximumCandidates,
   };
   const airflow = optimizeWholeHouseSystem(input);
-  const selected: EvaluatedWholeHouseConfiguration = isBaseline ? airflow.baseline : airflow.best;
+  // The site engine already owns building geometry, fabric and construction.
+  // Ranking on Whole System's generic lifecycle (which also includes them)
+  // can choose a different ventilation package from the genuine additive
+  // objective. Re-rank EVERY fixed-archetype feasible mechanical option on
+  // the actual electricity + equipment-manufacturing marginal cost.
+  const mechanicalCost = (candidate: EvaluatedWholeHouseConfiguration) =>
+    (candidate.annual.ventilationElectricalKWh + candidate.annual.fanElectricalKWh) * lifecycleYears
+    + candidate.manufacturing.ductAndOpeningsKWh
+    + candidate.manufacturing.controlsAndHeatRecoveryKWh;
+  const selected: EvaluatedWholeHouseConfiguration = isBaseline ? airflow.baseline
+    : airflow.ranked.filter(candidate => candidate.feasible).reduce(
+      (lowest, candidate) => !lowest || mechanicalCost(candidate) < mechanicalCost(lowest)
+        ? candidate : lowest,
+      null as EvaluatedWholeHouseConfiguration | null,
+    ) || airflow.best;
   // Site + Shadow assumes a natural ventilation cooling benefit. It cannot
   // ALSO be credited while claiming a mechanical HRV/fan strategy. Recalculate
   // the source cooling formula without the natural-ventilation term, keeping
