@@ -3799,6 +3799,7 @@ const HouseView = ({
       physicsValidation,
       siteEvidence: siteContext,
       optimizedGeometry: siteOptimization.best,
+      siteGeometrySearchSeed: siteOptimization.searchSeed,
       optimizedWholeSystem: wholeHouseOptimization.best,
       topDesigns,
       improvement: wholeHouseOptimization.improvement,
@@ -4197,7 +4198,7 @@ const HouseView = ({
                   <div>
                     <div className="text-[8px] text-gray-500 uppercase tracking-widest">Automatic site anchor</div>
                     <div className="text-[11px] font-bold text-white mt-1">{siteOptimizationInputs.name}</div>
-                    <div className="text-[8px] font-mono text-cyan-300">{siteOptimizationInputs.latitudeDeg.toFixed(3)}°, {siteOptimizationInputs.longitudeDeg.toFixed(3)}°</div>
+                    <div className="text-[8px] font-mono text-cyan-300">{siteOptimizationInputs.latitudeDeg.toFixed(3)}°, {siteOptimizationInputs.longitudeDeg.toFixed(3)}° · design seed {siteOptimization?.searchSeed ?? siteDesignSeed}</div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <select value={sitePresetKey} onChange={event => selectSitePreset(event.target.value)} className="bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[9px] text-gray-300">
