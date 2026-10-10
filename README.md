@@ -109,6 +109,12 @@ rather than reporting only the top geometry under the site-only objective.
 2. The server **re-evaluates every submitted geometry** under the current site
    constraints, including the baseline and the site-only winner. It ignores
    any client-side energy/feasibility assertions.
+Users can press **Explore another design** to cycle through a new repeatable
+site-search seed; the chosen seed appears beside the climate/site anchor
+and in the downloaded JSON report. Replaying a seed produces the same
+geometry portfolio for the same site inputs (note that separately stored
+warm-start examples can also affect the server search).
+
 3. Each form receives a bounded, fairly interleaved detached-house airflow
    sweep (balanced, wet-room transfer and demand zoning). It combines site
    envelope/solar/construction with mechanical fan, ventilation, ducts,
