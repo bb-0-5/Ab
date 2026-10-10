@@ -2789,6 +2789,11 @@ const HouseView = ({
   const [physicsValidation, setPhysicsValidation] = useState<BuildingPhysicsValidationReport | null>(null);
   const [systemEvidenceError, setSystemEvidenceError] = useState('');
   const systemAutoKeyRef = useRef('');
+  // Discard slow/out-of-order responses when users change a site during a run.
+  const siteRunSequenceRef = useRef(0);
+  const coupledRunSequenceRef = useRef(0);
+  const wholeRunSequenceRef = useRef(0);
+  const evidenceRunSequenceRef = useRef(0);
   const systemLocationAttemptedRef = useRef(false);
   const [autopilotPresetKey, setAutopilotPresetKey] = useState('bendigo');
   const [autopilotResult, setAutopilotResult] = useState<ExistingHomeAutopilotResult | null>(null);
@@ -3607,6 +3612,8 @@ const HouseView = ({
   };
 
   const runSiteOptimization = async () => {
+    const runId = ++siteRunSequenceRef.current;
+    ++coupledRunSequenceRef.current;
     setSiteOptimizationRunning(true);
     setSiteOptimizationError('');
     setSiteOptimizationApplied(false);
@@ -3652,23 +3659,29 @@ const HouseView = ({
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Site optimization failed.');
+      if (runId !== siteRunSequenceRef.current) return;
       setSiteOptimization(payload as SiteGeometryOptimizationResult);
       // Evaluate the accepted site form against the SAME room geometry,
       // independently of the separate four-archetype typology comparison.
       if (activePanel === 'system') {
-        void runCoupledSiteAirflow(payload as SiteGeometryOptimizationResult, siteRequest);
+        void runCoupledSiteAirflow(payload as SiteGeometryOptimizationResult, siteRequest, runId);
       }
     } catch (error) {
-      setSiteOptimizationError(error instanceof Error ? error.message : 'Site optimization failed.');
+      if (runId === siteRunSequenceRef.current) {
+        setSiteOptimizationError(error instanceof Error ? error.message : 'Site optimization failed.');
+      }
     } finally {
-      setSiteOptimizationRunning(false);
+      if (runId === siteRunSequenceRef.current) setSiteOptimizationRunning(false);
     }
   };
 
   const runCoupledSiteAirflow = async (
     result: SiteGeometryOptimizationResult,
     siteInput: Record<string, unknown>,
+    siteRunId: number,
   ) => {
+    if (siteRunId !== siteRunSequenceRef.current) return;
+    const runId = ++coupledRunSequenceRef.current;
     setCoupledSiteFlowRunning(true);
     setCoupledSiteFlowError('');
     try {
@@ -3683,16 +3696,20 @@ const HouseView = ({
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Site + airflow screen failed.');
+      if (runId !== coupledRunSequenceRef.current || siteRunId !== siteRunSequenceRef.current) return;
       setCoupledSiteFlow(payload as CoupledSiteFlowResult);
     } catch (error) {
-      setCoupledSiteFlowError(error instanceof Error ? error.message : 'Site + airflow screen failed.');
+      if (runId === coupledRunSequenceRef.current) {
+        setCoupledSiteFlowError(error instanceof Error ? error.message : 'Site + airflow screen failed.');
+      }
     } finally {
-      setCoupledSiteFlowRunning(false);
+      if (runId === coupledRunSequenceRef.current) setCoupledSiteFlowRunning(false);
     }
   };
 
   const runWholeHouseOptimization = async () => {
     if (!rooms.length) return;
+    const runId = ++wholeRunSequenceRef.current;
     setWholeHouseOptimizationRunning(true);
     setWholeHouseOptimizationError('');
     try {
@@ -3719,15 +3736,19 @@ const HouseView = ({
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Whole-house optimization failed.');
+      if (runId !== wholeRunSequenceRef.current) return;
       setWholeHouseOptimization(payload as WholeHouseOptimizationResult);
     } catch (error) {
-      setWholeHouseOptimizationError(error instanceof Error ? error.message : 'Whole-house optimization failed.');
+      if (runId === wholeRunSequenceRef.current) {
+        setWholeHouseOptimizationError(error instanceof Error ? error.message : 'Whole-house optimization failed.');
+      }
     } finally {
-      setWholeHouseOptimizationRunning(false);
+      if (runId === wholeRunSequenceRef.current) setWholeHouseOptimizationRunning(false);
     }
   };
 
   const runSystemEvidence = async () => {
+    const runId = ++evidenceRunSequenceRef.current;
     setSystemEvidenceError('');
     const location = {
       name: siteOptimizationInputs.name,
@@ -3751,10 +3772,13 @@ const HouseView = ({
       const [contextPayload, validationPayload] = await Promise.all([contextResponse.json(), validationResponse.json()]);
       if (!contextResponse.ok) throw new Error(contextPayload.error || 'Site evidence could not be loaded.');
       if (!validationResponse.ok) throw new Error(validationPayload.error || 'Physics validation could not be loaded.');
+      if (runId !== evidenceRunSequenceRef.current) return;
       setSiteContext(contextPayload as AutomaticSiteContextResult);
       setPhysicsValidation(validationPayload as BuildingPhysicsValidationReport);
     } catch (error) {
-      setSystemEvidenceError(error instanceof Error ? error.message : 'System evidence could not be loaded.');
+      if (runId === evidenceRunSequenceRef.current) {
+        setSystemEvidenceError(error instanceof Error ? error.message : 'System evidence could not be loaded.');
+      }
     }
   };
 
@@ -3864,16 +3888,27 @@ const HouseView = ({
     }).catch(() => undefined);
   }, [activePanel]);
 
+  // Stable geometric signature prevents engine-driven room-array identity
+  // churn from repeatedly cancelling the automatic site sweep.
+  const systemRoomGeometryKey = rooms.map(room =>
+    `${room.id}:${room.x}:${room.y}:${room.width}:${room.height}:${room.ceilingHeight}`).join('|');
+
   useEffect(() => {
     if (activePanel !== 'system' || rooms.length === 0) return;
-    const geometryKey = rooms.map(room => `${room.id}:${room.x}:${room.y}:${room.width}:${room.height}:${room.ceilingHeight}`).join('|');
-    const key = [siteOptimizationInputs.latitudeDeg, siteOptimizationInputs.longitudeDeg, siteOptimizationInputs.targetFloorAreaM2, geometryKey].join('::');
+    // Indoor target, design life, hazard requirements and every site field
+    // must invalidate previous coupled results, not only latitude and area.
+    const key = JSON.stringify({ site: siteOptimizationInputs, rooms: systemRoomGeometryKey });
     if (systemAutoKeyRef.current === key) return;
-    systemAutoKeyRef.current = key;
-    void runSiteOptimization();
-    void runWholeHouseOptimization();
-    void runSystemEvidence();
-  }, [activePanel, rooms, siteOptimizationInputs.latitudeDeg, siteOptimizationInputs.longitudeDeg, siteOptimizationInputs.targetFloorAreaM2]);
+    // Debounce successive changes rather than racing costly 1,800-form sweeps.
+    const timer = window.setTimeout(() => {
+      if (systemAutoKeyRef.current === key) return;
+      systemAutoKeyRef.current = key;
+      void runSiteOptimization();
+      void runWholeHouseOptimization();
+      void runSystemEvidence();
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [activePanel, systemRoomGeometryKey, siteOptimizationInputs]);
 
   const selectedAirflowRoom = rooms.find(room => room.id === selectedAirflowRoomId) || rooms[0] || null;
   const selectedHeightProfile = thermalGrid?.heightProfiles?.find(profile => profile.roomId === selectedAirflowRoom?.id) || null;
