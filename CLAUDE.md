@@ -74,6 +74,20 @@ release `20260826-074205`.
 - `Dockerfile`, `compose.yaml`, `DEPLOY_INSTRUCTIONS.md`: AWS EC2 + Docker + Cloudflare
   Tunnel deployment.
 
+## Site-weather parity (shared site and HVAC climate)
+
+Both `src/lib/site_geometry_optimizer.ts` and
+`src/lib/whole_house_optimizer.ts` now use the requested indoor balance
+temperature, NOT the uncorrected 18°C preset HDD/CDD pair. Site energy/solar
+season allocation is derived from setpoint-adjusted degree days. The server
+alone attaches operator-validated EPW dry-bulb samples to site, linked
+mechanical and standalone whole-system routes. Both linked engines receive
+the SAME validated hourly series or the same fitted climate preset.
+**This does not provide hourly solar, thermal mass, ground coupling, or
+dynamically calibrated heat balance.** EPW weather arrays should never be
+persisted inside anonymous workspace state. Test via
+`npm run test:site-weather`.
+
 ## One-page user experience
 
 The app boots into `activeTab='house'`, with the initial splash disabled.
