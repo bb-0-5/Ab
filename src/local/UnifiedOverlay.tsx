@@ -37,15 +37,28 @@ const region=(goal:VisualGoal)=>{
  return 'Geometry, weather and airflow screen share climate but need physical validation.';
 };
 function SuitPlate(){
- return <g transform="translate(492 256)">
-   <path d="M-43,-68 L-8,-86 L36,-75 L56,-22 L39,47 L12,73 L-30,54 L-51,-12Z"
-    fill="#143847" stroke="#7dd3fc" strokeWidth="3"/>
-   <path d="M-30,-49 L-4,-62 L24,-56 L36,-16 L24,31 L5,45 L-23,30 L-35,-13Z"
-    fill="#091a26" stroke="#5eead4" strokeWidth="2.5"/>
-   <path d="M-25,-30 L-1,-40 L25,-26 M-27,-8 L26,-8 M-17,21 L19,23"
-    fill="none" stroke="#fb7185" strokeWidth="1.5" opacity=".8"/>
-   <path d="M-43,-68 L-8,-86 L36,-75 M-51,-12 L-30,54 L12,73 L39,47"
-    fill="none" stroke="#e2e8f0" strokeWidth="1.5" opacity=".65"/>
+ // Layered full-body artistic silhouette; the model's ACTUAL CAD export is
+ // only a small flat wearable/cosplay trim panel, not these visual suit parts.
+ return <g transform="translate(505 257)" fill="#152a3e" stroke="#7dd3fc" strokeWidth="2.2">
+   <path d="M-21,-137 L14,-137 L28,-119 L27,-90 L14,-74 L-19,-74 L-31,-96 L-30,-119Z"
+    fill="#334155" stroke="#fda4af" strokeWidth="2.6"/>
+   <path d="M-22,-119 L-8,-126 L17,-122 L20,-107 L8,-104 L-17,-105Z"
+    fill="#fbbf24" stroke="#fde68a" strokeWidth="1"/>
+   <path d="M-34,-73 L26,-73 L53,-48 L42,17 L26,37 L-31,37 L-46,15 L-54,-44Z" fill="#1e3a4c"/>
+   <path d="M-17,-58 L11,-58 L32,-34 L15,-13 L-20,-13 L-36,-34Z" fill="#7f1d1d" stroke="#fb7185" strokeWidth="2"/>
+   <circle cx="-2" cy="-32" r="16" stroke="#67e8f9" strokeWidth="3" fill="#0c4a6e"/>
+   <circle cx="-2" cy="-32" r="8" stroke="#e0f2fe" strokeWidth="2" fill="#155e75"/>
+   <path d="M-41,30 L38,30 L29,60 L-29,60Z" fill="#334155"/>
+   <path d="M-53,-59 L-79,-45 L-91,0 L-74,10 L-57,-25 L-41,-34Z
+     M52,-59 L77,-45 L91,0 L76,10 L57,-25 L42,-34Z" fill="#881337"/>
+   <path d="M-90,2 L-99,65 L-80,74 L-71,21Z" fill="#164e63"/>
+   <path d="M90,2 L99,65 L80,74 L71,21Z" fill="#164e63" stroke="#fda4af" strokeWidth="3.6"/>
+   <path d="M-98,69 L-102,86 L-80,89 L-78,74 M99,69 L102,86 L80,89 L79,74" fill="#334155"/>
+   <path d="M-26,60 L-38,103 L-31,148 L-10,148 L0,83 L9,148 L31,148 L37,105 L25,60Z" fill="#1e3a4c"/>
+   <path d="M-31,133 L-38,155 L-9,155 L-9,145 M11,145 L10,155 L39,155 L31,133" fill="#881337"/>
+   <path d="M-95,13 L-79,18 M76,18 L94,14 M-23,102 L-31,122 M22,102 L31,122"
+    fill="none" stroke="#fda4af" strokeWidth="1.5"/>
+   <text x="0" y="173" textAnchor="middle" fill="#fda4af" stroke="none" fontSize="11">SUIT LOOK · DECORATIVE ONLY</text>
  </g>;
 }
 function WaveRenderer({goal}:{goal:VisualGoal}){
