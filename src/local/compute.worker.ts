@@ -9,27 +9,81 @@ import { screenCoupledSiteAirflow, searchCoupledSiteMechanicalPortfolio } from '
 import { parseEpwTemperatureProfile, weatherStationDistanceKm } from '../lib/hourly_weather';
 import { optimizeImpedanceMatch } from './impedance';
 import { optimizeRouteSelectivity } from './selectivity';
+import { calibrateKnownYields,parseKnownYieldsCSV,screenHypotheticalBarriers } from './kinetics';
+import {
+  defaultCondition,membraneNeed,screenMembrane,proposeMaterialDiscoveries,
+  proposeIsotopeHypotheses,probeDiscovery,checkCondition,
+  type Discovery,type OperatingCondition,type Task,
+} from './cross_domain';
 
-type BuildRequest={
+type SharedRequest={discoveries?:Discovery[]};
+type BuildRequest=SharedRequest&{
   id:number;mode:'building';preset:string;areaM2:number;seed:number;targetTempC:number;
   epwText?:string;
 };
-type CircuitRequest={id:number;mode:'circuits';frequencyMHz:number;sourceOhms:number;loadOhms:number};
-type ChemistryRequest={id:number;mode:'chemistry';minimumAcceptedFraction:number};
-type WorkerRequest=BuildRequest|CircuitRequest|ChemistryRequest;
+type CircuitRequest=SharedRequest&{id:number;mode:'circuits';frequencyMHz:number;sourceOhms:number;loadOhms:number};
+type ChemistryRequest=SharedRequest&{id:number;mode:'chemistry';minimumAcceptedFraction:number;
+  knownYieldsCSV?:string;reactionId?:string;
+  condition?:OperatingCondition;timeS?:number};
+type MembraneRequest=SharedRequest&{id:number;mode:'membrane';condition:OperatingCondition;task:Task};
+type WorkerRequest=BuildRequest|CircuitRequest|ChemistryRequest|MembraneRequest;
 const context=self as unknown as DedicatedWorkerGlobalScope;
 context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
  const request=e.data;
  try{
   context.postMessage({id:request.id,kind:'progress',message:'Evaluating candidate configurations on this device…'});
+  const prior=Array.isArray(request.discoveries)?request.discoveries.slice(0,24).filter(
+   d=>d&&typeof d==='object'&&typeof d.id==='string'&&d.condition&&!checkCondition(d.condition)
+  ):[];
+  if(request.mode==='membrane'){
+   const report=screenMembrane(request.condition,request.task,prior);
+   context.postMessage({id:request.id,kind:'result',mode:'membrane',result:report});
+   return;
+  }
   if(request.mode==='circuits'){
-   const result=optimizeImpedanceMatch(request);
-   context.postMessage({id:request.id,kind:'result',mode:'circuits',result});
+   const raw=optimizeImpedanceMatch(request);
+   const condition=defaultCondition('air');
+   const finding:Discovery={
+    id:`rf:${request.frequencyMHz}:${request.sourceOhms}:${request.loadOhms}`,
+    kind:'rf_interface',producer:'circuits',
+    label:`${request.frequencyMHz} MHz passive interface`,
+    createdAt:'screening_1',evidence:'hypothesis',
+    source:'Idealized passive circuit model; no measured S-parameters.',
+    condition,
+   };
+   const discoveries=[finding];
+   const crossDomain=[...prior,...discoveries].slice(0,20).flatMap(x=>probeDiscovery(x,condition));
+   context.postMessage({id:request.id,kind:'result',mode:'circuits',
+    result:{...raw,discoveries,crossDomain}});
    return;
   }
   if(request.mode==='chemistry'){
-   const result=optimizeRouteSelectivity(undefined,request.minimumAcceptedFraction);
-   context.postMessage({id:request.id,kind:'result',mode:'chemistry',result});
+   const toy=optimizeRouteSelectivity(undefined,request.minimumAcceptedFraction);
+   const condition=request.condition||defaultCondition('water');
+   const reason=checkCondition(condition);
+   if(reason)throw Error(reason);
+   const discoveries=[...proposeMaterialDiscoveries(condition),...proposeIsotopeHypotheses(condition)];
+   let calibration=null,barrierScreen=null;
+   let calibrationStatus='No observed yield CSV supplied; all probability outcomes are hypothetical, not calibrated.';
+   if(request.knownYieldsCSV){
+    const observations=parseKnownYieldsCSV(request.knownYieldsCSV);
+    const reactionId=request.reactionId||observations[0]?.reactionId;
+    if(!reactionId)throw Error('Please select a measured reaction identity.');
+    calibration=calibrateKnownYields(observations,reactionId,condition.medium);
+    barrierScreen=screenHypotheticalBarriers(calibration,condition.temperatureK,
+      Math.max(0,request.timeS??3600));
+    calibrationStatus=`Held-out MAE ${(calibration.holdoutMAE*100).toFixed(1)} percentage points across ${calibration.holdoutCount} observations; ${calibration.gate}.`;
+    discoveries.push({id:`kinetics:${reactionId}:${condition.medium}`,
+      kind:'kinetic_fit',producer:'chemistry',label:`Calibrated effective kinetics: ${reactionId}`,
+      createdAt:'measured_yield_fit_v1',
+      evidence:'measured_user_data',source:calibration.sourceRecords.join(' | ').slice(0,220),
+      condition});
+   }
+   const crossDomain=[...discoveries,...prior].slice(0,20).flatMap(x=>probeDiscovery(x,condition));
+   const results={...toy,calibration,barrierScreen,calibrationStatus,
+    discoveries,crossDomain,priorDiscoveriesTested:prior.length,
+    caution:'No molecular wavefunctions, entropy-derived barriers or isotope chemistry are solved from first principles. A possible event may have an infinitesimal finite-horizon probability.'};
+   context.postMessage({id:request.id,kind:'result',mode:'chemistry',result:results});
    return;
   }
   const preset=SITE_LOCATION_PRESETS[request.preset]||SITE_LOCATION_PRESETS.melbourne;
@@ -96,6 +150,9 @@ context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
    scenarios:joint.ranked,
    explanation:joint.outcome,
    limitations:joint.limitations,
+   discoveries:[membraneNeed(defaultCondition('air'),'thermal_barrier')],
+   crossDomain:prior.slice(0,20).flatMap(d=>probeDiscovery(d,defaultCondition('air'))),
+   priorDiscoveriesTested:prior.length,
   };
   context.postMessage({id:request.id,kind:'result',mode:'building',result:results});
  }catch(err){
