@@ -9,6 +9,7 @@ services:
       PORT: 3000
       DATA_DIR: /app/data
       APP_URL: https://abovebound.org
+      ABOVEBOUND_RELEASE_SHA: ${ABOVEBOUND_RELEASE_SHA:-}
       # Operator-supplied EPW under /app/data; leave blank for climatology presets.
       ABOVEBOUND_EPW_FILE: ${ABOVEBOUND_EPW_FILE:-}
       NODE_ID: ${NODE_ID:-abovebound-aws-1}

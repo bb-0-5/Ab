@@ -18,6 +18,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Check deploy script syntax (does not deploy)
+        run: bash -n scripts/deploy-on-host.sh
       - name: Validate Docker Compose configuration
         run: TUNNEL_TOKEN=ci-placeholder docker compose config --quiet
       - run: npm ci

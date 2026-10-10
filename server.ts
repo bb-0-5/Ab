@@ -1146,6 +1146,11 @@ async function startServer() {
     res.json({
       status: "ok",
       nodeId: NODE_ID,
+      // Public code provenance. A missing hash means this deployment has not
+      // been verified against a GitHub revision; this is never a secret.
+      releaseSha: /^[a-f0-9]{40}$/.test(process.env.ABOVEBOUND_RELEASE_SHA || "")
+        ? process.env.ABOVEBOUND_RELEASE_SHA
+        : null,
       memorySize: simMemory.size,
       memoryLimit: MAX_MEMORY_NODES,
     });
