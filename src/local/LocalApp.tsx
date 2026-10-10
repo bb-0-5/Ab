@@ -343,7 +343,7 @@ export default function LocalApp(){
   </header>
   <main className="mx-auto max-w-6xl space-y-6 px-4 py-8 md:px-8">
    <section className="rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-[#102634] to-[#0c1721] p-6 md:p-10">
-    <span className="text-[11px] font-bold uppercase tracking-[.24em] text-cyan-300">One page · automatic exploration</span>
+    <span className="text-[11px] font-bold uppercase tracking-[.24em] text-cyan-300">Evidence-led local optimisation</span>
     <h2 className="mt-3 max-w-4xl text-3xl font-black tracking-tight md:text-5xl">
      Describe the goal. Let your computer explore the configurations.
     </h2>
@@ -474,25 +474,21 @@ export default function LocalApp(){
       <p className="mt-2 text-xs text-amber-200">No imported observations = no calibrated chemical yields. Kinetic possibilities do not guarantee events within finite time; unknown catalysts or isotope effects cannot be inferred.</p>
     </div>}
     <div className="mt-6 flex flex-wrap items-center gap-3">
-     <button onClick={()=>start(goal)} disabled={working}
+     <button onClick={()=>{queueRef.current=[];setBatch({total:0,completed:0});
+       start(goal,goal==='building'?{seed:campaign.nextSeed}:undefined)}} disabled={working}
       className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-black text-[#041019] hover:bg-cyan-300 disabled:cursor-wait disabled:opacity-40">
-      {working?'Evaluating…':'Optimise on this device'}</button>
+      {working?'Evaluating…':goal==='building'?'Test another design':'Run this experiment'}</button>
      {goal==='building'&&<button onClick={reseed} disabled={working}
       className="rounded-xl border border-cyan-400/40 px-5 py-3 text-sm font-bold text-cyan-200 disabled:opacity-40">
       Explore a different building</button>}
-     <span role="status" className="max-w-md text-xs text-slate-400">{status}</span>
+     {working&&<button onClick={stop} className="rounded-xl border border-rose-400/30 px-4 py-3 text-xs font-bold text-rose-200">Stop</button>}
+     <span role="status" aria-live="polite" className="max-w-md text-xs text-slate-300">{status}</span>
     </div>
    </section>
 
-   <UnifiedOverlay goal={goal} condition={operatingCondition} findings={findings}
-     metrics={visualMetrics}
-     budgetAUD={printBudgetAUD}
-     frontier={selectedSuit?.alternatives.map(x=>({
-      cost:x.estimatedTotalCostAUD,section:x.sectionIndexMm4,
-      acceptable:x.printable,material:x.material,
-     }))||[]}
-     onSelectGoal={next=>{setGoal(next);setResult(null);setResultGoal(null);
-       setStatus('Choose the goal and run its local optimisation.');}}/>
+   {goal==='building'&&<BuildingProgress campaign={campaign}
+     current={selectedBuilding} running={working} batch={batch}
+     onContinue={continueBuilding} onStop={stop}/>}
    <section aria-label="Optimisation result" className="rounded-3xl border border-white/10 bg-[#0a151e] p-6 md:p-8">
     <div className="flex flex-wrap items-center justify-between gap-3">
      <h3 className="text-2xl font-black tracking-tight">{working?'Finding a candidate…':result?'Your result':'Your result will appear here'}</h3>
@@ -666,6 +662,19 @@ export default function LocalApp(){
       onSelectGoal={next=>{stop();setGoal(next);setResult(null);setResultGoal(null);
        setStatus('Select constraints, then run the calculation.');}}/>
     </div>
+   </details>
+   <details className="rounded-2xl border border-white/10 bg-[#0b1720] p-5">
+    <summary className="cursor-pointer text-sm font-bold text-cyan-100">Show the cross-domain system map · conceptual view</summary>
+    <p className="mt-2 text-xs text-slate-400">This optional view illustrates links between domains. It is not a measured CFD, electrical or chemical field.</p>
+   <UnifiedOverlay goal={goal} condition={operatingCondition} findings={findings}
+     metrics={visualMetrics}
+     budgetAUD={printBudgetAUD}
+     frontier={selectedSuit?.alternatives.map(x=>({
+      cost:x.estimatedTotalCostAUD,section:x.sectionIndexMm4,
+      acceptable:x.printable,material:x.material,
+     }))||[]}
+     onSelectGoal={next=>{stop();setGoal(next);setResult(null);setResultGoal(null);
+       setStatus('Choose the goal and run its local optimisation.');}}/>
    </details>
    <section className="rounded-2xl border border-white/10 bg-[#0b1720] p-5">
     <details>
