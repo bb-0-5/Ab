@@ -227,6 +227,42 @@ export default function LocalApp(){
  const selectedSuit=resultGoal==='suit'?result as FabResult:null;
  const findings=extractDiscoveriesFromHistory(history,24);
  const currentShared=(result||{}) as SharedResult;
+ const operatingCondition:OperatingCondition={medium,temperatureK:operatingK,pressurePa,flowSpeedMs:airflow};
+ const visualMetrics:VisualMetrics={
+  headline:goal==='suit'?'Printable sci-fi suit concept, not flight hardware':
+   goal==='membrane'?'Material needs meet environmental constraints':
+   goal==='chemistry'?'Competing pathways, entropy and observed yields':
+   goal==='circuits'?'Find compatible circuit impedances':
+   'Joint site geometry and ventilation',
+  subtitle:goal==='suit'
+   ?'Automatically screen printable geometry and polymer against frame-section, budget, ambient temperature and print-bed constraints.'
+   :'Discoveries from one simulation are checked by the others under their own physics and evidence rules.',
+  feasibility:working?'no_result':goal==='suit'&&selectedSuit?(selectedSuit.selected?'conditional':'unsupported'):
+   goal==='membrane'&&selectedMembrane?(selectedMembrane.selected?'conditional':'unsupported'):
+   goal==='building'&&selectedBuilding?(selectedBuilding.best?'screened':'unsupported'):
+   goal==='chemistry'&&selectedChem?(selectedChem.calibration?.gate==='passes_baseline'?'screened':'conditional'):
+   goal==='circuits'&&selectedCircuit?(selectedCircuit.recommended?'conditional':'screened'):'no_result',
+  tested:goal==='suit'?(selectedSuit?.candidatesEvaluated??0):
+   goal==='membrane'?(selectedMembrane?.totalCandidates??0):
+   goal==='building'?(selectedBuilding?.siteCandidates??0):
+   goal==='chemistry'?(selectedChem?.candidatesTested??0):
+   selectedCircuit?.tested??0,
+  selected:goal==='suit'?(selectedSuit?.selected?.material||'No supported filament'):
+   goal==='membrane'?(selectedMembrane?.selected?.label||'No supported reference'):
+   goal==='building'?(selectedBuilding?.best?.form||'Not selected'):
+   goal==='chemistry'?(selectedChem?.calibration?'Evidence-fit prototype':'Hypothesis only'):
+   selectedCircuit?.best?.topology||'Not calculated',
+  materialCostAUD:goal==='suit'?(selectedSuit?.selected?.estimatedTotalCostAUD??null):null,
+  remaining:goal==='suit'?'No human-powered flight is inferred; these prints are decorative cosplay only.':
+   'The display is a linked schematic, not an FEA, CFD, plasma or quantum field simulation.',
+ };
+ const saveSTL=()=>{
+  if(!selectedSuit?.selected||!selectedSuit.selected.printable)return;
+  const mesh=panelSTL(selectedSuit.selected);
+  const url=URL.createObjectURL(new Blob([mesh],{type:'model/stl'}));
+  const a=document.createElement('a');a.href=url;a.download='abovebound-sci-fi-decorative-panel-mm.stl';
+  a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
+ };
 
  return <div className="min-h-screen bg-[#071016] text-slate-100 selection:bg-cyan-700">
   <header className="border-b border-white/10 px-4 py-4 md:px-8">
