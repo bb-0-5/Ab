@@ -788,6 +788,16 @@ export function evaluateSiteHouseDesign(design: SiteHouseDesign, rawInput: SiteG
   return evaluateNormalized(design, input, buildSolarSamples(input.location));
 }
 
+/**
+ * Trusted, reproducible reference: calculate the EXACT default/explicit
+ * baseline encoded by the current site input. Never accept a browser-posted
+ * arbitrary "baseline" whose inflated energy could manufacture savings.
+ */
+export function evaluateSiteReference(rawInput: SiteGeometryOptimizationInput): EvaluatedSiteHouseDesign {
+  const input = normalizeInput(rawInput);
+  return evaluateNormalized(input.baseline, input, buildSolarSamples(input.location));
+}
+
 function sunPathSummary(location: SiteLocationProfile): SunPathPoint[] {
   const days = [
     { label: 'June solstice', day: 172 },
