@@ -9,7 +9,9 @@ import {
   type EvaluatedWholeHouseConfiguration,
   type WholeHouseConfiguration,
 } from './whole_house_optimizer';
-import { DEFAULT_DEGREE_DAY_BASE_TEMP_C } from './degree_day_setpoint';
+// The site model and mechanical proxy MUST use the same occupant balance
+// temperature and climate inputs; defaulting mechanics to 18°C while site
+// loads follow a 22°C user setpoint invents inconsistent savings.
 
 /**
  * Couples a site design's proposed room topology to a DETACHED-house mechanical
@@ -24,9 +26,9 @@ import { DEFAULT_DEGREE_DAY_BASE_TEMP_C } from './degree_day_setpoint';
  *   duct/openings/controls/HRV manufacturing. EXCLUDE its generic building
  *   embodied, opaque-fabric, and solar terms to prevent double counting.
  *
- * Both models use the original site-preset degree-day climate at 18 C base.
- * Hourly EPW weather isn't used here: Site + Shadow is still not hourly and
- * mixing different climate bases into a "combined saving" would be misleading.
+ * Both models use the same indoor balance point and source: the fitted
+ * climate profile or the SAME validated EPW dry-bulb series. Neither model
+ * becomes an hourly heat-balance solver or uses EPW solar irradiance.
  * All output is screening only, with explicit area/layout evidence limits.
  */
 
@@ -175,15 +177,18 @@ function evaluateCase(
   maximumCandidates: number,
   coolingCOP: number,
   isBaseline: boolean,
+  targetTempC: number,
+  hourlyOutdoorTemperaturesC?: number[],
 ): CoupledSiteFlowCase {
   const { rooms, layout } = roomsFromSiteDesign(site);
   const input: WholeHouseOptimizerInput = {
     rooms,
     location,
     fixedArchetype: 'detached',
-    // Exactly the site model's preset balance temperature; keep the two
-    // reduced-order calculations on the SAME weather basis.
-    targetTempC: DEFAULT_DEGREE_DAY_BASE_TEMP_C,
+    // Exactly the site model's selected indoor balance temperature and
+    // (if supplied) the same operator-provided validated EPW series.
+    targetTempC,
+    hourlyOutdoorTemperaturesC,
     lifecycleYears,
     maximumCandidates,
   };
@@ -255,14 +260,18 @@ function evaluateCase(
  */
 export function screenCoupledSiteAirflow(
   site: { baseline: EvaluatedSiteHouseDesign; best: EvaluatedSiteHouseDesign; location: SiteLocationProfile },
-  config: { lifecycleYears?: number; maximumCandidates?: number; coolingCOP?: number } = {},
+  config: {
+    lifecycleYears?: number; maximumCandidates?: number; coolingCOP?: number;
+    targetTempC?: number; hourlyOutdoorTemperaturesC?: number[];
+  } = {},
 ): CoupledSiteFlowResult {
   const lifecycleYears = Math.min(100, Math.max(5, Number(config.lifecycleYears) || 30));
   // Mirror Site + Shadow's default and 1..8 clipping for cooling COP.
   const coolingCOP = Math.min(8, Math.max(1, Number(config.coolingCOP) || 3.2));
+  const targetTempC = Math.min(28, Math.max(16, Number(config.targetTempC) || 22));
   const maximumCandidates = Math.min(1200, Math.max(48, Math.round(Number(config.maximumCandidates) || 108)));
-  const baseline = evaluateCase(site.baseline, site.location, lifecycleYears, maximumCandidates, coolingCOP, true);
-  const proposed = evaluateCase(site.best, site.location, lifecycleYears, maximumCandidates, coolingCOP, false);
+  const baseline = evaluateCase(site.baseline, site.location, lifecycleYears, maximumCandidates, coolingCOP, true, targetTempC, config.hourlyOutdoorTemperaturesC);
+  const proposed = evaluateCase(site.best, site.location, lifecycleYears, maximumCandidates, coolingCOP, false, targetTempC, config.hourlyOutdoorTemperaturesC);
   const areaDelta = Math.abs(baseline.layout.declaredFloorAreaM2 - proposed.layout.declaredFloorAreaM2);
   const floorAreaDifferencePercent = areaDelta / Math.max(1, baseline.layout.declaredFloorAreaM2) * 100;
   // Comparing differently-sized homes can look like an energy saving while
@@ -305,7 +314,7 @@ export function screenCoupledSiteAirflow(
     limitations: [
       'This is a linked evaluation of a preselected site form and detached-house mechanical options, NOT a joint geometry/HVAC optimiser or CFD.',
       'Site + Shadow owns the whole envelope, solar and original building manufacture. Its natural-ventilation cooling credit is REMOVED before adding mechanically supplied ventilation and fans, to avoid claiming both benefits. Whole System adds ONLY mechanical ventilation, fans and extra manufacture; generic building, fabric and solar totals are excluded.',
-      'Both components use the site climate preset at an 18 C degree-day balance reference, NOT a verified hourly heat-balance model or an 18 C thermostat requirement. The separately configured EPW hourly route is not applied to this coupled result.',
+      'Both components use the same selected indoor balance point and climate degree-day source (preset fit or station dry-bulb EPW). Even EPW-derived degree days do not make this an hourly dynamic heat-balance, irradiance, infiltration or HVAC simulation.',
       'Room rectangles are scaled surrogate topology from the site generator. Rooms conserve total declared area, but this does not prove doorway connections, real footprints, structural layout or occupants.',
       'Comparisons changing floor area by more than 5% fail the equivalence gate; similar area alone does not prove equal amenity or construction constraints.',
       'The mechanical and solar models use simplified independent assumptions; savings remain illustrative until validated against real buildings and engineering standards.',
@@ -326,12 +335,16 @@ export function screenCoupledSiteAirflow(
 export function searchCoupledSiteMechanicalPortfolio(
   site: { baseline: EvaluatedSiteHouseDesign; best: EvaluatedSiteHouseDesign; location: SiteLocationProfile },
   alternatives: EvaluatedSiteHouseDesign[],
-  config: { lifecycleYears?: number; maximumCandidates?: number; coolingCOP?: number } = {},
+  config: {
+    lifecycleYears?: number; maximumCandidates?: number; coolingCOP?: number;
+    targetTempC?: number; hourlyOutdoorTemperaturesC?: number[];
+  } = {},
 ): JointSiteMechanicalSearch {
   const lifecycleYears = Math.min(100, Math.max(5, Number(config.lifecycleYears) || 30));
   const coolingCOP = Math.min(8, Math.max(1, Number(config.coolingCOP) || 3.2));
+  const targetTempC = Math.min(28, Math.max(16, Number(config.targetTempC) || 22));
   const maximumCandidates = Math.min(108, Math.max(48, Math.round(Number(config.maximumCandidates) || 48)));
-  const baseline = evaluateCase(site.baseline, site.location, lifecycleYears, maximumCandidates, coolingCOP, true);
+  const baseline = evaluateCase(site.baseline, site.location, lifecycleYears, maximumCandidates, coolingCOP, true, targetTempC, config.hourlyOutdoorTemperaturesC);
 
   // Server callers must re-evaluate EVERY proposal using the same site input
   // before calling this routine. Limit the portfolio independently of callers.
@@ -342,7 +355,7 @@ export function searchCoupledSiteMechanicalPortfolio(
     const signature = JSON.stringify(proposal.design);
     if (seen.has(signature)) continue;
     seen.add(signature);
-    cases.push(evaluateCase(proposal, site.location, lifecycleYears, maximumCandidates, coolingCOP, false));
+    cases.push(evaluateCase(proposal, site.location, lifecycleYears, maximumCandidates, coolingCOP, false, targetTempC, config.hourlyOutdoorTemperaturesC));
   }
   const siteOnlyChoice = cases.find(candidate =>
     JSON.stringify(candidate.site.design) === JSON.stringify(site.best.design))!;
@@ -401,7 +414,7 @@ export function searchCoupledSiteMechanicalPortfolio(
       'Surrogate rooms are generated, uniformly area-corrected rectangles, not a surveyed architectural plan or measured doorway/cavity network.',
       'All options are fixed detached-house building archetypes; do not generalise conclusions to apartment party walls or common services.',
       'Site envelope, windows, sun and embodied construction are counted once; mechanically supplied ventilation, fans and extra equipment are additional. Natural-ventilation credits are removed under mechanical control.',
-      'Site + Shadow and airflow still use approximate, preset degree-day physics at a common 18°C reference. This is not hourly calibrated EnergyPlus/CFD or ASHRAE Standard 140 certified.',
+      'Site + Shadow and airflow use the same selected indoor balance temperature; EPW hourly dry-bulb may supply both climate inputs, otherwise both use a fitted preset. Solar, fabric dynamics and HVAC remain simplified: not calibrated EnergyPlus/CFD or ASHRAE Standard 140 certified.',
       'Only comparable floor areas within 5% and project-screen feasible candidates can be selected. Matching floor area alone cannot prove equal liveability.',
       'Manufacturing allowances are not product EPD evidence; confirm building permissions, costs, surveyed geometry and local hazards before making a real construction choice.',
     ],
