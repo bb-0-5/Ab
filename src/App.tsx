@@ -3694,7 +3694,6 @@ const HouseView = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           siteInput,
-          baselineDesign: result.baseline.design,
           proposedDesign: result.best.design,
           candidateDesigns: result.feasibleShortlist.map(candidate => candidate.design),
         }),
