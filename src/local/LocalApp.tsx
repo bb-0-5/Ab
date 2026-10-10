@@ -395,6 +395,12 @@ export default function LocalApp(){
       </div>:<div className="mt-4 rounded-xl border border-amber-700/40 bg-amber-950/20 p-4 text-sm text-amber-100">
        No known catalogue material passes the stated constraints. A new material needs independent physical measurements; the engine cannot invent a valid one.
       </div>}
+      <div className="mt-3 rounded-lg border border-white/10 bg-black/25 p-3 text-xs text-slate-300">
+       <strong>Environmental transport:</strong> {titleCase(selectedMembrane.environmentHeatTransfer.regime)}.
+       Estimated heat flux for an assumed 15 K surface difference: {selectedMembrane.environmentHeatTransfer.heatFluxWm2===null?'Unsupported':
+         `${fmt(selectedMembrane.environmentHeatTransfer.heatFluxWm2,1)} W/m²`}.
+       <p className="mt-1 text-[11px] text-amber-200">{selectedMembrane.environmentHeatTransfer.method}</p>
+      </div>
       <p className="mt-3 text-sm text-slate-400">Tested {selectedMembrane.totalCandidates} reference candidates; {selectedMembrane.passingCandidates} conditionally pass a thermal-only screen.</p>
       <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-amber-100">{selectedMembrane.unmetRequirements.map((x,i)=><li key={i}>{x}</li>)}</ul>
       <details className="mt-3 text-xs text-slate-400"><summary className="cursor-pointer">All tested materials and limits</summary>
