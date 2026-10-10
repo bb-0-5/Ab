@@ -17,8 +17,9 @@ import { DEFAULT_DEGREE_DAY_BASE_TEMP_C } from './degree_day_setpoint';
  * real-world apartment, a CFD model, or a measured as-built floor plan.
  *
  * Scope of additive lifecycle accounting:
- * - Site engine owns construction, envelope, glazing, solar and natural-vent
- *   operational allowance. Use its full annual and embodied totals.
+ * - Site engine owns construction, envelope, glazing and solar. Recompute its
+ *   cooling load WITHOUT its natural-ventilation credit when mechanical
+ *   ventilation is installed, to avoid taking two incompatible credits.
  * - Whole-house engine owns only NEW mechanical fresh-air + fan electricity and
  *   duct/openings/controls/HRV manufacturing. EXCLUDE its generic building
  *   embodied, opaque-fabric, and solar terms to prevent double counting.
@@ -48,6 +49,8 @@ export interface CoupledSiteFlowCase {
   };
   energy: {
     annualSiteElectricalKWh: number;
+    /** Foregone natural-ventilation cooling credit under mechanical control. */
+    naturalVentilationCreditRemovedElectricalKWh: number;
     annualVentilationElectricalKWh: number;
     annualFanElectricalKWh: number;
     annualCombinedElectricalKWh: number;
@@ -138,6 +141,7 @@ function evaluateCase(
   location: SiteLocationProfile,
   lifecycleYears: number,
   maximumCandidates: number,
+  coolingCOP: number,
   isBaseline: boolean,
 ): CoupledSiteFlowCase {
   const { rooms, layout } = roomsFromSiteDesign(site);
@@ -153,7 +157,16 @@ function evaluateCase(
   };
   const airflow = optimizeWholeHouseSystem(input);
   const selected: EvaluatedWholeHouseConfiguration = isBaseline ? airflow.baseline : airflow.best;
-  const annualSiteElectricalKWh = site.operational.annualTotalKWh;
+  // Site + Shadow assumes a natural ventilation cooling benefit. It cannot
+  // ALSO be credited while claiming a mechanical HRV/fan strategy. Recalculate
+  // the source cooling formula without the natural-ventilation term, keeping
+  // the solar and sensible load contribution on Site + Shadow's boundary.
+  const coolingWithoutNaturalCreditKWh = Math.max(0,
+    (site.operational.envelopeCoolingKWh + site.solar.coolingSolarPenaltyKWh * 0.9) / coolingCOP);
+  const annualSiteElectricalKWh = site.operational.annualHeatingElectricalKWh
+    + coolingWithoutNaturalCreditKWh;
+  const naturalVentilationCreditRemovedElectricalKWh = Math.max(0,
+    annualSiteElectricalKWh - site.operational.annualTotalKWh);
   const annualVentilationElectricalKWh = selected.annual.ventilationElectricalKWh;
   const annualFanElectricalKWh = selected.annual.fanElectricalKWh;
   const annualCombinedElectricalKWh = annualSiteElectricalKWh
@@ -175,6 +188,7 @@ function evaluateCase(
     },
     energy: {
       annualSiteElectricalKWh: round(annualSiteElectricalKWh),
+      naturalVentilationCreditRemovedElectricalKWh: round(naturalVentilationCreditRemovedElectricalKWh),
       annualVentilationElectricalKWh: round(annualVentilationElectricalKWh),
       annualFanElectricalKWh: round(annualFanElectricalKWh),
       annualCombinedElectricalKWh: round(annualCombinedElectricalKWh),
@@ -195,12 +209,14 @@ function evaluateCase(
  */
 export function screenCoupledSiteAirflow(
   site: { baseline: EvaluatedSiteHouseDesign; best: EvaluatedSiteHouseDesign; location: SiteLocationProfile },
-  config: { lifecycleYears?: number; maximumCandidates?: number } = {},
+  config: { lifecycleYears?: number; maximumCandidates?: number; coolingCOP?: number } = {},
 ): CoupledSiteFlowResult {
   const lifecycleYears = Math.min(100, Math.max(5, Number(config.lifecycleYears) || 30));
+  // Mirror Site + Shadow's default and 1..8 clipping for cooling COP.
+  const coolingCOP = Math.min(8, Math.max(1, Number(config.coolingCOP) || 3.2));
   const maximumCandidates = Math.min(1200, Math.max(48, Math.round(Number(config.maximumCandidates) || 108)));
-  const baseline = evaluateCase(site.baseline, site.location, lifecycleYears, maximumCandidates, true);
-  const proposed = evaluateCase(site.best, site.location, lifecycleYears, maximumCandidates, false);
+  const baseline = evaluateCase(site.baseline, site.location, lifecycleYears, maximumCandidates, coolingCOP, true);
+  const proposed = evaluateCase(site.best, site.location, lifecycleYears, maximumCandidates, coolingCOP, false);
   const areaDelta = Math.abs(baseline.layout.declaredFloorAreaM2 - proposed.layout.declaredFloorAreaM2);
   const floorAreaDifferencePercent = areaDelta / Math.max(1, baseline.layout.declaredFloorAreaM2) * 100;
   // Comparing differently-sized homes can look like an energy saving while
@@ -242,7 +258,7 @@ export function screenCoupledSiteAirflow(
     },
     limitations: [
       'This is a linked evaluation of a preselected site form and detached-house mechanical options, NOT a joint geometry/HVAC optimiser or CFD.',
-      'Site + Shadow owns the whole envelope, solar, natural ventilation and original building manufacture; Whole System adds ONLY mechanical ventilation, fans and their extra manufacture. Its generic building, fabric and solar totals are explicitly excluded to prevent double counting.',
+      'Site + Shadow owns the whole envelope, solar and original building manufacture. Its natural-ventilation cooling credit is REMOVED before adding mechanically supplied ventilation and fans, to avoid claiming both benefits. Whole System adds ONLY mechanical ventilation, fans and extra manufacture; generic building, fabric and solar totals are excluded.',
       'Both components use the site climate preset at an 18 C degree-day balance reference, NOT a verified hourly heat-balance model or an 18 C thermostat requirement. The separately configured EPW hourly route is not applied to this coupled result.',
       'Room rectangles are scaled surrogate topology from the site generator. Rooms conserve total declared area, but this does not prove doorway connections, real footprints, structural layout or occupants.',
       'Comparisons changing floor area by more than 5% fail the equivalence gate; similar area alone does not prove equal amenity or construction constraints.',
