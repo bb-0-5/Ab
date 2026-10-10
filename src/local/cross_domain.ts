@@ -221,3 +221,35 @@ export function extractDiscoveriesFromHistory(
  }
  return [...byId.values()];
 }
+
+/** Re-screen each discovery against multiple real physical environments.
+ * A use case is reported only when its relevant property is known AND its
+ * material temperature/phase threshold is not violated. No isotope-specific
+ * constitutive law is fabricated.
+ */
+export function searchDiscoveryUseCases(discoveries:Discovery[],budget=12) {
+ if(!Number.isInteger(budget)||budget<1||budget>32)throw Error('Bound discovery sweep budget 1..32.');
+ const conditions:OperatingCondition[]=[
+  defaultCondition('air'),
+  defaultCondition('water'),
+  defaultCondition('vacuum'),
+  {medium:'vacuum',temperatureK:5000,pressurePa:.001,flowSpeedMs:0},
+  {medium:'air',temperatureK:650,pressurePa:101325,flowSpeedMs:8},
+ ];
+ const result=discoveries.slice(0,budget).map(discovery=>{
+  const all=conditions.flatMap(condition=>probeDiscovery(discovery,condition));
+  return {
+   discoveryId:discovery.id,label:discovery.label,originalMedium:discovery.condition.medium,
+   probesPerformed:all.length,
+   compatible:all.filter(x=>x.status==='conditional'),
+   rejected:all.filter(x=>x.status==='rejected').length,
+   unknown:all.filter(x=>x.status==='unsupported').length,
+   note:discovery.kind==='isotope_hypothesis'
+     ?'Isotope mass alone produces NO validated use case; independent measurements needed.'
+     :'Use cases are conservative, task-specific thermal or geometric screens only, not certified materials.',
+  };
+ });
+ return {discoveriesTested:result.length,scenariosPerDiscovery:conditions.length,
+  reports:result,limited:true,
+  warning:'Zero accepted results at 5000 K vacuum are NOT proof of material impossibility; only of this bounded reference catalogue and available constitutive evidence.'};
+}
