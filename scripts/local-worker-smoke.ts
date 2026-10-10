@@ -25,6 +25,43 @@ assert.ok(rf.best.centerDeliveredPowerFraction>=0&&rf.best.centerDeliveredPowerF
 assert.ok(rf.microstripExample.predictedImpedanceOhms>0);
 const chem=send({id:2,mode:'chemistry',minimumAcceptedFraction:.6});
 assert.ok(chem.gate.targetPerInput<=chem.baseline.targetPerInput+.0001);
+const membrane=send({id:10,mode:'membrane',task:'heat_spreader',
+ condition:{medium:'air',temperatureK:295,pressurePa:101325,flowSpeedMs:2}});
+assert.ok(membrane.selected?.thermalConductivityWmK>0);
+assert.ok(membrane.discoveries.some((x:any)=>x.kind==='membrane_need'));
+const hot=send({id:11,mode:'membrane',task:'flow_membrane',
+ condition:{medium:'vacuum',temperatureK:5000,pressurePa:.001,flowSpeedMs:0},
+ discoveries:membrane.discoveries});
+assert.equal(hot.selected,null);
+assert.ok(hot.useCaseSweep.discoveriesTested>0);
+const chemistry=send({id:12,mode:'chemistry',minimumAcceptedFraction:.5,
+ condition:{medium:'air',temperatureK:295,pressurePa:101325,flowSpeedMs:2},
+ timeS:3600,discoveries:membrane.discoveries});
+assert.equal(chemistry.calibration,null,'No empirical model without uploaded known reaction yields.');
+assert.ok(chemistry.discoveries.some((x:any)=>x.kind==='isotope_hypothesis'));
+assert.ok(chemistry.matchedMembraneNeeds.length>0,
+ 'Membrane requirement must be handed to the chemistry/material search.');
+const receiver=send({id:13,mode:'circuits',frequencyMHz:100,sourceOhms:50,loadOhms:100,
+ discoveries:chemistry.discoveries});
+assert.ok(receiver.crossDomain.some((x:any)=>x.domain==='circuits'&&x.status==='unsupported'),
+ 'Circuit simulator must test but not invent isotope electrical properties.');
+const suit=send({id:20,mode:'suit',
+ printGoal:'flight_suit_concept',partWidthMm:80,partLengthMm:135,
+ printerBedXmm:220,printerBedYmm:220,budgetAUD:12,filamentPriceAUDkg:30,
+ minSectionIndexMm4:90,
+ condition:{medium:'air',temperatureK:295,pressurePa:101325,flowSpeedMs:0},
+ discoveries:chemistry.discoveries});
+assert.equal(suit.mode,'bounded_local_fdm_screen');
+assert.equal(suit.viableForHumanFlight,false);
+assert.ok(suit.selected?.printable);
+assert.ok(suit.candidatesEvaluated>=100);
+assert.ok(suit.crossDomain.length>0);
+const hotSuit=send({id:21,mode:'suit',
+ printGoal:'flight_suit_concept',partWidthMm:80,partLengthMm:135,
+ printerBedXmm:220,printerBedYmm:220,budgetAUD:12,filamentPriceAUDkg:30,
+ minSectionIndexMm4:90,
+ condition:{medium:'vacuum',temperatureK:5000,pressurePa:.001,flowSpeedMs:0}});
+assert.equal(hotSuit.selected,null,'Do not fabricate claims of printable hot-vacuum flying armor.');
 const building=send({id:3,mode:'building',preset:'melbourne',
  areaM2:130,targetTempC:22,seed:1441});
 assert.equal(building.seed,1441);
