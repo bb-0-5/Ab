@@ -1,8 +1,8 @@
-# Deploy AboveBound — static, local-first
+# Static local-first deployment
 
-The current app's execution is **entirely inside the user's web browser**.
-There is no AWS instance, Express API, Docker volume, WebSocket server or
-background simulation service required.
+All runtime simulations are Web Workers in the user's own browser.
+There is **no AWS, Express API, WebSocket, Docker, Supabase Edge Function
+or paid cloud compute** in the new runtime.
 
 ```sh
 npm ci
@@ -10,27 +10,35 @@ npm run test:all
 npm run build
 ```
 
-Deploy the contents of `dist/` to **static** HTTPS hosting. Cloudflare Pages,
-GitHub Pages, or an ordinary HTTPS static file host work. Make sure that the
-bundled `*.worker-*.js` assets are served as ordinary JavaScript files with
-the correct MIME type and that the origin uses HTTPS (localhost is fine for
-development). The site uses a relative `base: './'` for subpath hosting.
+Upload `dist/` to HTTPS static hosting, such as Cloudflare Pages,
+GitHub Pages or comparable CDN. Serve hashed worker assets as JavaScript
+and test on a real mobile device: source files are not required on
+the runtime machine. Vite's relative base supports project subpaths.
 
-### Current abovebound.org cutover is NOT automatic
-The old public DNS/Cloudflare Tunnel currently routes to an AWS origin.
-Publishing `dist/` to an independent static host does **not** replace the
-origin or migrate its anonymous historical memory. First verify preview,
-then export legacy data, configure Supabase with RLS, then plan DNS cutover.
-Only after real-host acceptance testing should the AWS instance, attached
-storage and Cloudflare Tunnel be decommissioned separately. Removing scripts
-from this GitHub repo DOES NOT terminate running billable AWS infrastructure.
+## Cloudflare Pages option (no origin server)
+Connect the GitHub repository `bb-0-5/Ab` to Cloudflare Pages; set:
+- framework preset: Vite
+- build command: `npm run build`
+- output directory: `dist`
+- no runtime environment variables needed for device-only operation
 
-### Data and privacy
-Results are saved locally on the device. Optional private Supabase backup
-requires explicit project URL, PUBLIC publishable key, anonymous Auth, and
-the owner-only migration in `supabase/migrations`. Do not put a service-role
-key in a public build. Anonymous cloud sessions cannot be recovered after
-browser storage is lost; add recoverable accounts before depending on cloud
-memory for critical work.
+Before linking `abovebound.org`, verify a `*.pages.dev` preview:
+single page loads, Worker script loads, building/impedance/probability
+runs finish and local history reloads across refresh. Then install the
+owner-only Supabase migration in the correct, intentionally selected
+project and test two separate authenticated identities.
 
-The physics/chemistry/hardware screens remain educational, not certified.
+**Do not point the apex hostname to Pages while the old Cloudflare Tunnel
+is the only working production origin.** Plan DNS cutover after backups.
+The previous app's Docker volume `discovery_memory.json` is NOT
+automatically migrated. Export it and independently verify records
+before retiring AWS. Removing AWS-oriented files from this repository
+does not stop or delete any cloud resources, routes or billable volumes.
+Stop/retire those separately after successful static deployment.
+
+## Security
+Only publishable Supabase keys are accepted in the optional cloud UI;
+server service-role keys are forbidden in frontend code. Apply
+`supabase/migrations/20261011000000_ab_computation_memory.sql`
+and verify RLS. Supabase anonymous auth identities will not be recoverable
+from another device until an identity-linking login flow is implemented.

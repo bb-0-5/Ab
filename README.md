@@ -1,456 +1,97 @@
-# BeyondBound
-
-BeyondBound is a React/Three.js generative-design lab. Its simulations form one pipeline rather than separate demos:
-
-- V0 creates the compression field.
-- V1–V2 explore causal-node fields from orthogonal phases.
-- V3–V4 build shortest-route networks.
-- V5 converts closed routes into architectural membranes.
-- V6 simulates thermal, electrical, blockchain, or mathematical flow.
-- V7 tunes the upstream stages from the measured flow.
-- V8 explores Riemann-zeta and prime-distribution structure.
-- V9–V11 construct the material lattice, mesh, and hardware envelope used by the swarm.
-- V12 runs the live house, HVAC, Esky, vent, solar, and climate models.
-- V13 provides the periodic-table and material-composite builder.
-
-V8 is a standalone mathematical visualization. Prime gaps, Riemann-zeta zeros and
-golden-ratio phases do not alter V6 flow resistance, V12 wall conductance, HVAC
-schedules, material selection or claimed energy savings. Building-physics results
-must come from dimensional, material, weather, load and equipment inputs.
-
-## Whole System building optimizer
-
-Open **House → Whole System** for the primary building-energy workflow. It runs
-automatically from the selected location and compares detached, terrace, low-rise
-apartment and tower-apartment archetypes while sweeping pressure-control strategy,
-transfer openings, duct diameter, fan pressure and heat recovery. The score combines
-annual HVAC/fan demand with construction, duct, opening and controls manufacturing
-energy over the selected lifecycle.
-
-The consolidated software-3D view combines the annual Earth/sun position, generated
-building geometry, shadow direction, cached neighbouring-building massing and the
-whole-house pressure network. It remains orbitable and zoomable without WebGL.
-
-Seven Australian preset anchors include small cached snapshots from the Overture Maps
-buildings dataset. Exact-site GeoJSON can be added with `npm run site-context:import`.
-Footprints and height/level fields are evidence; missing heights, internal layouts,
-materials and shared cavities remain explicitly labelled assumptions. The UI reports
-site completeness and uncertainty rather than silently inventing missing property
-information.
-
-The `/api/house/validation-report` endpoint currently runs eight deterministic
-unit/sign/conservation/repeatability checks. Passing these checks qualifies the model
-for comparative screening only; it does not mean the model has passed ASHRAE Standard
-140, BESTEST, certified CFD, an energy rating or building approval.
-
-## What the automatic Whole System recommendation actually means
-
-The optimizer now distributes any bounded candidate budget **evenly across all
-four dwelling archetypes**, instead of silently using the entire short budget on
-detached houses. The API reports how many alternatives were evaluated and passed
-the project-defined comfort/noise/airflow constraints for each form.
-
-It also includes an **81-case embodied-energy assumption stress test**: each
-dwelling type's unsourced construction-energy allowance is independently set to
-75%, 100% or 125% of its current provisional figure (3⁴ combinations). The
-reported winning-archetype counts tell you whether the selected first-place
-dwelling depends on those choices. These are deliberately chosen WHAT-IF
-perturbations, **not statistical uncertainty ranges or probabilities**.
-
-The Whole System page shows a clear warning when the winner changes across the
-scenarios or when some dwelling types have no feasible candidate. The JSON
-download includes coverage and stress data, and the new **Decision brief (.txt)**
-button produces a readable, reproducible comparison with limits and needed
-evidence. Neither output is a real-world building recommendation, thermal
-certificate or construction approval.
-
-For a genuinely actionable optimisation, the remaining work is substantial:
-obtain exact property geometry and hour-by-hour local weather; replace unverified
-structure allowances with comparable EPD-based bills of quantities; model real
-apartment adjacency and occupancy; and compare thermal/airflow performance against
-independent reference cases. An apparent win that disappears when assumed
-manufacturing factors change is a finding about the assumptions, **not** a
-verified energy saving.
-
-## One shared climate + indoor setpoint across building and HVAC
-
-The automated one-page Site + Shadow and geometry × ventilation search now
-use **the same balance temperature and climate temperature evidence**.
-Before this fix, Site + Shadow silently multiplied preset 18°C degree days
-against an arbitrary requested indoor temperature, while mechanical ventilation
-screened its own separate balance point. That could make an apparently
-"better" geometry simply an inconsistent climate comparison.
-
-The default climate path now fits the existing 18°C HDD/CDD preset and
-re-integrates degree days at the user's chosen indoor setpoint for both site
-fabric and mechanical ventilation. If the operator has provided a validated
-nearby EnergyPlus EPW file, its **8,760/8,784 hourly dry-bulb observations**
-instead supply degree days to **both** engines (with leap-year annualisation).
-A location without a matching valid station falls back explicitly to the
-fitted preset, with the reason in the result. Site + Shadow's solar/eave
-model continues to use approximate geometric and climatology assumptions:
-**station dry-bulb temperatures are NOT hourly solar radiation or building
-thermal simulation**.
-
-The source, station distance, annualised hours, chosen setpoint and
-resulting heating/cooling degree days are reported in
-`siteOptimization.weatherContext`. The client cannot inject forged
-hourly weather into the server's optimisation routes. Large hourly vectors
-are not persisted into workspace histories. The system remains a reduced-order,
-uncalibrated energy screen: true HVAC heating and cooling balance
-temperatures need not equal the selected indoor thermostat setpoint.
-
-Run `npm run test:site-weather` for fixed 10°C EPW, preset setpoint
-monotonicity, geometry/HVAC climate parity, replay and fallback validation.
-
-To keep those estimates internally reproducible, building optimisation now
-returns its **full-precision computed design geometry**. Previously it rounded
-orientation, eaves, windows and dimensions before returning the selected
-geometry: re-evaluating that "same" design on the downstream HVAC route
-changed the energy calculation. UI values can still be displayed rounded,
-but the geometry sent between physical calculation stages must not be.
-
-## Offline EPW hourly weather for Whole System
-
-An operator can now supply an **EnergyPlus Weather (EPW)** file instead of
-relying entirely on fitted preset climate degree days. Put an EPW on the
-running server under `DATA_DIR/weather/site.epw` and configure
-`ABOVEBOUND_EPW_FILE=weather/site.epw` in the production environment. The
-file is intentionally **not committed or browser-uploaded**. A verified
-8,760- or 8,784-hour EPW with valid, ordered timestamps and non-missing dry-bulb
-temperature values is required.
-
-Whole System uses the temperatures to integrate annual heating/cooling
-degree days at the requested balance setpoint, annualising leap years to
-365 days. It accepts the station only within **75 km** of the selected site.
-Missing/corrupt/distant weather is refused and the interface states that it
-fell back to the preset. The backend does not accept a user's forged weather
-vector or claimed weather source via the request body.
-
-This upgrade affects the Whole System envelope/ventilation heat-loss proxy,
-**not the separate Site + Shadow optimiser or simplified solar model**. EPW
-solar radiation is *not* treated as measured vertical-facade irradiance.
-It remains a reduced-order screening workflow, not an hourly building-thermal
-solver, a calibrated site weather model or ASHRAE 140 validation.
-
-To run deterministic parser, station-distance and optimiser coupling checks:
-`npm run test:weather`. No weather data is needed for normal operation.
-
-## One-page design experience — no parameter tab maze
-
-The homepage now opens directly into **Automatic building design**, without
-the six-module tab ribbon, splash screen or the five-module House toolbar.
-Research labs remain available behind **Research tools**, not as primary
-navigation. The actual building design view is one page:
-
-- Choose an approximate location and desired floor area, or use device location.
-- The application **automatically** searches site orientation, footprint,
-  solar/shadow geometry, room layout, mechanical ventilation and heat
-  recovery. The user does **not** select every combination.
-- The first thing visible is a short, plain-language *Building design summary*:
-  selected form, floor area, air strategy, estimated annual electricity,
-  lifetime modeled energy and number of options screened. If no feasible
-  combination exists, the headline explicitly says so and suppresses bogus
-  performance figures. Screening caveats remain visible.
-- **Explore another design** advances the deterministic geometry seed to
-  sample a different portfolio automatically; repeated input/seed gives
-  repeatable results within the same saved-learning state.
-- 3D physics, intermediate candidate tables, technical evidence and
-  full machine-readable reports live behind expandable sections. They do
-  not crowd the default one-page presentation.
-
-Site optimization no longer waits for manual V12 simulation initialization
-or nonempty engine room arrays; the whole-system model can use its explicitly
-labelled default room surrogate until real plans are available.
-A single pass explores hundreds/thousands of constrained combinations,
-not every possible permutation. The counts in the summary are the evaluated
-sample, **not** a claim of complete design-space coverage.
-
-`npm run test:one-page` checks the human summary, refusal to invent outcomes
-when feasible options are absent, and deterministic replay.
-
-## Automatic bounded geometry × HVAC portfolio search
-
-**Whole System** now runs a second-stage geometry × mechanical optimisation,
-rather than reporting only the top geometry under the site-only objective.
-
-1. Site + Shadow's deterministic search keeps **up to three feasible,
-   roughly equivalent-area (within 5%) and geometrically distinct designs
-   per form**, for a maximum 12-design shortlist.
-2. The server **re-evaluates every submitted geometry** under the current site
-   constraints, including the baseline and the site-only winner. It ignores
-   any client-side energy/feasibility assertions.
-Users can press **Explore another design** to cycle through a new repeatable
-site-search seed; the chosen seed appears beside the climate/site anchor
-and in the downloaded JSON report. Replaying a seed produces the same
-geometry portfolio for the same site inputs (note that separately stored
-warm-start examples can also affect the server search).
-
-3. Each form receives a bounded, fairly interleaved detached-house airflow
-   sweep (balanced, wet-room transfer and demand zoning). It combines site
-   envelope/solar/construction with mechanical fan, ventilation, ducts,
-   controls and heat recovery *once*, removing conflicting natural-ventilation
-   cooling credit.
-4. It selects the **lowest modelled lifecycle energy** among options passing
-   both screening constraints and the equal-area gate. No infeasible option
-   can be selected.
-5. The interface shows the chosen geometry, ventilation strategy, annual and
-   lifecycle figures, number of pairs evaluated, and the gap versus the
-   original site-only choice. JSON reports include the bounded portfolio.
-
-This is a **bounded joint selection** over a portfolio initially generated
-by a site-only optimizer, not a globally optimal joint building/plant design.
-Candidates outside that portfolio, surveyed room geometry, independent hourly
-thermal benchmarks, EPD manufacturing evidence and genuine real-site
-construction constraints remain out of scope. The 3D scene still renders
-the **site-only** geometry; the paired result shows its distinct chosen form
-and configuration until the visualisation is explicitly switched over.
-That distinction is intentional.
-
-`npm run test:coupled-site` covers feasibility, replay, equal-service area
-and reconciled energy accounting, including the portfolio path.
-
-## Linked site form + mechanical airflow screening
-
-**House → Whole System** now includes a second, separately labelled screen
-underneath the 3D building: **Site geometry → actual room layout → airflow**.
-The original full four-archetype comparison remains available separately.
-
-The site optimizer first chooses a geometrical form and room sketch. The new
-server route `POST /api/house/optimize-site-airflow` independently
-**re-evaluates** the submitted baseline and proposed site designs using the
-same input constraints, derives appropriately scaled room/ceiling geometry,
-and optimizes *only a detached-house mechanical ventilation strategy*
-for that generated layout. It compares:
-
-```text
-annual = site engine's envelope + solar annual electricity
-         (without optional natural-ventilation cooling credit)
-       + mechanical ventilation annual electricity
-       + mechanical fan annual electricity
-
-manufacturing = site engine's construction allowance
-              + mechanical duct/openings/HRV/controls allowance
-
-lifecycle = annual * selected years + manufacturing
-```
-
-To avoid double counting, generic building manufacture and fabric/solar
-terms from the four-archetype Whole System model are **not added**. It uses
-the **same preset 18°C balance-temperature degree-day basis** for both
-submodels, even when a separate EPW file is configured (Site + Shadow is
-not hourly yet). The added flow affects mechanical fan/ventilation only;
-this is **not a jointly optimised geometry/HVAC search**. No claim is
-made that this is an actual architectural floor plan, that generated room
-boundaries are observed, or that the simplified solar and mechanical
-models have been validated together.
-
-Site-generated sketch rooms are rescaled uniformly to conserve the
-site model's declared floor area, and the interface labels them surrogate
-room geometry. A comparison fails the claimed-improvement gate if the
-proposed design changes floor area by over **5%** or either subsystem
-fails its project-defined feasibility checks. Saved JSON includes the
-full linked evaluation and the separately selected airflow configuration.
-The API does not trust client-posted energy/feasibility numbers;
-it recomputes both geometries on the server.
-
-Run `npm run test:coupled-site` for the deterministic geometry, area,
-energy accounting, original four-archetype sweep and comparison-gate
-regressions. Proper joint optimization would next need calibrated thermal
-dynamics, actual drawing/CAD adjacency and measured material EPDs.
-
-## Room and airflow lifecycle optimizer
-
-Open **House → Lifecycle Optimize** to choose a real V12 room and search its room
-dimensions, ceiling height, intake and exhaust positions, airflow rate, standard vent
-diameter, and cross/stack/mixed airflow strategy. The objective is:
-
-```text
-lifecycle energy = annual HVAC and fan energy × design life
-                 + envelope, glazing, duct, vent, fan and complexity manufacturing energy
-```
-
-Minimum usable floor area and the requested temperature (within ±0.5°C at the design
-weather condition) are hard constraints. A proposal is only marked as an improvement
-when its net lifecycle energy is lower than the current design, so extra manufacturing
-or installation complexity must be repaid by operational savings within the selected
-design life. Accepted designs can be applied directly to the live V12 floorplan and
-airflow solver.
-
-The model is intended for early design comparison. Its manufacturing factors are
-editable in code and should be replaced with product-specific Environmental Product
-Declaration data before construction decisions. It is not an NCC certificate or
-mechanical-engineering sign-off.
-
-## Site, sun and self-shadow optimizer
-
-Open **House → Site + Shadow** to search complete building forms against an explicit
-location. The optimizer tests rectangular, elongated, L-shaped and courtyard plans,
-orientation, eave depths, roof pitch, equator-facing glazing, floor elevation,
-structural system and hazard-resistant shell. It calculates the sun's altitude and
-azimuth from latitude throughout a representative year and ray-tests façade samples
-against other wings of the same footprint. This separates shade cast by the building
-itself from shade cast by its eaves.
-
-The energy objective rewards summer shade in cooling-dominated locations and winter
-solar access in heating-dominated locations. It also includes envelope conduction,
-air leakage, natural-ventilation credit, construction energy and the embodied energy
-of wind, flood, bushfire, seismic and snow resilience measures. Accepted designs can
-replace the V12 room layout and feed their seasonal shade factors into the live solar
-heat-gain model.
-
-The solver makes no location or weather API calls. Location presets are editable
-screening values. Australian users should replace average solar exposure with the
-latest value for the exact site from the [Bureau of Meteorology climatology maps](https://www.bom.gov.au/climate/maps/averages/solar-exposure/).
-Local legal requirements are not safely inferable from latitude: enter site-specific
-setbacks, wind, flood, BAL, seismic and snow classifications, then verify them against
-the adopted [National Construction Code](https://ncc.abcb.gov.au/) and the relevant
-state, council and certifier requirements.
-
-## Existing Home Autopilot
-
-Open **House → Existing Home** for a floorplan-free retrofit screening. With no
-property evidence, the engine constructs twelve plausible versions of the home across
-four construction eras, three footprint complexities and a realistic area range. It
-then tests all 255 combinations of roof, wall and floor insulation, air sealing,
-secondary glazing, external shading, heat-pump replacement and heat-recovery
-ventilation.
-
-Operational heating, cooling and fan energy is evaluated together with the embodied
-energy of each retrofit. A package is recommended only when lifecycle savings remain
-positive in at least 75% of the plausible-home ensemble. Optional construction-era and
-rough-area hints narrow uncertainty, but neither a floorplan nor an image is required.
-The browser location button uses the nearest bundled climate preset and does not call a
-mapping, imagery or AI API.
-
-## Smart HVAC cycling and thermal-source recovery
-
-Open **House → Smart Cycle** to compare a tight, continuously circulating thermostat
-with intermittent compressor control. The deterministic solver searches pulse length,
-off time, deadband and capacity, then optionally evaluates suitable outside air,
-recovered hot/cold streams and pressure recovery.
-
-The transient room model includes room-air heat capacity, accessible building thermal
-mass, envelope conduction, infiltration, internal heat, temperature-dependent COP,
-fan/pump/standby power, compressor startup energy, minimum equipment cycle times,
-humidity gating and controller/source manufacturing energy. A strategy is recommended
-only when it holds the requested comfort band for at least 98% of the simulated period,
-respects compressor cycling limits and remains lifecycle-energy positive after
-manufacturing.
-
-Ordinary same-pressure injected air receives no expansion-cooling credit. Pressure
-recovery is only modelled when an actual gauge pressure and expander efficiency are
-supplied, and electricity used to produce the compressed air is charged to the result.
-
-## Adaptive wall and waste-heat feasibility
-
-Open **House -> Adaptive Wall** to determine whether a wall-cavity heat concept
-actually lowers lifecycle energy. The transient wall model compares an existing static
-wall with a passive microlattice, a switchable microlattice thermal valve, expandable
-insulation bladders, and a combined bladder/lattice system. It tracks wall-core
-temperature, insulation state, waste-heat export, HVAC load, pumps, switching,
-actuation leakage, indoor actuator heat, condensation margin, manufacturing energy,
-and energy payback.
-
-No parameter setup is required. Entering the panel automatically evaluates 72
-low-discrepancy wall geometries and actuator parameter sets against all 16 controller
-strategies (1,152 simulations), applies the best lifecycle result, and shows eight
-deliberately diverse ranked candidates. The complete manual assumptions remain under
-an optional advanced section for engineering sensitivity checks.
-
-The solver enforces conservation of energy. A microlattice does not destroy heat: in
-cooling mode it only helps when it conducts heat to a colder outside or fixed sink. A
-passive conductive lattice is also counted as a thermal bridge whenever it bypasses
-insulation. Waste heat left inside can reduce heating demand, but adds to cooling
-demand. A proposal is accepted only if it reduces operating electricity, avoids the
-moisture screen, and repays its embodied energy within the selected design life.
-
-Compute hardware is treated only as an electrical load that becomes heat. The useful
-question is whether a measured air or liquid cooling path can move that heat to a real
-sink, water store, or heating demand after fan/pump power and manufacturing energy are
-charged. Running blockchain validation or any other workload does not absorb heat and
-does not receive a special thermodynamic credit.
-
-This is an early feasibility model, not a construction approval. Fire spread,
-pressure safety, puncture, drainage, mould, material ageing, structural effects and
-site-specific NCC requirements still require measured prototypes and qualified review.
-
-## Interactive 3D physics views
-
-Open **House -> Airflow Sim** for an orbitable room cutaway with the real intake and
-exhaust heights, animated flow, stack pressure, airflow rate, air changes per hour and
-horizontal temperature layers. Each room automatically sweeps 512 combinations of
-intake height, exhaust height, natural or powered flow, airflow rate and vent diameter,
-then applies and displays the lowest-objective candidate. Manual height sliders are
-kept under an optional override. The existing arrow canvas is retained underneath as
-the horizontal plan-view Navier-Stokes field; it is no longer presented as if a
-floor-plan axis were height.
-
-The vertical solver uses the room ceiling height, actual vent separation, hydrostatic
-stack pressure, powered or natural flow, supply temperature, room heat gains and
-mixing to generate a bounded vertical temperature profile. It feeds displacement
-effectiveness and flow direction back into the live V12 plan solver. This is a
-reduced-order early-design model, not detailed commissioned CFD.
-
-**House -> Adaptive Wall** now also includes an orbitable wall cutaway. It animates
-the room heat source, wall layers, microlattice state, expandable insulation bladder
-and the real heat-sink path while the numerical optimizer trace plays below it.
-
-When GPU WebGL is unavailable, the same views automatically switch to the built-in
-Canvas2D software 3D renderer. Drag orbit, wheel/pinch zoom, animation and the numerical
-simulation remain active; WebGL support is an acceleration path rather than a gate.
+# AboveBound — your computer does the exploring
+
+The current public entrypoint is a **static, local-first** single-page design
+lab: location/area → automatic building & HVAC search → one understandable
+result. Users can also select a **passive RF impedance match** or a
+**probability-path selectivity thought experiment**.
+
+## How it works now
+
+- All computation runs in the user's browser, in a Web Worker that is
+  terminated/restarted for each new design. **No AWS, Docker, Express,
+  WebSocket server, external AI or remote computation is required.**
+- The normal building run automatically samples hundreds of geometry
+  candidates, re-evaluates the promising site/room/HVAC alternatives
+  under the same location, annual weather and balance temperature, and
+  reports tested coverage. Constraints gate the recommendation.
+- **Explore a different building** uses a reproducible deterministic seed.
+  A local EPW weather file (max 5 MB, ≤75 km from chosen preset) can be
+  read by the user's device; it is never uploaded. Without EPW, an
+  approximate climate preset is used and labelled.
+- RF demonstration sweeps E12 two-element passive L matches with Ohms,
+  Henries, Farads and frequency; checks delivered power against available
+  source power. Component Q is estimated. This **does not validate DDR,
+  high-speed motherboard signal integrity, PCB traces or VNA results.**
+- Chemistry demonstration enumerates hypothetical probability gates and
+  separately reports **conditional selectivity** and **absolute target
+  output per original input**. Discarding unfavorable routes without
+  changing branching kinetics cannot automatically increase chemical
+  yield. This is **not quantum chemical reaction modeling**.
+- One-page UI intentionally has no simulation tabs or parameter maze.
+  Technical details and history are behind collapsible disclosures.
+
+## Device memory + optional Supabase
+
+Latest 32 results stay on your device; download full JSON any time.
+For cloud backups the user can optionally supply a Supabase project URL
+and PUBLIC publishable key in Memory → Cloud backup. Anonymous GoTrue
+authentication then provides a JWT; `supabase/migrations/20261011000000_ab_computation_memory.sql`
+defines a protected owner-only `public.ab_computation_memory` table.
+Only compact summary records are uploaded, never full EPW/hourly arrays.
+
+**Supabase project selection isn't complete.** The connected accounts have
+projects named `Bb5` and `hexfield`, but neither has been confirmed as
+AboveBound's cloud memory database. **No existing database was changed.**
+Apply the migration ONLY to the intended project, enable anonymous sign-in,
+configure CORS/security and verify cross-user RLS before relying on backup.
+Anonymous cloud accounts cannot restore themselves from a new device.
+Offline device-local use does not require a cloud connection.
 
 ## Run locally
 
-Requirements: Node.js 20 or newer.
-
-```powershell
-npm install
-Copy-Item .env.example .env.local
+```sh
+npm ci
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open the locally displayed Vite URL. For static HTTPS hosting:
 
-The simulation engine, genetic optimizer, and local neural models are self-contained
-and make no external AI API calls. Visitors receive an anonymous workspace identifier
-stored in their browser; simulation checkpoints and optimization results are saved to
-the app's own persistent data volume without a login. Exact inputs stay in that private
-workspace. Coarse climate bands and successful technical designs feed the shared
-warm-start archive so later searches can reuse proven candidates without sharing exact
-locations or personal information.
-
-## Production deployment
-
-The app includes a production Docker image, a Cloudflare Tunnel Compose service, and
-an AWS deployment runbook for `abovebound.org`. See
-[DEPLOY_INSTRUCTIONS.md](./DEPLOY_INSTRUCTIONS.md). Cloudflare Pages alone is not
-enough because the app uses an Express API, WebSockets, and persistent server state.
-
-## Verify changes
-
-```powershell
-npm run test:sims
-npm run test:optimizer
-npm run test:site
-npm run test:existing-home
-npm run test:hvac-cycle
-npm run test:adaptive-wall
-npm run test:height-airflow
-npm run test:airflow-network
-npm run test:whole-house
-npm run test:physics-validation
-npm run test:site-context
-npm run lint
+```sh
+npm run test:all
 npm run build
 ```
 
-Run the complete suite with `npm run test:all`.
+Upload the contents of `dist/` to a static host such as Cloudflare Pages.
+The Worker bundle is part of the assets. There is no Node backend on the
+runtime host. See `DEPLOY_INSTRUCTIONS.md` for a safe cutover plan.
 
-`test:sims` instantiates and exercises Fundamental, V0, and every engine from V1 through V13 without requiring WebGL.
+**Production warning:** `abovebound.org` still points to the **old AWS
+origin through Cloudflare Tunnel** until the public hostname is explicitly
+migrated. Repository changes do **not** shut down the old AWS host, prevent
+billing or migrate its existing `discovery_memory.json`. Confirm static
+preview and export old saved data before switching DNS, then retire AWS
+separately. Do not delete current Tunnel while it still serves production.
 
-## Local state
+## Source and engineering boundaries
 
-The Express server stores novelty memory and saved simulation snapshots in `discovery_memory.json`. Novelty memory is deduplicated and capped at 2,048 states. The Save and Load controls persist snapshots through `/api/sim-state/:version`.
+- `src/main.tsx` → `src/local/LocalApp.tsx`: static UI.
+- `src/local/compute.worker.ts`: all device-only search. Main UI does
+  not call the old `/api` or `/ws` endpoints.
+- `src/local/impedance.ts`: bounded complex passive RF power screening.
+- `src/local/selectivity.ts`: probabilistic pathway exclusion / throughput.
+- `src/local/memory.ts`: browser memory + optional authenticated Supabase.
+- `src/lib/site_geometry_optimizer.ts`,
+  `src/lib/site_whole_house_coupling.ts`: building search, still
+  a **screening** model with synthetic room topology and unsourced embodied
+  coefficients; no certified building energy rating or structural check.
+- `docs/SIMULATION_AUDIT.md`: V0–V13 mathematical/engineering audit with
+  the specific evidence limitations and invariants.
+- `src/App.tsx`, `server.ts`: retired research/legacy API source,
+  deliberately **not imported into the static production app**. Preserve
+  only for historical data export and backcompat tests until cutover.
 
-If Vite reports a `plugin:vite:react-babel UNKNOWN ... read` error while this repo is under OneDrive, run a working copy from a normal local folder such as `C:\Users\<you>\Projects\beyondboundforreal`. OneDrive file virtualization can interrupt Vite's synchronous source reads.
+`npm run test:all` runs legacy smoke (not model validation), building
+physics checks, device RF conservation and categorical yield invariants,
+and a production static bundle check. Scientific assumptions remain
+simplified and should be treated as hypotheses until independently
+benchmarked against hardware measurements or chemical experiments.
