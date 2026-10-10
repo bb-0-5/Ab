@@ -16,6 +16,10 @@ services:
       WS_MAX_PAYLOAD_BYTES: ${WS_MAX_PAYLOAD_BYTES:-1048576}
     ports:
       - "127.0.0.1:3000:3000"
+    networks:
+      default:
+        aliases:
+          - beyondbound
     volumes:
       - beyondbound-data:/app/data
     healthcheck:

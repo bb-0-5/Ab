@@ -69,6 +69,12 @@ In the Cloudflare dashboard:
 5. Add a second route for `www.abovebound.org` to the same service if the `www`
    hostname should work too.
 
+The deployed tunnel currently uses `http://beyondbound:3000`. The Compose
+`app` service includes `beyondbound` as a Docker-network alias, so either
+`http://app:3000` or `http://beyondbound:3000` resolves to the same app.
+Do not change the live tunnel configuration without checking its active host.
+
+
 The hostname route creates the required Cloudflare DNS record. Keep Cloudflare's
 Network -> WebSockets setting enabled.
 

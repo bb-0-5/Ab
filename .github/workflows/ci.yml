@@ -18,5 +18,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Validate Docker Compose configuration
+        run: TUNNEL_TOKEN=ci-placeholder docker compose config --quiet
       - run: npm ci
       - run: npm run test:all
