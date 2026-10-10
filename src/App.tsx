@@ -3692,6 +3692,7 @@ const HouseView = ({
           siteInput,
           baselineDesign: result.baseline.design,
           proposedDesign: result.best.design,
+          candidateDesigns: result.feasibleShortlist.map(candidate => candidate.design),
         }),
       });
       const payload = await response.json();
@@ -4230,7 +4231,7 @@ const HouseView = ({
                 />
                 <section aria-label="Geometry to airflow coupled screening" className="rounded-xl border border-cyan-500/25 bg-black/30 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-[11px] font-black text-cyan-200 uppercase tracking-widest">Site geometry → actual room layout → airflow</h3>
+                    <h3 className="text-[11px] font-black text-cyan-200 uppercase tracking-widest">Joint site geometry × mechanical airflow search</h3>
                     <span className="text-[8px] font-mono text-gray-400">
                       {coupledSiteFlowRunning ? 'Re-evaluating designs…' : coupledSiteFlow ? 'Linked screening complete' : 'Awaiting site design'}
                     </span>
@@ -4241,6 +4242,30 @@ const HouseView = ({
                     const fmt = (value: number) => Math.round(value).toLocaleString('en-AU');
                     const accepted = result.decision.qualifiesAsImprovement;
                     return <div className="mt-3 space-y-3">
+                      {result.jointSearch && (() => {
+                        const joint = result.jointSearch;
+                        return <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/[0.06] p-3 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h4 className="text-[11px] font-black text-cyan-200 uppercase">Lowest-energy tested geometry + HVAC pairing</h4>
+                            <span className="text-[8px] font-mono text-gray-300">{joint.geometryCandidatesEvaluated} geometries · {joint.mechanicalCandidatesEvaluated} airflow calculations · {joint.feasibleEquivalentAreaCandidates} valid pairs</span>
+                          </div>
+                          <p className={`rounded-md border px-3 py-2 text-[10px] ${joint.qualifiesAsImprovement ? 'border-emerald-500/30 text-emerald-100' : 'border-amber-500/30 text-amber-100'}`}>{joint.outcome}</p>
+                          {joint.selected && <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <div className="p-2 rounded-lg bg-black/30"><div className="text-[8px] text-gray-400">Selected building</div><strong className="text-[11px] text-white">{joint.selected.site.design.form.replaceAll('_', ' ')}</strong></div>
+                            <div className="p-2 rounded-lg bg-black/30"><div className="text-[8px] text-gray-400">Ventilation</div><strong className="text-[11px] text-white">{joint.selected.selectedAirflow.control.replaceAll('_', ' ')}</strong></div>
+                            <div className="p-2 rounded-lg bg-black/30"><div className="text-[8px] text-gray-400">Lifecycle energy</div><strong className="text-[11px] text-cyan-200">{fmt(joint.selected.energy.totalLifecycleKWh)} kWh</strong></div>
+                            <div className="p-2 rounded-lg bg-black/30"><div className="text-[8px] text-gray-400">Benefit vs site-only choice</div><strong className="text-[11px] text-cyan-200">{joint.lifecycleSavingsVsSiteOnlyChoiceKWh === null ? 'Not comparable' : `${fmt(joint.lifecycleSavingsVsSiteOnlyChoiceKWh)} kWh`}</strong></div>
+                          </div>}
+                          <div className="space-y-1">
+                            {joint.ranked.slice(0, 4).map((candidate, index) =>
+                              <div key={index} className="flex flex-wrap gap-2 items-center justify-between border-t border-white/10 pt-1.5 text-[9px]">
+                                <span className={candidate.eligible ? 'text-gray-200' : 'text-amber-300'}>#{index + 1} · {candidate.form.replaceAll('_', ' ')} · {candidate.areaM2.toFixed(1)} m² · {candidate.airflowControl.replaceAll('_', ' ')} {candidate.eligible ? '✓' : '— fails screen'}</span>
+                                <strong className="font-mono text-cyan-100">{fmt(candidate.totalLifecycleKWh)} kWh</strong>
+                              </div>)}
+                          </div>
+                          <p className="text-[9px] text-amber-100/80">Bounded selection across generated geometry candidates, not full physical co-optimisation or a certified building recommendation. The rendered 3D form above still follows the separate site optimiser; use these joint results for the selected combination and see the downloaded JSON for its geometry.</p>
+                        </div>;
+                      })()}
                       <p className={`rounded-lg border px-3 py-2 text-[10px] ${accepted ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200' : 'border-amber-500/35 bg-amber-500/10 text-amber-100'}`}>
                         <strong>{accepted ? 'Linked design clears both screening gates.' : 'Not a supported net improvement.'}</strong> {result.decision.reason}
                       </p>
