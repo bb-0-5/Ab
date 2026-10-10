@@ -129,6 +129,8 @@ export interface EvaluatedWholeHouseConfiguration {
 export interface ArchetypeComparison {
   archetype: DwellingArchetype;
   label: string;
+  /** True only when this representative clears project-defined screening gates. */
+  feasible: boolean;
   sharedConditionedBoundaryPercent: number;
   summerNeighbourShadePercent: number;
   winterSolarAccessPercent: number;
@@ -706,6 +708,7 @@ export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}
     return {
       archetype: archetypeId,
       label: profile.label,
+      feasible: candidate.feasible && candidate.configuration.archetype === archetypeId,
       sharedConditionedBoundaryPercent: profile.sharedConditionedBoundaryPercent,
       summerNeighbourShadePercent: round(100 - (100 - profile.summerNeighbourShadePercent)
         * (100 - clamp(Number(siteObstruction?.summerShadePotentialPercent) || 0, 0, 90)) / 100, 1),
