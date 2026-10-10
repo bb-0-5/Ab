@@ -731,14 +731,12 @@ function evaluateNormalized(design: SiteHouseDesign, input: NormalizedInput, sam
   const penalty = feasible ? 0 : 10_000_000 + checks.filter(check => !check.passed).length * 1_000_000;
 
   return {
-    design: {
-      ...design,
-      orientationDeg: round(design.orientationDeg, 1), floorAreaM2: round(design.floorAreaM2, 1),
-      widthM: round(design.widthM, 2), depthM: round(design.depthM, 2), ceilingHeightM: round(design.ceilingHeightM, 2),
-      wingRatio: round(design.wingRatio, 3), eaveEquatorM: round(design.eaveEquatorM, 2), eaveOtherM: round(design.eaveOtherM, 2),
-      roofPitchDeg: round(design.roofPitchDeg, 1), equatorGlazingRatio: round(design.equatorGlazingRatio, 3),
-      otherGlazingRatio: round(design.otherGlazingRatio, 3), floorElevationM: round(design.floorElevationM, 2),
-    },
+    // Keep computational geometry FULL PRECISION for server replay and
+    // cross-panel HVAC coupling. Previously returning rounded display values
+    // here silently changed footprint, areas and lifecycle energy when the
+    // downstream route re-evaluated the same "winning" design. UI alone
+    // should format with .toFixed(). Precision is not evidence certainty.
+    design: { ...design },
     footprintPolygons: footprintPolygons.map(polygon => polygon.map(point => ({ x: round(point.x, 3), y: round(point.y, 3) }))),
     rooms: roomLayout(design, input.targetIndoorTempC, input.location.latitudeDeg),
     perimeterM: round(perimeterM, 1),
