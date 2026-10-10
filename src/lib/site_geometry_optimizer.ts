@@ -1,3 +1,6 @@
+import { adjustDegreeDaysForSetpoint } from './degree_day_setpoint';
+import { hourlyDegreeDays } from './hourly_weather';
+
 export type HouseForm = 'rectangle' | 'elongated' | 'l_shape' | 'courtyard';
 export type StructuralSystem = 'braced_timber' | 'reinforced_masonry' | 'steel_frame';
 export type ResilientShell = 'standard' | 'enhanced' | 'hardened';
@@ -137,6 +140,10 @@ export interface SiteGeometryOptimizationInput {
   heatingCOP?: number;
   coolingCOP?: number;
   lifecycleYears?: number;
+  /** Server-supplied, validated EPW hourly dry-bulb temperatures. */
+  hourlyOutdoorTemperaturesC?: number[];
+  hourlyWeatherSource?: { stationName: string; source: string; stationDistanceKm: number };
+  weatherFallbackReason?: string;
   baseline?: Partial<SiteHouseDesign>;
   /** Trusted, previously successful designs used to warm-start the local search. */
   learnedDesigns?: SiteHouseDesign[];
@@ -151,6 +158,17 @@ export interface SiteGeometryOptimizationResult {
   best: EvaluatedSiteHouseDesign;
   sunPath: SunPathPoint[];
   searchSeed: number;
+  weatherContext: {
+    mode: 'epw_hourly_temperature' | 'preset_fitted_degree_days';
+    stationName: string | null;
+    source: string;
+    stationDistanceKm: number | null;
+    weatherHours: number | null;
+    balanceTemperatureC: number;
+    heatingDegreeDays: number;
+    coolingDegreeDays: number;
+    note: string;
+  };
   candidatesEvaluated: number;
   /**
    * Small, deterministic, feasible and roughly equivalent-area portfolio for
@@ -200,8 +218,12 @@ export const DEFAULT_SITE_REQUIREMENTS: SiteResilienceRequirements = {
   minimumSetbackM: 1.5,
 };
 
-interface NormalizedInput extends Required<Omit<SiteGeometryOptimizationInput, 'location' | 'requirements' | 'baseline' | 'learnedDesigns'>> {
+interface NormalizedInput extends Required<Omit<SiteGeometryOptimizationInput,
+  'location' | 'requirements' | 'baseline' | 'learnedDesigns'
+  | 'hourlyOutdoorTemperaturesC' | 'hourlyWeatherSource' | 'weatherFallbackReason'>> {
   location: SiteLocationProfile;
+  weatherContext: SiteGeometryOptimizationResult['weatherContext'];
+  climate: { heatingDegreeDays: number; coolingDegreeDays: number };
   requirements: SiteResilienceRequirements;
   baseline: SiteHouseDesign;
   learnedDesigns: SiteHouseDesign[];
@@ -447,10 +469,10 @@ function solarPerformance(design: SiteHouseDesign, input: NormalizedInput, sampl
         winterAdmitted += facadeIncident * (1 - combinedShade);
         heatingBenefit += admitted;
       } else {
-        coolingPenalty += admitted * input.location.coolingDegreeDays
-          / Math.max(input.location.coolingDegreeDays + input.location.heatingDegreeDays, 1);
-        heatingBenefit += admitted * input.location.heatingDegreeDays
-          / Math.max(input.location.coolingDegreeDays + input.location.heatingDegreeDays, 1);
+        coolingPenalty += admitted * input.climate.coolingDegreeDays
+          / Math.max(input.climate.coolingDegreeDays + input.climate.heatingDegreeDays, 1);
+        heatingBenefit += admitted * input.climate.heatingDegreeDays
+          / Math.max(input.climate.coolingDegreeDays + input.climate.heatingDegreeDays, 1);
       }
     }
   }
@@ -555,6 +577,28 @@ function normalizeInput(raw: SiteGeometryOptimizationInput): NormalizedInput {
   location.latitudeDeg = clamp(Number(location.latitudeDeg), -66, 66);
   location.longitudeDeg = clamp(Number(location.longitudeDeg), -180, 180);
   location.averageDailySolarMJm2 = clamp(Number(location.averageDailySolarMJm2), 2, 35);
+  const targetIndoorTempC = clamp(Number(raw.targetIndoorTempC ?? 22), 16, 28);
+  // Degree days are climate *inputs* at a conventional base of 18 C, not
+  // 22 C setpoint degree days. Re-evaluate at the requested balance point.
+  // With server-validated EPW we use the hourly dry-bulb temperatures here,
+  // while solar gains stay on the independent simplified site model.
+  const hourly = raw.hourlyOutdoorTemperaturesC;
+  const climate = hourly === undefined
+    ? adjustDegreeDaysForSetpoint(location, targetIndoorTempC)
+    : hourlyDegreeDays(hourly, targetIndoorTempC);
+  const weatherContext: SiteGeometryOptimizationResult['weatherContext'] = {
+    mode: hourly === undefined ? 'preset_fitted_degree_days' : 'epw_hourly_temperature',
+    stationName: hourly === undefined ? null : raw.hourlyWeatherSource?.stationName || 'EPW station',
+    source: hourly === undefined ? 'selected location climate preset' : raw.hourlyWeatherSource?.source || 'operator-provided EPW',
+    stationDistanceKm: hourly === undefined ? null : raw.hourlyWeatherSource?.stationDistanceKm ?? null,
+    weatherHours: hourly?.length ?? null,
+    balanceTemperatureC: targetIndoorTempC,
+    heatingDegreeDays: round(climate.heatingDegreeDays, 2),
+    coolingDegreeDays: round(climate.coolingDegreeDays, 2),
+    note: hourly === undefined
+      ? `Fitted climate degree days at ${targetIndoorTempC}°C, estimated from an annual preset at 18°C.${raw.weatherFallbackReason ? ' Station file rejected: ' + raw.weatherFallbackReason : ''}`
+      : 'Hourly dry-bulb values set HVAC load degree days; solar and orientation are still simplified, not hourly irradiance or a dynamic heat-balance simulation.',
+  };
   const requirements = { ...DEFAULT_SITE_REQUIREMENTS, ...(raw.requirements || {}) };
   const targetFloorAreaM2 = clamp(Number(raw.targetFloorAreaM2 ?? 130), 35, 500);
   const minFloorAreaM2 = clamp(Number(raw.minFloorAreaM2 ?? targetFloorAreaM2 * 0.85), 30, targetFloorAreaM2);
@@ -588,13 +632,15 @@ function normalizeInput(raw: SiteGeometryOptimizationInput): NormalizedInput {
   };
   return {
     location,
+    climate,
+    weatherContext,
     requirements,
     targetFloorAreaM2,
     minFloorAreaM2,
     maxFloorAreaM2,
     lotWidthM: clamp(Number(raw.lotWidthM ?? 24), 8, 200),
     lotDepthM: clamp(Number(raw.lotDepthM ?? 40), 8, 300),
-    targetIndoorTempC: clamp(Number(raw.targetIndoorTempC ?? 22), 16, 28),
+    targetIndoorTempC,
     wallRValue,
     roofRValue: clamp(Number(raw.roofRValue ?? 5), 0.8, 18),
     floorRValue: clamp(Number(raw.floorRValue ?? 2.5), 0.4, 12),
@@ -643,8 +689,8 @@ function evaluateNormalized(design: SiteHouseDesign, input: NormalizedInput, sam
     + floorAreaM2 / input.floorRValue
     + windowAreaM2 * input.windowUValue
     + 0.33 * input.airLeakageACH * volumeM3;
-  const envelopeHeatingThermalKWh = envelopeUA * input.location.heatingDegreeDays * 24 / 1000;
-  const envelopeCoolingThermalKWh = envelopeUA * input.location.coolingDegreeDays * 24 / 1000;
+  const envelopeHeatingThermalKWh = envelopeUA * input.climate.heatingDegreeDays * 24 / 1000;
+  const envelopeCoolingThermalKWh = envelopeUA * input.climate.coolingDegreeDays * 24 / 1000;
   const formVentilationFactor = design.form === 'elongated' ? 0.16 : design.form === 'l_shape' ? 0.12 : design.form === 'courtyard' ? 0.1 : 0.06;
   const naturalVentilationCreditKWh = envelopeCoolingThermalKWh
     * formVentilationFactor * clamp(windowToWallRatio / 0.22, 0.4, 1.3);
@@ -926,6 +972,7 @@ export function optimizeSiteGeometry(rawInput: SiteGeometryOptimizationInput = {
     best,
     sunPath: sunPathSummary(input.location),
     searchSeed: input.seed,
+    weatherContext: input.weatherContext,
     candidatesEvaluated,
     feasibleShortlist,
     improvement: {
@@ -938,7 +985,9 @@ export function optimizeSiteGeometry(rawInput: SiteGeometryOptimizationInput = {
       reason,
     },
     assumptions: [
-      'The annual sun path is calculated locally from latitude, day of year and solar hour; no weather or AI API is called.',
+      'The annual sun path is calculated locally from latitude, day of year and solar hour. Solar is still a screening estimate, NOT EPW facade irradiance or a calibrated sun/shadow result.',
+      input.weatherContext.note,
+      'Heating and cooling degree days are re-evaluated at the selected indoor balance temperature; the 18 C preset pair is not directly applied to a different setpoint.',
       'Average daily solar exposure is an editable climatology input. For Australia, replace screening presets with the latest Bureau of Meteorology grid value for the exact site.',
       'Self-shadowing uses ray intersections between façade samples and the generated L-shape or courtyard footprint; eave shading is calculated separately from sun altitude and façade incidence.',
       'Hazard and code fields are preliminary hard constraints supplied by the user or a screening preset. A certifier must confirm the planning scheme, NCC edition, site classification, BAL, flood level, wind region and engineering loads.',
