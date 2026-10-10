@@ -273,7 +273,8 @@ export default function LocalApp(){
     </>}
     {selectedCircuit&&<>
      <p className="mt-4 text-sm text-slate-300">Best illustrative E12 passive L-match at {fmt(selectedCircuit.requested.frequencyMHz)} MHz (with assumed component Q). Source {fmt(selectedCircuit.requested.sourceOhms)} Ω → load {fmt(selectedCircuit.requested.loadOhms)} Ω.</p>
-     <h4 className="mt-4 text-xl font-black text-cyan-200">{titleCase(selectedCircuit.best.topology)} · {selectedCircuit.best.series.label} series + {selectedCircuit.best.shunt.label} shunt</h4>
+     <p className={`mt-4 rounded-xl border p-3 text-sm ${selectedCircuit.recommended?'border-emerald-700/40 text-emerald-200':'border-amber-700/40 text-amber-200'}`}>{selectedCircuit.recommendationReason}</p>
+     <h4 className="mt-4 text-xl font-black text-cyan-200">{selectedCircuit.recommended?'Suggested example network':'Lowest-loss explored network (not recommended)'}: {titleCase(selectedCircuit.best.topology)} · {selectedCircuit.best.series.label} series + {selectedCircuit.best.shunt.label} shunt</h4>
      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
       <Metric label="Unmatched delivered power" value={`${fmt(selectedCircuit.baselineDeliveredPowerFraction*100,1)}%`}/>
       <Metric label="Matched delivered power" value={`${fmt(selectedCircuit.best.centerDeliveredPowerFraction*100,1)}%`}/>
