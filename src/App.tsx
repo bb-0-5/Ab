@@ -3713,7 +3713,8 @@ const HouseView = ({
   };
 
   const runWholeHouseOptimization = async () => {
-    if (!rooms.length) return;
+    // The engine has a documented fallback room sketch when V12 is not yet
+    // initialized: searching a building must not require starting a simulation.
     const runId = ++wholeRunSequenceRef.current;
     setWholeHouseOptimizationRunning(true);
     setWholeHouseOptimizationError('');
@@ -3900,7 +3901,7 @@ const HouseView = ({
     `${room.id}:${room.x}:${room.y}:${room.width}:${room.height}:${room.ceilingHeight}`).join('|');
 
   useEffect(() => {
-    if (activePanel !== 'system' || rooms.length === 0) return;
+    if (activePanel !== 'system') return;
     // Indoor target, design life, hazard requirements and every site field
     // must invalidate previous coupled results, not only latitude and area.
     const key = JSON.stringify({ site: siteOptimizationInputs, seed: siteDesignSeed, rooms: systemRoomGeometryKey });
@@ -4195,11 +4196,15 @@ const HouseView = ({
                     <p className="mt-4 text-[11px] text-amber-200 leading-relaxed">{design.caution}</p>
                   </section>;
                 })()}
-                <div className="flex flex-wrap gap-2 text-[7px] font-mono uppercase">
+                <details className="text-[9px] text-gray-400">
+                  <summary className="cursor-pointer">Calculation checks &amp; evidence sources</summary>
+                  <div className="flex flex-wrap gap-2 text-[7px] font-mono uppercase mt-2">
                   <span className={`rounded-full border px-2 py-1 ${physicsValidation?.readyForScreening ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/5' : 'border-amber-500/30 text-amber-200 bg-amber-500/5'}`}>{physicsValidation ? `${physicsValidation.passed}/${physicsValidation.cases.length} numerical checks` : 'checking physics…'}</span>
                   <span className="rounded-full border border-cyan-500/30 text-cyan-200 bg-cyan-500/5 px-2 py-1">{siteContext ? `${siteContext.source.replaceAll('_', ' ')} · ${siteContext.neighbours.length} neighbours` : 'loading site evidence…'}</span>
                   <span className={`rounded-full border px-2 py-1 ${siteContext?.uncertainty.band === 'low' ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/30 text-amber-200'}`}>{siteContext ? `${siteContext.uncertainty.band} site uncertainty` : 'uncertainty pending'}</span>
                 </div>
+                  </div>
+                </details>
                 {(siteOptimizationError || wholeHouseOptimizationError || systemEvidenceError) && <div className="rounded-lg border border-red-500/25 bg-red-500/5 p-3 text-[9px] text-red-300">{siteOptimizationError || wholeHouseOptimizationError || systemEvidenceError}</div>}
                 <details className="rounded-xl border border-white/10 bg-black/20 p-3">
                   <summary className="cursor-pointer text-sm text-cyan-200 font-semibold">See the 3D simulation and technical evidence</summary>
