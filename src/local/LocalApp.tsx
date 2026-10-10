@@ -419,6 +419,11 @@ export default function LocalApp(){
 
    <UnifiedOverlay goal={goal} condition={operatingCondition} findings={findings}
      metrics={visualMetrics}
+     budgetAUD={printBudgetAUD}
+     frontier={selectedSuit?.alternatives.map(x=>({
+      cost:x.estimatedTotalCostAUD,section:x.sectionIndexMm4,
+      acceptable:x.printable,material:x.material,
+     }))||[]}
      onSelectGoal={next=>{setGoal(next);setResult(null);setResultGoal(null);
        setStatus('Choose the goal and run its local optimisation.');}}/>
    <section aria-label="Optimisation result" className="rounded-3xl border border-white/10 bg-[#0a151e] p-6 md:p-8">
