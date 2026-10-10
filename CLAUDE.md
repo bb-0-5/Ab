@@ -1,3 +1,20 @@
+## Fabrication + unified visual layer
+
+The public `src/local/UnifiedOverlay.tsx` is ONE shared interactive
+SVG viewport for five domains and physical-constraint screen results.
+It is art/schematic only, not simulated 3D, CFD, chemical reaction or
+flight hardware evidence. `src/local/fabrication.ts` optimizes a
+bounded set of PLA/PETG/TPU **cosmetic flat panel** designs by cost after
+hard user-printer bed, budget, and geometric section/temperature gates.
+`panelSTL()` emits a closed-manifold 2.5D mesh in implicitly mm units.
+An artist's full suit figure is distinct from the sole CAD export.
+NEVER claim strength/flight: `viableForHumanFlight` is always false.
+
+Use `npm run test:fabrication` and full `npm run test:all`.
+Further development should benchmark printer tolerances and material
+datasheets before hardware claims. No subsystem here qualifies
+any wearable powered human flight system.
+
 ## Cross-domain material/chemistry learning boundary
 
 The active local worker imports `src/local/cross_domain.ts` and
