@@ -3,6 +3,7 @@ import {
   stressTestEmbodiedAssumptions,
   type DwellingArchetype,
 } from '../src/lib/whole_house_optimizer';
+import { buildWholeHouseDecisionBrief } from '../src/lib/whole_house_decision_brief';
 
 const rooms = [
   { id: 'living', name: 'Living Area', x: 0, y: 0, width: 5.5, height: 4.5, ceilingHeight: 2.7, internalLoad: 720 },
@@ -76,6 +77,17 @@ if (reversal.verdict !== 'ranking_changes' || reversal.winnerCounts.detached ===
 const infeasible = stressTestEmbodiedAssumptions(synthetic.map(candidate => ({ ...candidate, feasible: false })), null);
 if (infeasible.verdict !== 'no_feasible_design' || infeasible.scenariosEvaluated !== 0) {
   throw new Error('A stress report must not rank infeasible designs as successes.');
+}
+
+const plainBrief = buildWholeHouseDecisionBrief(first);
+if (!plainBrief.includes('NOT AN ENGINEERING RECOMMENDATION')
+  || !plainBrief.includes('CONSTRUCTION-ENERGY ASSUMPTION STRESS TEST')
+  || !plainBrief.includes(`${stress.baselineWinnerWins} of ${stress.scenariosEvaluated}`)
+  || plainBrief.includes('undefined') || plainBrief.includes('NaN')) {
+  throw new Error('Plain-language screening brief is incomplete or misleading.');
+}
+if (plainBrief !== buildWholeHouseDecisionBrief(second)) {
+  throw new Error('Decision briefs must be deterministic for identical inputs.');
 }
 
 console.log(JSON.stringify({
