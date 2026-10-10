@@ -21,6 +21,7 @@ export interface BuildingRun {
     manufacturedKWh:number;geometry:Array<Array<{x:number;y:number}>>;feasible:boolean;
   };
   weather:{mode:string;stationName:string|null;weatherHours:number|null;note:string;stationDistanceKm:number|null};
+  scenarios?:Array<{form:string;areaM2:number;annualElectricalKWh:number;totalLifecycleKWh:number;airflowControl:string;heatRecoveryEfficiency:number;eligible:boolean}>;
   explanation:string;limitations:string[];
 }
 export interface Sample {
