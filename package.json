@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "start": "vite preview --host 0.0.0.0 --port 4173",
+    "dev": "vite --host 127.0.0.1",
+    "start": "vite preview --host 127.0.0.1 --port 4173",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
@@ -31,7 +31,8 @@
     "test:panel-coupling": "tsx scripts/panel-coupling-smoke.ts",
     "test:evidence-sources": "tsx scripts/evidence-sources-smoke.ts",
     "test:local": "tsx scripts/local-first-smoke.ts",
-    "test:worker": "tsx scripts/local-worker-smoke.ts"
+    "test:worker": "tsx scripts/local-worker-smoke.ts",
+    "explore:local": "tsx scripts/device-automation.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
