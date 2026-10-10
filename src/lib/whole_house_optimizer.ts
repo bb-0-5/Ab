@@ -661,8 +661,10 @@ export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}
   // maximumCandidates=48, making the "whole system" comparison misleading.
   const archetypeConfigurations = archetypes.map(archetype => {
     const group: WholeHouseConfiguration[] = [];
-    for (const control of controls) for (const opening of openings)
-      for (const diameter of diameters) for (const pressure of pressures) for (const hrv of recovery) {
+    // Interleave CONTROL strategies too: a 48-candidate normal run then
+    // screens 4 archetypes × 3 controls, instead of only balanced_rooms.
+    for (const opening of openings) for (const diameter of diameters)
+      for (const pressure of pressures) for (const hrv of recovery) for (const control of controls) {
         group.push({
           archetype,
           control,
