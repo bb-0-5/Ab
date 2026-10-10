@@ -12,7 +12,7 @@ import { runExistingHomeAutopilot } from "./src/lib/existing_home_autopilot";
 import { optimizeHvacCycle, type HvacCycleStrategy } from "./src/lib/hvac_cycle_optimizer";
 import { discoverAdaptiveWall, type AdaptiveWallStrategy } from "./src/lib/adaptive_wall_optimizer";
 import { optimizeRoomLifecycle } from "./src/lib/room_lifecycle_optimizer";
-import { optimizeSiteGeometry, evaluateSiteHouseDesign, SITE_LOCATION_PRESETS, type SiteHouseDesign, type SiteGeometryOptimizationInput } from "./src/lib/site_geometry_optimizer";
+import { optimizeSiteGeometry, evaluateSiteHouseDesign, evaluateSiteReference, SITE_LOCATION_PRESETS, type SiteHouseDesign, type SiteGeometryOptimizationInput } from "./src/lib/site_geometry_optimizer";
 import { screenCoupledSiteAirflow, searchCoupledSiteMechanicalPortfolio } from "./src/lib/site_whole_house_coupling";
 import { optimizeWholeHouseSystem } from "./src/lib/whole_house_optimizer";
 import { runBuildingPhysicsValidation, type BuildingPhysicsValidationReport } from "./src/lib/building_physics_validation";
@@ -763,11 +763,14 @@ async function startServer() {
     try {
       const raw = req.body?.siteInput;
       if (!raw || typeof raw !== "object"
-        || !req.body?.baselineDesign || !req.body?.proposedDesign) {
-        return res.status(400).json({ error: "Site inputs and baseline/proposed design geometries are required." });
+        || !req.body?.proposedDesign) {
+        return res.status(400).json({ error: "Site inputs and proposed design geometry are required." });
       }
       const siteInput = raw as SiteGeometryOptimizationInput;
-      const baseline = evaluateSiteHouseDesign(req.body.baselineDesign, siteInput);
+      // Derive the reference from CURRENT inputs, never from a forged client
+      // geometry. Artificially energy-hungry baselines must not create fake
+      // lifecycle savings.
+      const baseline = evaluateSiteReference(siteInput);
       const best = evaluateSiteHouseDesign(req.body.proposedDesign, siteInput);
       const location = { ...SITE_LOCATION_PRESETS.custom, ...(siteInput.location || {}) };
       const coupled = screenCoupledSiteAirflow({ location, baseline, best }, {
@@ -802,7 +805,7 @@ async function startServer() {
           improvementAccepted: result.decision.qualifiesAsImprovement,
           lifecycleEnergySavingsKWh: result.decision.lifecycleEnergySavingsKWh,
         },
-        state: { input: { siteInput, baselineDesign: req.body.baselineDesign, proposedDesign: req.body.proposedDesign }, result },
+        state: { input: { siteInput, proposedDesign: req.body.proposedDesign }, result },
       });
       saveToDisk();
       return res.json(result);
