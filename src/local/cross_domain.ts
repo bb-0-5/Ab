@@ -201,7 +201,7 @@ export function probeDiscovery(d:Discovery,condition:OperatingCondition):Probe[]
     if(domain!=='chemistry')
       return unknown('A calibrated chemical yield curve is NOT a material, membrane, building or RF constitutive law.');
     const fit=d.kinetics;
-    if(!fit||fit.gate!=='passes_baseline'||fit.environment!==condition.medium)
+    if(!fit||!fit.reusableAcrossRuns||fit.gate!=='passes_baseline'||fit.environment!==condition.medium)
       return unknown('Missing or inadequate held-out calibration or wrong reaction medium.');
     if(condition.temperatureK<fit.temperatureRangeK[0]||condition.temperatureK>fit.temperatureRangeK[1])
       return unknown('Requested temperature is outside measured training range; extrapolation not supported.');

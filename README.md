@@ -74,6 +74,13 @@ physically incompatible properties NEVER enter another simulation as
 trusted constants. A bounded environmental sweep compares air, water,
 room-temperature vacuum and 5000 K vacuum; unknowns remain unknown.
 
+Chemistry calibration now checks source labels, optional
+`batch_id`/`protocol_id`, zero/blank yield handling, train-versus-batch
+separation and target + side-product holdout errors. Condition-split fits
+without distinct batches or an identified unchanged protocol are **not
+reused** as new discovery evidence. A numerical fit never proves a
+hypothetical catalyst or new isotope can exist.
+
 A new membrane goal asks what material can carry, block or channel heat
 in a specified medium, T, pressure and flow regime. High-temperature
 phase failure and missing properties produce a clear "no supported
