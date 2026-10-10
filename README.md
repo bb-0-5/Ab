@@ -95,3 +95,24 @@ physics checks, device RF conservation and categorical yield invariants,
 and a production static bundle check. Scientific assumptions remain
 simplified and should be treated as hypotheses until independently
 benchmarked against hardware measurements or chemical experiments.
+
+## Laptop / desktop automated experiments (no backend)
+
+With Node installed on **your computer**, run:
+
+```sh
+npm run explore:local -- --goal building --preset melbourne --area 130 --count 4
+npm run explore:local -- --goal circuits --frequency 100 --source 50 --load 100
+npm run explore:local -- --goal chemistry --min-accept 0.5
+```
+
+Building mode automatically evaluates multiple reproducible seeds and writes
+the lowest-energy passing design among the sampled options to a timestamped
+JSON report inside `runs/` on **your computer**. It does not call an
+external API. Maximum 8 seed runs per invocation prevents runaway searches.
+
+This is a bounded experimental design generator, **not** an unrestricted
+self-modifying code agent. A browser cannot freely write files or alter the
+machine; local CLI file writes are explicit and confined to `runs/`.
+If later implementing autonomous source edits, require local sandboxing,
+visible diffs, tests and explicit write approval.
