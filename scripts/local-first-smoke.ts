@@ -17,6 +17,12 @@ assert.ok(unmatched.best.centerDeliveredPowerFraction<=1+1e-9,'Passive circuit c
 assert.ok(unmatched.best.bandAveragePowerFraction<=1);
 assert.ok(unmatched.best.bandAveragePowerFraction>=0);
 assert.ok(unmatched.best.worstBandPowerFraction<=unmatched.best.bandAveragePowerFraction+1e-9);
+assert.ok(unmatched.best.toleranceWorstPowerFraction>=0);
+assert.ok(unmatched.best.toleranceWorstPowerFraction<=1);
+assert.ok(unmatched.best.toleranceWorstPowerFraction<=unmatched.best.centerDeliveredPowerFraction+1e-9);
+if(unmatched.recommended)
+ assert.ok(unmatched.best.toleranceWorstPowerFraction>unmatched.baselineDeliveredPowerFraction+0.005,
+   'A robust recommendation must actually beat the no-network baseline at tolerance corners.');
 assert.deepEqual(unmatched,optimizeImpedanceMatch({frequencyMHz:100,sourceOhms:50,loadOhms:100}));
 assert.throws(()=>optimizeImpedanceMatch({frequencyMHz:1e6,sourceOhms:50,loadOhms:100}),/1–1000/);
 assert.throws(()=>optimizeImpedanceMatch({frequencyMHz:100,sourceOhms:-1,loadOhms:100}),/1–1000/);
