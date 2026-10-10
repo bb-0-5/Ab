@@ -13,6 +13,32 @@
  * allowed. This module does not create or claim synthetic lab observations.
  */
 export const GAS_R=8.314462618; // J mol-1 K-1
+const BOLTZMANN=1.380649e-23; // J K-1
+const PLANCK=6.62607015e-34; // J s
+/**
+ * Eyring transition-state THEORY for an assumed unimolecular channel.
+ * ΔG‡(T) = ΔH‡ - TΔS‡ and
+ * k = (k_B T/h) exp(-ΔG‡/RT).
+ * ΔH‡ and ΔS‡ must come from independent experimental evidence; no yield
+ * data alone identifies them uniquely without additional assumptions.
+ * 0 < k < infinity does NOT imply an event within any finite observation.
+ */
+export function transitionStateEventProbability(input:{
+ temperatureK:number;activationEnthalpyJMol:number;
+ activationEntropyJMolK:number;durationS:number;
+}){
+ const {temperatureK:T,activationEnthalpyJMol:H,activationEntropyJMolK:S,durationS:t}=input;
+ if(![T,H,S,t].every(Number.isFinite)||T<170||T>5000||H<0||H>1e7
+   ||Math.abs(S)>1000||t<0||t>1e9)
+  throw Error('Finite and bounded Eyring temperature, activation enthalpy/entropy and horizon required.');
+ const deltaG=H-T*S;
+ const logRate=Math.log(BOLTZMANN*T/PLANCK)-deltaG/(GAS_R*T);
+ const rate=Math.exp(Math.max(-700,Math.min(700,logRate)));
+ return {activationFreeEnergyJMol:deltaG,ratePerS:rate,
+  probabilityWithinHorizon:-Math.expm1(-Math.min(700,rate*t)),
+  limitation:'Transition-state-theory scenario, NOT a reaction prediction without measured activation enthalpy and entropy. A finite rate does not guarantee observation during finite time.'};
+}
+
 
 export interface YieldObservation {
   id:string;
