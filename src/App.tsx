@@ -3723,7 +3723,7 @@ const HouseView = ({
   const downloadSystemReport = () => {
     if (!siteOptimization || !wholeHouseOptimization) return;
     const topDesigns = [...wholeHouseOptimization.archetypeComparisons]
-      .sort((a, b) => a.lifecycleEnergyKWh - b.lifecycleEnergyKWh)
+      .sort((a, b) => Number(b.feasible) - Number(a.feasible) || a.lifecycleEnergyKWh - b.lifecycleEnergyKWh)
       .slice(0, 3);
     const report = {
       reportType: 'BeyondBound building-energy screening report',
