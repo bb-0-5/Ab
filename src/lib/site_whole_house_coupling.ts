@@ -83,6 +83,7 @@ export interface CoupledSiteFlowResult {
     floorAreaDifferencePercent: number;
   };
   limitations: string[];
+  jointSearch?: JointSiteMechanicalSearch;
 }
 
 /**
