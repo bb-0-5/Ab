@@ -1,6 +1,7 @@
 import { inferHouseAirflowNetwork, type AirflowNetworkRoom } from './house_airflow_network';
 import { SITE_LOCATION_PRESETS, type SiteLocationProfile } from './site_geometry_optimizer';
 import { adjustDegreeDaysForSetpoint, DEFAULT_DEGREE_DAY_BASE_TEMP_C, type DegreeDayClimate } from './degree_day_setpoint';
+import { hourlyDegreeDays } from './hourly_weather';
 import { COMFORT_CRITERIA, embodiedEvidenceFor, type EvidenceConfidence } from './evidence_sources';
 
 export type DwellingArchetype = 'detached' | 'terrace_mid' | 'lowrise_apartment_mid' | 'tower_apartment_mid';
@@ -18,6 +19,14 @@ export interface WholeHouseOptimizerInput {
   lifecycleYears?: number;
   hvacCop?: number;
   maximumCandidates?: number;
+  /** Parsed from an operator-controlled EPW on the SERVER, never the browser. */
+  hourlyOutdoorTemperaturesC?: number[];
+  hourlyWeatherSource?: {
+    stationName: string;
+    source: string;
+    stationDistanceKm: number;
+  };
+  weatherFallbackReason?: string;
   siteObstruction?: {
     summerShadePotentialPercent: number;
     winterSolarAccessPercent: number;
@@ -171,6 +180,16 @@ export interface WholeHouseOptimizationResult {
   ranked: EvaluatedWholeHouseConfiguration[];
   archetypeComparisons: ArchetypeComparison[];
   embodiedAssumptionStressTest: EmbodiedAssumptionStressTest;
+  weatherContext: {
+    mode: 'epw_hourly_temperature' | 'preset_fitted_degree_days';
+    stationName: string | null;
+    source: string;
+    stationDistanceKm: number | null;
+    weatherHours: number | null;
+    heatingDegreeDays: number;
+    coolingDegreeDays: number;
+    note: string;
+  };
   solarContext: {
     source: string;
     summerShadePotentialPercent: number;
@@ -665,7 +684,25 @@ export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}
     heatingDegreeDays: location.heatingDegreeDays,
     coolingDegreeDays: location.coolingDegreeDays,
   };
-  const climate = adjustDegreeDaysForSetpoint(presetClimate, targetTempC);
+  const hourlyTemperatures = rawInput.hourlyOutdoorTemperaturesC;
+  // Explicitly validate operator-provided hourly observations. Never use
+  // a partially missing file and never silently fall back after accepting one.
+  const climate = hourlyTemperatures !== undefined
+    ? hourlyDegreeDays(hourlyTemperatures, targetTempC)
+    : adjustDegreeDaysForSetpoint(presetClimate, targetTempC);
+  const weatherContext: WholeHouseOptimizationResult['weatherContext'] = {
+    mode: hourlyTemperatures !== undefined ? 'epw_hourly_temperature' : 'preset_fitted_degree_days',
+    stationName: hourlyTemperatures !== undefined ? rawInput.hourlyWeatherSource?.stationName || 'EPW station' : null,
+    source: hourlyTemperatures !== undefined ? rawInput.hourlyWeatherSource?.source || 'operator-provided EPW'
+      : 'location preset heating/cooling degree days',
+    stationDistanceKm: hourlyTemperatures !== undefined ? rawInput.hourlyWeatherSource?.stationDistanceKm ?? null : null,
+    weatherHours: hourlyTemperatures?.length ?? null,
+    heatingDegreeDays: round(climate.heatingDegreeDays, 2),
+    coolingDegreeDays: round(climate.coolingDegreeDays, 2),
+    note: hourlyTemperatures !== undefined
+      ? 'Hourly dry-bulb values replace the synthetic degree-day profile for fabric/ventilation conduction. This is NOT an hourly whole-building solver. Leap records are annualised to 365 days. Solar gains and site geometry still use simplified separate assumptions.'
+      : `Degree days are fitted from climatology presets, not hourly weather.${rawInput.weatherFallbackReason ? ' Weather file not used: ' + rawInput.weatherFallbackReason : ''}`,
+  };
   const baseline = evaluateConfiguration(rooms, location, baselineConfiguration, lifecycleYears, hvacCop, climate, siteObstruction);
   const evaluated = configurations.map(configuration => evaluateConfiguration(
     rooms, location, configuration, lifecycleYears, hvacCop, climate, siteObstruction,
@@ -752,6 +789,7 @@ export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}
     ranked: evaluated.slice(0, 12),
     archetypeComparisons,
     embodiedAssumptionStressTest,
+    weatherContext,
     solarContext: {
       source: siteObstruction?.source || 'archetype_only',
       summerShadePotentialPercent: round(clamp(Number(siteObstruction?.summerShadePotentialPercent) || 0, 0, 90), 1),
@@ -781,7 +819,9 @@ export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}
         : 'Neighbouring-building shade is an archetype estimate. The 3D sun view uses the selected latitude and the optimized local footprint for directional shadow testing.',
       'Manufacturing energy includes a per-dwelling structure allowance plus ducts, openings, controls and heat recovery so operational savings cannot hide a larger build cost.',
       `Embodied-energy factors are UNSOURCED screening assumptions. The independent hypothetical ±25% stress test gives ${embodiedAssumptionStressTest.baselineWinnerWins}/${embodiedAssumptionStressTest.scenariosEvaluated} scenarios to the baseline winner (${embodiedAssumptionStressTest.verdict}). A source audit found qualifying Australian reference data only for detached houses on an older materials boundary. The other factors are unverified; this is not a confidence interval or probability. Replace assumptions with comparable product EPD data before a decision.`,
-      `Preset degree days are re-evaluated at the ${round(targetTempC, 1)} degC indoor setpoint from an annual temperature profile fitted to the preset pair at a ${DEFAULT_DEGREE_DAY_BASE_TEMP_C} degC base. This is a climatology screen, not hourly weather; a preset with zero heating or zero cooling degree days constrains the annual swing poorly and extrapolates optimistically away from the base.`,
+      hourlyTemperatures !== undefined
+        ? `Station-derived dry-bulb hourly degree days were integrated at a ${round(targetTempC, 1)} degC balance temperature using ${hourlyTemperatures.length} EPW hours; this is an annualised degree-day estimate, NOT hourly heat-balance or dynamic fabric/solar modelling. Station proximity is not site calibration.`
+        : `Preset degree days are re-evaluated at the ${round(targetTempC, 1)} degC indoor setpoint from an annual temperature profile fitted to the preset pair at a ${DEFAULT_DEGREE_DAY_BASE_TEMP_C} degC base. This is a climatology screen, not hourly weather; a preset with zero heating or zero cooling degree days constrains the annual swing poorly and extrapolates optimistically away from the base.`,
       `Candidate selection minimises lifecycle energy alone. Comfort, noise and mass balance are feasibility constraints and are reported separately; no accepted conversion from temperature deviation to energy exists (ASHRAE 55, EN 16798-1 and NatHERS were checked), so none is applied. The ${SCREENING_CONSTRAINTS.comfortDeviationLimitC} K comfort limit and ${SCREENING_CONSTRAINTS.noiseLimitDbA} dBA noise limit are project-specified screening choices, not sourced quantities.`,
     ],
   };
