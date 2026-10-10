@@ -128,6 +128,7 @@ export default function LocalApp(){
   loadCampaign(buildingKey('melbourne',130,22,'preset'),481516));
  const [batch,setBatch]=useState({total:0,completed:0});
  const queueRef=useRef<number[]>([]);
+ const busyRef=useRef(false);
  const startRef=useRef<(mode:Goal,overrides?:{seed?:number})=>void>(()=>{});
  const selectionRef=useRef({key:'',goal:'building' as Goal});
  const mountedKeyRef=useRef(false);
@@ -147,6 +148,7 @@ export default function LocalApp(){
   const id=++requestId.current;
   const runSeed=overrides?.seed??seed;
   const runKey=buildingKey(preset,area,temperature,weatherId);
+  busyRef.current=true;
   setWorking(true);setStatus('Starting a local calculation…');
   // Keep the last completed result visible while the next search runs.
   const condition:OperatingCondition={medium,temperatureK:operatingK,pressurePa,flowSpeedMs:airflow};
@@ -166,7 +168,7 @@ export default function LocalApp(){
    const m=e.data;
    if(m.id!==requestId.current)return;
    if(m.kind==='progress'){setStatus(m.message||'Evaluating candidates…');return;}
-   setWorking(false);
+   busyRef.current=false;setWorking(false);
    if(m.kind==='error'){
     queueRef.current=[];setBatch({total:0,completed:0});
     setStatus(m.error||'Calculation failed.');return;
@@ -201,15 +203,22 @@ export default function LocalApp(){
      'Result saved on device, but cloud backup failed: '+(err instanceof Error?err.message:String(err))));}
    }
    if(mode==='building'&&stillSelected&&queueRef.current.length){
-    const next=queueRef.current.shift()!;
     setBatch(p=>({...p,completed:p.completed+1}));
-    setTimeout(()=>{if(selectionRef.current.key===runKey
-      &&selectionRef.current.goal==='building')startRef.current('building',{seed:next});},80);
+    if(typeof document!=='undefined'&&!document.hidden){
+     const next=queueRef.current.shift()!;
+     setTimeout(()=>{
+      if(selectionRef.current.key===runKey&&selectionRef.current.goal==='building'){
+       if(document.hidden){queueRef.current.unshift(next);
+        setStatus('Paused between designs while this tab is hidden.');}
+       else startRef.current('building',{seed:next});
+      }
+     },80);
+    }else setStatus('Paused between designs while this tab is hidden.');
    }else if(mode==='building'){
     setBatch(p=>p.total?{...p,completed:Math.min(p.total,p.completed+1)}:p);
    }
   };
-  instance.onerror=e=>{if(id!==requestId.current)return;setWorking(false);
+  instance.onerror=e=>{if(id!==requestId.current)return;busyRef.current=false;setWorking(false);
    queueRef.current=[];setBatch({total:0,completed:0});
    setStatus('Local worker error: '+(e.message||'Failed to load computation.'))};
   instance.postMessage({...input,id,mode,discoveries:prior,
@@ -230,21 +239,33 @@ export default function LocalApp(){
   queueRef.current=[];setBatch({total:0,completed:0});
   setCampaign(loadCampaign(searchKey,seed));
   if(selectionRef.current.goal==='building'){
-   worker.current?.terminate();requestId.current++;setWorking(false);
+   worker.current?.terminate();requestId.current++;busyRef.current=false;setWorking(false);
    setResult(null);setResultGoal(null);
    setStatus('Design inputs changed. Run a new comparison for these conditions.');
   }
  },[searchKey]);
+ useEffect(()=>{
+  const onVisible=()=>{
+   if(!document.hidden&&!busyRef.current&&queueRef.current.length
+      &&selectionRef.current.goal==='building'){
+    const next=queueRef.current.shift()!;
+    startRef.current('building',{seed:next});
+   }
+  };
+  document.addEventListener('visibilitychange',onVisible);
+  return()=>document.removeEventListener('visibilitychange',onVisible);
+ },[]);
  const stop=()=>{
   queueRef.current=[];requestId.current++;worker.current?.terminate();
+  busyRef.current=false;
   setWorking(false);setBatch({total:0,completed:0});
   setStatus('Stopped. Your completed designs remain stored on this device.');
  };
- const continueBuilding=()=>{
-  if(working)return;
+ const continueBuilding=(count:number)=>{
+  if(working||count<1||count>25)return;
   const seeds:number[]=[];let next=campaign.nextSeed;
-  for(let i=0;i<5;i++){seeds.push(next);next=advanceSeed(next);}
-  queueRef.current=seeds.slice(1);setBatch({total:5,completed:0});
+  for(let i=0;i<count;i++){seeds.push(next);next=advanceSeed(next);}
+  queueRef.current=seeds.slice(1);setBatch({total:count,completed:0});
   start('building',{seed:seeds[0]});
  };
  const reseed=()=>{const next=campaign.nextSeed;setSeed(next);start('building',{seed:next});};
