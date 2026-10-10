@@ -142,6 +142,24 @@ export interface ArchetypeComparison {
   tradeoff: string;
 }
 
+/**
+ * A deterministic WHAT-IF stress test for UNSOURCED embodied-energy inputs.
+ * ±25% is a chosen perturbation, NOT a statistical confidence interval,
+ * calibrated distribution, or claim about Australian construction costs.
+ */
+export interface EmbodiedAssumptionStressTest {
+  method: 'independent_archetype_perturbations';
+  factorMultipliers: number[];
+  scenariosEvaluated: number;
+  baselineWinner: DwellingArchetype | null;
+  feasibleArchetypes: number;
+  winnerCounts: Record<DwellingArchetype, number>;
+  baselineWinnerWins: number;
+  stableWithinTest: boolean;
+  verdict: 'stable_within_test' | 'ranking_changes' | 'incomplete_feasible_coverage' | 'no_feasible_design';
+  note: string;
+}
+
 export interface WholeHouseOptimizationResult {
   location: SiteLocationProfile;
   candidatesEvaluated: number;
@@ -149,6 +167,7 @@ export interface WholeHouseOptimizationResult {
   best: EvaluatedWholeHouseConfiguration;
   ranked: EvaluatedWholeHouseConfiguration[];
   archetypeComparisons: ArchetypeComparison[];
+  embodiedAssumptionStressTest: EmbodiedAssumptionStressTest;
   solarContext: {
     source: string;
     summerShadePotentialPercent: number;
@@ -516,6 +535,83 @@ function evaluateConfiguration(
   };
 }
 
+/**
+ * Re-rank the best FEASIBLE design per archetype under all 3^4 independent
+ * hypothetical embodied-energy perturbations, without re-running the physics.
+ * The load, duct, HVAC and comfort model remain unchanged. This specifically
+ * exposes when the claimed 'best building' is actually a choice of assumptions.
+ */
+export function stressTestEmbodiedAssumptions(
+  candidates: EvaluatedWholeHouseConfiguration[],
+  baselineWinner: DwellingArchetype | null,
+): EmbodiedAssumptionStressTest {
+  const archetypes = Object.keys(DWELLING_ARCHETYPES) as DwellingArchetype[];
+  const factorMultipliers = [0.75, 1, 1.25];
+  const winnerCounts = Object.fromEntries(archetypes.map(id => [id, 0])) as Record<DwellingArchetype, number>;
+  const bestFeasible = new Map<DwellingArchetype, EvaluatedWholeHouseConfiguration>();
+
+  for (const candidate of candidates) {
+    if (!candidate.feasible) continue;
+    const id = candidate.configuration.archetype;
+    const previous = bestFeasible.get(id);
+    if (!previous || candidate.totalLifecycleEnergyKWh < previous.totalLifecycleEnergyKWh) {
+      bestFeasible.set(id, candidate);
+    }
+  }
+
+  const feasibleArchetypes = bestFeasible.size;
+  let scenariosEvaluated = 0;
+  if (feasibleArchetypes > 0) {
+    // One multiplier for each of the four archetypes: 81 reproducible scenarios.
+    for (const detached of factorMultipliers) for (const terrace of factorMultipliers)
+      for (const lowrise of factorMultipliers) for (const tower of factorMultipliers) {
+        const factors: Record<DwellingArchetype, number> = {
+          detached, terrace_mid: terrace, lowrise_apartment_mid: lowrise, tower_apartment_mid: tower,
+        };
+        let selected: DwellingArchetype | null = null;
+        let bestEnergy = Infinity;
+        for (const id of archetypes) {
+          const candidate = bestFeasible.get(id);
+          if (!candidate) continue;
+          // Replace ONLY the uncertain structure allowance, preserving HVAC,
+          // duct/controls manufacture, lifecycle length and feasibility gates.
+          const adjusted = candidate.totalLifecycleEnergyKWh
+            + candidate.manufacturing.buildingKWh * (factors[id] - 1);
+          if (adjusted < bestEnergy) {
+            selected = id;
+            bestEnergy = adjusted;
+          }
+        }
+        if (selected) winnerCounts[selected] += 1;
+        scenariosEvaluated += 1;
+      }
+  }
+
+  const baselineWinnerWins = baselineWinner ? winnerCounts[baselineWinner] : 0;
+  const stableWithinTest = feasibleArchetypes === archetypes.length
+    && baselineWinner !== null && baselineWinnerWins === scenariosEvaluated && scenariosEvaluated > 0;
+  const verdict: EmbodiedAssumptionStressTest['verdict'] = feasibleArchetypes === 0
+    ? 'no_feasible_design'
+    : feasibleArchetypes !== archetypes.length
+      ? 'incomplete_feasible_coverage'
+      : stableWithinTest
+        ? 'stable_within_test'
+        : 'ranking_changes';
+
+  return {
+    method: 'independent_archetype_perturbations',
+    factorMultipliers,
+    scenariosEvaluated,
+    baselineWinner,
+    feasibleArchetypes,
+    winnerCounts,
+    baselineWinnerWins,
+    stableWithinTest,
+    verdict,
+    note: 'Illustrative independent -25%, 0%, +25% changes to UNSOURCED per-archetype building embodied-energy factors. These are WHAT-IF scenarios, not empirical error bars, uncertainty probabilities, EPD data, or an engineering validation. Feasibility gates remain unchanged.',
+  };
+}
+
 export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}): WholeHouseOptimizationResult {
   const rooms = normalizeRooms(rawInput.rooms);
   const location = normalizeLocation(rawInput.location);
@@ -530,19 +626,31 @@ export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}
   const diameters = [125, 160, 200];
   const pressures = [90, 155];
   const recovery = [0.68, 0.84];
-  outer: for (const archetype of archetypes) for (const control of controls) for (const opening of openings)
-    for (const diameter of diameters) for (const pressure of pressures) for (const hrv of recovery) {
-      configurations.push({
-        archetype,
-        control,
-        transferOpeningAreaCm2: opening,
-        mainDuctDiameterMm: diameter,
-        fanStaticPressurePa: pressure,
-        heatRecoveryEfficiency: hrv,
-        designAirChangesPerHour: control === 'transfer_to_wet_rooms' ? 0.62 : control === 'demand_zoned' ? 0.54 : 0.58,
-      });
+  // Each archetype gets the same coverage, even with a reduced sweep budget.
+  // The previous archetype-major loop evaluated ONLY detached dwellings when
+  // maximumCandidates=48, making the "whole system" comparison misleading.
+  const archetypeConfigurations = archetypes.map(archetype => {
+    const group: WholeHouseConfiguration[] = [];
+    for (const control of controls) for (const opening of openings)
+      for (const diameter of diameters) for (const pressure of pressures) for (const hrv of recovery) {
+        group.push({
+          archetype,
+          control,
+          transferOpeningAreaCm2: opening,
+          mainDuctDiameterMm: diameter,
+          fanStaticPressurePa: pressure,
+          heatRecoveryEfficiency: hrv,
+          designAirChangesPerHour: control === 'transfer_to_wet_rooms' ? 0.62 : control === 'demand_zoned' ? 0.54 : 0.58,
+        });
+      }
+    return group;
+  });
+  outer: for (let index = 0; index < archetypeConfigurations[0].length; index += 1) {
+    for (const group of archetypeConfigurations) {
+      configurations.push(group[index]);
       if (configurations.length >= maximumCandidates) break outer;
     }
+  }
 
   const baselineConfiguration: WholeHouseConfiguration = {
     archetype: 'detached', control: 'balanced_rooms', transferOpeningAreaCm2: 120,
@@ -569,8 +677,12 @@ export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}
   const bestByArchetype = new Map<DwellingArchetype, EvaluatedWholeHouseConfiguration>();
   evaluated.forEach(candidate => {
     const current = bestByArchetype.get(candidate.configuration.archetype);
-    if (!current || candidate.score < current.score) bestByArchetype.set(candidate.configuration.archetype, candidate);
+    if (!current || (candidate.feasible && !current.feasible)
+      || (candidate.feasible === current.feasible && candidate.score < current.score)) {
+      bestByArchetype.set(candidate.configuration.archetype, candidate);
+    }
   });
+  const embodiedAssumptionStressTest = stressTestEmbodiedAssumptions(evaluated, best.feasible ? best.configuration.archetype : null);
   const detached = bestByArchetype.get('detached') || baseline;
   const archetypeComparisons = archetypes.map(archetypeId => {
     const candidate = bestByArchetype.get(archetypeId) || baseline;
@@ -607,10 +719,8 @@ export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}
     (lowest, candidate) => candidate.totalLifecycleEnergyKWh < lowest.totalLifecycleEnergyKWh ? candidate : lowest,
     evaluated[0] || baseline,
   );
-  // `best` minimises `score`, which adds comfort, noise and mass-balance penalties
-  // on top of lifecycle energy. Those penalties can and do reorder candidates, so
-  // the selected design is not necessarily the lowest-energy one. Surface the gap
-  // instead of describing the winner as an energy minimum.
+  // The best feasible candidate need not be the unconstrained energy minimum.
+  // Surface the excluded lower-energy alternative rather than hiding that gap.
   const energyPenaltyOfSelectionKWh = best.totalLifecycleEnergyKWh - lowestEnergyCandidate.totalLifecycleEnergyKWh;
   const selectionMatchesLowestEnergy = energyPenaltyOfSelectionKWh <= 0.005;
   const lowestLifecycleEnergyAlternative = selectionMatchesLowestEnergy ? null : {
@@ -632,6 +742,7 @@ export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}
     best,
     ranked: evaluated.slice(0, 12),
     archetypeComparisons,
+    embodiedAssumptionStressTest,
     solarContext: {
       source: siteObstruction?.source || 'archetype_only',
       summerShadePotentialPercent: round(clamp(Number(siteObstruction?.summerShadePotentialPercent) || 0, 0, 90), 1),
@@ -660,7 +771,7 @@ export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}
         ? 'Neighbouring-building shade is adjusted with a cached massing horizon screen; the 3D sun view casts the selected hour through those footprint-derived masses.'
         : 'Neighbouring-building shade is an archetype estimate. The 3D sun view uses the selected latitude and the optimized local footprint for directional shadow testing.',
       'Manufacturing energy includes a per-dwelling structure allowance plus ducts, openings, controls and heat recovery so operational savings cannot hide a larger build cost.',
-      `Embodied-energy factors are UNSOURCED screening assumptions, and they - not the ${evaluated.length}-candidate sweep - decide which archetype wins. A source audit found a qualifying Australian range for detached dwellings only (about 4.5x the value used here, on an older boundary) and none at all for terrace or apartment forms. Substituting published-order factors reverses the ranking. Treat the archetype result as a restatement of these constants until product EPD data replaces them.`,
+      `Embodied-energy factors are UNSOURCED screening assumptions. The independent hypothetical ±25% stress test gives ${embodiedAssumptionStressTest.baselineWinnerWins}/${embodiedAssumptionStressTest.scenariosEvaluated} scenarios to the baseline winner (${embodiedAssumptionStressTest.verdict}). A source audit found qualifying Australian reference data only for detached houses on an older materials boundary. The other factors are unverified; this is not a confidence interval or probability. Replace assumptions with comparable product EPD data before a decision.`,
       `Preset degree days are re-evaluated at the ${round(targetTempC, 1)} degC indoor setpoint from an annual temperature profile fitted to the preset pair at a ${DEFAULT_DEGREE_DAY_BASE_TEMP_C} degC base. This is a climatology screen, not hourly weather; a preset with zero heating or zero cooling degree days constrains the annual swing poorly and extrapolates optimistically away from the base.`,
       `Candidate selection minimises lifecycle energy alone. Comfort, noise and mass balance are feasibility constraints and are reported separately; no accepted conversion from temperature deviation to energy exists (ASHRAE 55, EN 16798-1 and NatHERS were checked), so none is applied. The ${SCREENING_CONSTRAINTS.comfortDeviationLimitC} K comfort limit and ${SCREENING_CONSTRAINTS.noiseLimitDbA} dBA noise limit are project-specified screening choices, not sourced quantities.`,
     ],
