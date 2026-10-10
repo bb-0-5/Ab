@@ -4254,6 +4254,7 @@ const HouseView = ({
                         <div>{result.proposed.site.design.form.replaceAll('_', ' ')} · {result.proposed.rooms.length} generated rooms · {result.proposed.layout.scaledRoomAreaM2.toFixed(1)} m² modeled · {result.proposed.configurationsEvaluated} airflow cases</div>
                         <div>{result.proposed.selectedAirflow.control.replaceAll('_', ' ')} · {result.proposed.selectedAirflow.designAirChangesPerHour.toFixed(2)} ACH · {Math.round(result.proposed.selectedAirflow.heatRecoveryEfficiency * 100)}% heat recovery</div>
                         <div>Construction + envelope/solar calculated once in Site + Shadow; mechanical ventilation, fan electricity and hardware added separately. No apartment extrapolation.</div>
+                        <div>Natural-ventilation credit removed before mechanically supplied ventilation: {fmt(result.proposed.energy.naturalVentilationCreditRemovedElectricalKWh)} kWh/y. This prevents claiming both cooling strategies at once.</div>
                         <div>Area difference {result.constraints.floorAreaDifferencePercent.toFixed(1)}%. {result.limitations[2]} {result.limitations[3]}</div>
                       </div>
                     </div>;

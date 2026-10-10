@@ -49,6 +49,9 @@ for (const item of [same.baseline, same.proposed]) {
   assert.equal(item.energy.siteManufacturingKWh, item.site.manufacturing.totalKWh,
     'Site construction should be counted once, without generic whole-house building manufacturing.');
   assert.ok(item.energy.extraMechanicalManufacturingKWh > 0);
+  assert.ok(item.energy.naturalVentilationCreditRemovedElectricalKWh >= 0);
+  assert.ok(item.energy.annualSiteElectricalKWh >= item.site.operational.annualTotalKWh - 0.2,
+    'Adding mechanical ventilation must not preserve a simultaneous natural ventilation credit.');
   assert.ok(Math.abs(item.energy.annualCombinedElectricalKWh
       - (item.energy.annualSiteElectricalKWh
         + item.energy.annualVentilationElectricalKWh

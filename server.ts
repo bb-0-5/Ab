@@ -772,6 +772,7 @@ async function startServer() {
       const location = { ...SITE_LOCATION_PRESETS.custom, ...(siteInput.location || {}) };
       const result = screenCoupledSiteAirflow({ location, baseline, best }, {
         lifecycleYears: siteInput.lifecycleYears,
+        coolingCOP: siteInput.coolingCOP,
         maximumCandidates: 108,
       });
       const workspace = workspaceFor(req);

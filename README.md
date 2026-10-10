@@ -112,7 +112,8 @@ and optimizes *only a detached-house mechanical ventilation strategy*
 for that generated layout. It compares:
 
 ```text
-annual = site engine's envelope + solar + natural vent annual electricity
+annual = site engine's envelope + solar annual electricity
+         (without optional natural-ventilation cooling credit)
        + mechanical ventilation annual electricity
        + mechanical fan annual electricity
 
