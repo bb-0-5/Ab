@@ -13,7 +13,7 @@ import { optimizeHvacCycle, type HvacCycleStrategy } from "./src/lib/hvac_cycle_
 import { discoverAdaptiveWall, type AdaptiveWallStrategy } from "./src/lib/adaptive_wall_optimizer";
 import { optimizeRoomLifecycle } from "./src/lib/room_lifecycle_optimizer";
 import { optimizeSiteGeometry, evaluateSiteHouseDesign, SITE_LOCATION_PRESETS, type SiteHouseDesign, type SiteGeometryOptimizationInput } from "./src/lib/site_geometry_optimizer";
-import { screenCoupledSiteAirflow } from "./src/lib/site_whole_house_coupling";
+import { screenCoupledSiteAirflow, searchCoupledSiteMechanicalPortfolio } from "./src/lib/site_whole_house_coupling";
 import { optimizeWholeHouseSystem } from "./src/lib/whole_house_optimizer";
 import { runBuildingPhysicsValidation, type BuildingPhysicsValidationReport } from "./src/lib/building_physics_validation";
 import { buildAutomaticSiteContext, makeSiteContextCacheKey, type GeoJsonFeatureCollection } from "./src/lib/site_context";
@@ -770,11 +770,26 @@ async function startServer() {
       const baseline = evaluateSiteHouseDesign(req.body.baselineDesign, siteInput);
       const best = evaluateSiteHouseDesign(req.body.proposedDesign, siteInput);
       const location = { ...SITE_LOCATION_PRESETS.custom, ...(siteInput.location || {}) };
-      const result = screenCoupledSiteAirflow({ location, baseline, best }, {
+      const coupled = screenCoupledSiteAirflow({ location, baseline, best }, {
         lifecycleYears: siteInput.lifecycleYears,
         coolingCOP: siteInput.coolingCOP,
         maximumCandidates: 108,
       });
+      // A small portfolio comes from the site-only seed sweep. Do NOT trust
+      // its scores/feasibility; re-evaluate all proposed geometries server-side.
+      const submitted = Array.isArray(req.body?.candidateDesigns)
+        ? req.body.candidateDesigns.slice(0, 12)
+        : [];
+      const candidates = submitted.map((design: SiteHouseDesign) =>
+        evaluateSiteHouseDesign(design, siteInput));
+      const jointSearch = searchCoupledSiteMechanicalPortfolio(
+        { location, baseline, best }, candidates, {
+          lifecycleYears: siteInput.lifecycleYears,
+          coolingCOP: siteInput.coolingCOP,
+          maximumCandidates: 48,
+        },
+      );
+      const result = { ...coupled, jointSearch };
       const workspace = workspaceFor(req);
       appendWorkspaceRecord(workspace, {
         type: "coupled_site_airflow_screen",
