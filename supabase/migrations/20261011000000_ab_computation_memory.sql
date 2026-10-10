@@ -4,7 +4,7 @@
 create table if not exists public.ab_computation_memory (
   id uuid primary key,
   user_id uuid not null references auth.users(id) on delete cascade,
-  kind text not null check(kind in ('building','circuits','chemistry','membrane')),
+  kind text not null check(kind in ('building','circuits','chemistry','membrane','suit')),
   title text not null check(char_length(title) between 1 and 180),
   payload jsonb not null check(jsonb_typeof(payload)='object'
     and length(payload::text) <= 16000),
