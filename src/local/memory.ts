@@ -10,7 +10,7 @@
 export interface MemoryEntry{
  id:string;
  savedAt:string;
- mode:'building'|'circuits'|'chemistry'|'membrane';
+ mode:'building'|'circuits'|'chemistry'|'membrane'|'suit';
  label:string;
  input:Record<string,number|string>;
  result:unknown;
@@ -122,6 +122,9 @@ function compact(entry:MemoryEntry){
  :entry.mode==='membrane'?{condition:result.condition,task:result.task,
   selected:result.selected,unmetRequirements:result.unmetRequirements,
   passingCandidates:result.passingCandidates,totalCandidates:result.totalCandidates}
+ :entry.mode==='suit'?{condition:result.condition,selected:result.selected,goal:result.goal,
+  candidatesEvaluated:result.candidatesEvaluated,
+  viableForHumanFlight:false,flightAssessment:result.flightAssessment}
  :{baseline:result.baseline,gate:result.gate,candidatesTested:result.candidatesTested,
    calibration:result.calibration?{
     reactionId:result.calibration.reactionId,environment:result.calibration.environment,
