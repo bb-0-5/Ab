@@ -496,7 +496,7 @@ export default function LocalApp(){
       </p>}
       {selectedSuit.selected&&<div className="mt-4 flex flex-wrap items-center gap-3">
        <strong className="text-cyan-200">{selectedSuit.selected.material} · {fmt(selectedSuit.selected.thicknessMm,1)} mm thick · {fmt(selectedSuit.selected.rimWidthMm,1)} mm rim</strong>
-       <button onClick={saveSTL} className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100">Download slicer-ready STL (mm)</button>
+       <button onClick={saveSTL} className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100">Download STL for slicer check (mm)</button>
        <span className="text-xs text-slate-400">Check the mesh and orientation in your own slicer; actual machine settings and fit are unverified.</span>
       </div>}
       <p className="mt-3 text-xs text-slate-400">{selectedSuit.candidatesEvaluated} material/frame candidates screened with default filament/waste and energy assumptions. One decorative panel only, not an entire costume production estimate.</p>
