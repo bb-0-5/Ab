@@ -796,7 +796,10 @@ export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}
     searchCoverage,
     baseline,
     best,
-    ranked: evaluated.slice(0, 12),
+    // The joint-site selector needs ALL feasible fixed-archetype options so
+    // it can rank on the linked objective rather than a generic-building
+    // objective. Normal four-archetype API responses stay capped at 12.
+    ranked: rawInput.fixedArchetype ? evaluated : evaluated.slice(0, 12),
     archetypeComparisons,
     embodiedAssumptionStressTest,
     weatherContext,
