@@ -806,7 +806,7 @@ export function EarthSiteHouse3D({
   const archetype = winner ? DWELLING_ARCHETYPES[winner.configuration.archetype] : DWELLING_ARCHETYPES.detached;
   const winningComparison = wholeHouse?.archetypeComparisons.find(item => item.archetype === winner?.configuration.archetype);
   const topArchetypes = useMemo(() => wholeHouse
-    ? [...wholeHouse.archetypeComparisons].sort((a, b) => a.lifecycleEnergyKWh - b.lifecycleEnergyKWh).slice(0, 3)
+    ? [...wholeHouse.archetypeComparisons].sort((a, b) => Number(b.feasible) - Number(a.feasible) || a.lifecycleEnergyKWh - b.lifecycleEnergyKWh).slice(0, 3)
     : [], [wholeHouse]);
 
   useEffect(() => {
@@ -1013,6 +1013,11 @@ export function EarthSiteHouse3D({
       <div className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/20"><div className="text-[7px] text-gray-500 uppercase">Shared envelope</div><div className="text-lg font-black text-purple-300">{archetype.sharedConditionedBoundaryPercent}%</div><div className="text-[7px] text-gray-600">conditioned boundaries</div></div>
       <div className="p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/20"><div className="text-[7px] text-gray-500 uppercase">Local sun now</div><div className="text-lg font-black text-yellow-200">{altitudeDeg > 0 ? `${altitudeDeg.toFixed(0)}°` : 'night'}</div><div className="text-[7px] text-gray-600">azimuth {azimuthDeg.toFixed(0)}°</div></div>
     </div>
+    {wholeHouse?.embodiedAssumptionStressTest.verdict === 'ranking_changes' && (
+      <div role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[10px] text-amber-100">
+        The model's first-place dwelling changes under illustrative embodied-energy assumptions. See the reliability check below the 3D view before relying on the ranking.
+      </div>
+    )}
     <div className="relative h-[520px] md:h-[610px] rounded-xl overflow-hidden border border-cyan-500/25 bg-[#020407]">
       <SoftwareCanvas3D draw={draw} label="Interactive annual Earth, sun, building shadow, apartment context and whole-house airflow simulation" />
       <div className="absolute left-3 top-3 pointer-events-none rounded-lg bg-black/80 border border-white/10 px-3 py-2 text-[8px] font-mono space-y-1">
@@ -1026,7 +1031,7 @@ export function EarthSiteHouse3D({
       <div className="absolute bottom-3 right-3 pointer-events-none text-[8px] text-cyan-300 bg-black/75 border border-cyan-500/20 px-2 py-1 rounded">Software 3D · WebGL-free</div>
     </div>
     {wholeHouse && <div>
-      <div className="text-[8px] text-gray-500 uppercase tracking-widest mb-2">Top three lifecycle designs</div>
+      <div className="text-[8px] text-gray-500 uppercase tracking-widest mb-2">Top three screened dwelling types · feasible first</div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
       {topArchetypes.map((comparison, index) => <div key={comparison.archetype} className={`p-3 rounded-xl border ${comparison.archetype === winner?.configuration.archetype ? 'bg-emerald-500/10 border-emerald-500/35' : 'bg-black/30 border-white/10'}`}>
         <div className="flex justify-between gap-2"><span className="text-[9px] font-black text-white uppercase">#{index + 1} {comparison.label}</span><span className={`text-[7px] uppercase ${comparison.feasible ? 'text-emerald-300' : 'text-amber-300'}`}>{comparison.feasible ? (comparison.archetype === winner?.configuration.archetype ? 'model #1' : 'screen pass') : 'screen fails'}</span></div>
