@@ -30,6 +30,32 @@ result. Users can also select a **passive RF impedance match** or a
 - One-page UI intentionally has no simulation tabs or parameter maze.
   Technical details and history are behind collapsible disclosures.
 
+## Shared discoveries and entropy-based chemistry
+
+Every local Worker task produces typed **discoveries** with provenance,
+units and an operating environment. Previous findings are reused on the
+next run: membrane needs can trigger a new chemistry/material screen;
+chemistry can propose an isotope/material hypothesis; building and
+electronics can test it under their own constraints. Unverified or
+physically incompatible properties NEVER enter another simulation as
+trusted constants. A bounded environmental sweep compares air, water,
+room-temperature vacuum and 5000 K vacuum; unknowns remain unknown.
+
+A new membrane goal asks what material can carry, block or channel heat
+in a specified medium, T, pressure and flow regime. High-temperature
+phase failure and missing properties produce a clear "no supported
+material" result, not a fictional material or engineering approval.
+
+The chemistry goal can import real **observed target + side yield**
+CSV records and calibrate an effective competing first-order
+temperature-dependent rate model, with a deterministic condition-grouped
+train/holdout split. It displays **holdout MAE versus the training-mean
+baseline**. Without measured records, no calibrated yield claim is made.
+Hypothetical entropy/barrier changes are not verified catalysts.
+
+See [Calibration & Cross-Simulation Protocol](docs/ENTROPY_DISCOVERY_CALIBRATION.md).
+Run `npm run test:discoveries`.
+
 ## Device memory + optional Supabase
 
 Latest 32 results stay on your device; download full JSON any time.
