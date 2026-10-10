@@ -131,12 +131,16 @@ Upload the contents of `dist/` to a static host such as Cloudflare Pages.
 The Worker bundle is part of the assets. There is no Node backend on the
 runtime host. See `DEPLOY_INSTRUCTIONS.md` for a safe cutover plan.
 
-**Production warning:** `abovebound.org` still points to the **old AWS
-origin through Cloudflare Tunnel** until the public hostname is explicitly
-migrated. Repository changes do **not** shut down the old AWS host, prevent
-billing or migrate its existing `discovery_memory.json`. Confirm static
-preview and export old saved data before switching DNS, then retire AWS
-separately. Do not delete current Tunnel while it still serves production.
+**Production deployment:** Cloudflare Pages project `abovebound` is linked
+to this GitHub repository's `main` branch. Its static Vite build was
+successfully deployed to `https://abovebound.pages.dev`. DNS for
+`abovebound.org` and `www.abovebound.org` was updated to point at
+Pages on 2026-10-11 (Melbourne time); hostname certificate validation may
+still be pending immediately after the change. This does **not** stop the
+old AWS server or migrate its `discovery_memory.json`. Back up the old
+volume and retire AWS resources separately, after confirming all saved
+legacy data has been recovered. The old Tunnel DNS target was
+`07e7a1e0-a9f8-44d9-92e0-3b36dccf44ae.cfargotunnel.com`.
 
 ## Source and engineering boundaries
 
