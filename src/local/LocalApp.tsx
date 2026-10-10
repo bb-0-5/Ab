@@ -295,6 +295,7 @@ export default function LocalApp(){
        <option value="circuits">An electronic interface — passive impedance matching</option>
        <option value="chemistry">Chemistry — calibrated yields &amp; hypothetical barriers</option>
        <option value="membrane">Membranes — materials in water, air or vacuum</option>
+       <option value="suit">Iron Man-inspired suits — printable costume parts</option>
       </select>
      </label>
      <p className="max-w-md text-xs leading-5 text-slate-400">The goal determines the applicable equations and constraints. Unrelated V8 prime patterns and graphical effects never adjust physical scores.</p>
@@ -327,7 +328,7 @@ export default function LocalApp(){
        </label>)}
      <p className="col-span-full text-xs text-amber-200">For passive, narrow-band RF interfaces only. Not a motherboard signal-integrity signoff or component datasheet.</p>
     </div>}
-    {(goal==='chemistry'||goal==='membrane')&&<div className="mt-6 grid gap-3 md:grid-cols-4">
+    {(goal==='chemistry'||goal==='membrane'||goal==='suit')&&<div className="mt-6 grid gap-3 md:grid-cols-4">
       <label className="text-xs text-slate-300">Medium
        <select aria-label="Operating medium" value={medium} onChange={e=>setMediumDefaults(e.target.value as Medium)}
         className="mt-2 block w-full rounded-xl border border-slate-600 bg-[#0a1821] p-3 text-white">
@@ -343,6 +344,35 @@ export default function LocalApp(){
        <input type="number" min="0" max="500" step=".5" value={airflow} onChange={e=>setAirflow(+e.target.value)}
         className="mt-2 block w-full rounded-xl border border-slate-600 bg-[#0a1821] p-3 text-white"/></label>
       <p className="col-span-full text-xs text-amber-200">No gas convection in a vacuum. Liquid water is not a meaningful medium at 5000 K; high-temperature material stability needs phase and corrosion evidence.</p>
+     </div>}
+     {goal==='suit'&&<div className="mt-5 grid gap-3 md:grid-cols-3">
+      <label className="text-xs text-slate-300">Costume plate width (mm)
+       <input type="number" min="30" max="400" value={partWidthMm}
+        onChange={e=>setPartWidthMm(+e.target.value)}
+        className="mt-2 block w-full rounded-xl border border-slate-600 bg-[#0a1821] p-3 text-white"/></label>
+      <label className="text-xs text-slate-300">Plate length (mm)
+       <input type="number" min="40" max="400" value={partLengthMm}
+        onChange={e=>setPartLengthMm(+e.target.value)}
+        className="mt-2 block w-full rounded-xl border border-slate-600 bg-[#0a1821] p-3 text-white"/></label>
+      <label className="text-xs text-slate-300">Max budget (AUD)
+       <input type="number" min="0" max="5000" step="1" value={printBudgetAUD}
+        onChange={e=>setPrintBudgetAUD(+e.target.value)}
+        className="mt-2 block w-full rounded-xl border border-slate-600 bg-[#0a1821] p-3 text-white"/></label>
+      <details className="col-span-full rounded-xl border border-slate-700 p-3 text-xs text-slate-300">
+       <summary className="cursor-pointer">Printer-bed size, filament price and minimum section</summary>
+       <div className="mt-3 grid gap-3 md:grid-cols-4">
+        {([
+         ['Bed X (mm)',printerBedXmm,setPrinterBedXmm],
+         ['Bed Y (mm)',printerBedYmm,setPrinterBedYmm],
+         ['Filament (AUD/kg)',filamentCostAUDkg,setFilamentCostAUDkg],
+         ['Min section proxy (mm⁴)',minimumSectionIndexMm4,setMinimumSectionIndexMm4],
+        ] as const).map(([label,value,set])=>
+         <label key={label}>{label}<input type="number" min="0" step="1" value={value}
+          onChange={e=>set(+e.target.value)}
+          className="mt-1 w-full rounded-lg border border-slate-600 bg-[#0a1821] p-2 text-white"/></label>)}
+       </div>
+       <p className="mt-2 text-amber-200">The thickness³ proxy is geometry only; NOT verified polymer strength or fatigue resistance. No flight hardware is designed here.</p>
+      </details>
      </div>}
      {goal==='membrane'&&<div className="mt-4 max-w-md">
       <label className="text-xs text-slate-300">Required membrane function
@@ -387,6 +417,10 @@ export default function LocalApp(){
     </div>
    </section>
 
+   <UnifiedOverlay goal={goal} condition={operatingCondition} findings={findings}
+     metrics={visualMetrics}
+     onSelectGoal={next=>{setGoal(next);setResult(null);setResultGoal(null);
+       setStatus('Choose the goal and run its local optimisation.');}}/>
    <section aria-label="Optimisation result" className="rounded-3xl border border-white/10 bg-[#0a151e] p-6 md:p-8">
     <div className="flex flex-wrap items-center justify-between gap-3">
      <h3 className="text-2xl font-black tracking-tight">{working?'Finding a candidate…':result?'Your result':'Your result will appear here'}</h3>
