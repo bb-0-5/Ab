@@ -476,7 +476,32 @@ export default function LocalApp(){
      <p className="mt-4 text-sm text-amber-200">Use an RF simulator, manufacturer models and impedance/VNA measurements before building real hardware. This simplified circuit model does not optimise a motherboard.</p>
      <details className="mt-3 text-xs text-slate-400"><summary className="cursor-pointer">Model assumptions</summary><ul className="mt-2 list-disc pl-5">{selectedCircuit.limitations.map((x,i)=><li key={i}>{x}</li>)}</ul></details>
     </>}
-    {selectedMembrane&&<>
+    {selectedSuit&&<>
+      <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-950/15 p-4">
+       <h4 className="text-xl font-black text-rose-100">Iron Man-inspired suit design · real home-printing constraints</h4>
+       <p className="mt-2 text-xs text-amber-200">{selectedSuit.flightAssessment}</p>
+      </div>
+      {selectedSuit.selected?<div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+       <Metric label="Lowest supported production cost estimate" value={`${fmt(selectedSuit.selected.estimatedTotalCostAUD,2)} AUD`}/>
+       <Metric label="Solid decorative frame mass" value={`${fmt(selectedSuit.selected.massG,1)} g`}/>
+       <Metric label="Less material than solid plaque" value={`${fmt(selectedSuit.selected.materialSavingPercent,1)}%`}/>
+       <Metric label="Geometric frame-section proxy" value={`${fmt(selectedSuit.selected.sectionIndexMm4)} mm⁴`}/>
+      </div>:<p className="mt-4 text-sm text-amber-200">
+       No candidate satisfies the required budget, print-bed, illustrative thermal stability and minimum frame section together.
+      </p>}
+      {selectedSuit.selected&&<div className="mt-4 flex flex-wrap items-center gap-3">
+       <strong className="text-cyan-200">{selectedSuit.selected.material} · {fmt(selectedSuit.selected.thicknessMm,1)} mm thick · {fmt(selectedSuit.selected.rimWidthMm,1)} mm rim</strong>
+       <button onClick={saveSTL} className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100">Download slicer-ready STL (mm)</button>
+       <span className="text-xs text-slate-400">Check the mesh and orientation in your own slicer; actual machine settings and fit are unverified.</span>
+      </div>}
+      <p className="mt-3 text-xs text-slate-400">{selectedSuit.candidatesEvaluated} material/frame candidates screened with default filament/waste and energy assumptions. One decorative panel only, not an entire costume production estimate.</p>
+      <ul className="mt-3 list-disc pl-5 text-xs text-amber-200">{selectedSuit.missingConstraints.map((x,i)=><li key={i}>{x}</li>)}</ul>
+      <details className="mt-3 rounded-xl border border-white/10 p-3 text-xs text-slate-400">
+       <summary className="cursor-pointer">Cost assumptions, manufacturing and flight limitations</summary>
+       <ul className="mt-2 list-disc pl-5">{selectedSuit.limitations.map((x,i)=><li key={i}>{x}</li>)}</ul>
+      </details>
+     </>}
+     {selectedMembrane&&<>
       <p className="mt-3 text-sm text-slate-300">{titleCase(selectedMembrane.task)} · {selectedMembrane.condition.medium} at {fmt(selectedMembrane.condition.temperatureK)} K and {fmt(selectedMembrane.condition.pressurePa,2)} Pa</p>
       {selectedMembrane.selected?<div className="mt-4">
        <h4 className="text-xl font-black text-cyan-200">Conditional candidate: {selectedMembrane.selected.label}</h4>
