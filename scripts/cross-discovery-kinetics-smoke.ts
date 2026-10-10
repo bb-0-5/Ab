@@ -38,6 +38,11 @@ assert.ok(fit.holdoutMAE<.0000001,
  'On exact synthetic competing first-order data the held-out yield error must vanish.');
 assert.ok(fit.holdoutMAE<fit.holdoutBaselineMAE);
 assert.equal(fit.gate,'passes_baseline');
+assert.equal(fit.validationSplit,'condition_holdout');
+assert.equal(fit.reusableAcrossRuns,false,'Same-dataset grouped condition holdout is not sufficient for automatic learning.');
+assert.ok(fit.holdoutSideMAE<1e-7);
+assert.ok(fit.holdoutMaxAbsoluteError<1e-7);
+assert.ok(fit.durationRangeS[1]>fit.durationRangeS[0]);
 assert.ok(Math.abs(fit.targetFit.activationEnergyJMol-21000)<.01);
 assert.ok(Math.abs(fit.sideFit.activationEnergyJMol-11500)<.01);
 const replay=predictFromCalibration(fit,333,200);
@@ -52,6 +57,35 @@ assert.throws(()=>calibrateKnownYields(observations.slice(0,4),'toy-rx','air'),/
 assert.throws(()=>calibrateKnownYields(observations,'toy-rx','water'),/eight/);
 assert.throws(()=>calibrateKnownYields([observations[0],...observations],'toy-rx','air'),/Duplicate/);
 assert.throws(()=>parseKnownYieldsCSV('invalid columns\na,b'),/requires/);
+const incorrectlyBlank=csv.replace(observations[0].targetFraction.toString()+',',',');
+assert.throws(()=>parseKnownYieldsCSV(incorrectlyBlank),/missing target_fraction/,
+  'A blank measured target yield must not become the numeric zero.');
+assert.throws(()=>calibrateKnownYields(
+ observations.map((r,i)=>i===0?{...r,sideFraction:0}:r),'toy-rx','air'),/zero detected yield/,
+ 'Do not invent ln(rate) from a below-detection side channel.');
+const varyingProtocols=observations.map((r,i)=>({...r,protocolId:i===0?'different-catalyst':'original'}));
+assert.throws(()=>calibrateKnownYields(varyingProtocols,'toy-rx','air'),/Do not combine different reaction protocols/);
+const batched=observations.map((r,i)=>({
+ ...r,batchId:'batch-'+Math.floor(i/3),protocolId:'same-unchanged-protocol',
+}));
+const independentFit=calibrateKnownYields(batched,'toy-rx','air');
+assert.equal(independentFit.validationSplit,'batch_holdout');
+assert.equal(independentFit.trainingBatchCount,3);
+assert.equal(independentFit.holdoutBatchCount,1);
+assert.equal(independentFit.reusableAcrossRuns,true,
+ 'Mathematical fixture exercises provisional batch-isolation gate, NOT evidence that synthetic yields were experimentally observed.');
+assert.ok(independentFit.holdoutMAE<1e-7);
+assert.ok(independentFit.holdoutSideMAE<1e-7);
+const batchCSV=[
+ 'id,reaction_id,environment,temperature_k,duration_s,target_fraction,side_fraction,source,batch_id,protocol_id',
+ ...batched.map(x=>[
+ x.id,x.reactionId,x.environment,x.temperatureK,x.durationS,x.targetFraction,
+ x.sideFraction,x.source,x.batchId,x.protocolId,
+ ].join(',')),
+].join('\n');
+assert.deepEqual(parseKnownYieldsCSV(batchCSV),batched);
+const refit=calibrateKnownYields(parseKnownYieldsCSV(batchCSV),'toy-rx','air');
+assert.deepEqual(refit,independentFit);
 const eyring=transitionStateEventProbability({
  temperatureK:300,activationEnthalpyJMol:85000,
  activationEntropyJMolK:-100,durationS:1,
