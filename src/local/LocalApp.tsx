@@ -138,8 +138,12 @@ export default function LocalApp(){
    setCloudStatus(`Connected to Supabase as ${uid.slice(0,8)}… with private RLS. Anonymous sign-in does not recover history on a different device.`);
    const rows=await readCloud();const current=loadDeviceResults();
    const map=new Map<string,MemoryEntry>();
-   [...current,...rows].forEach(item=>map.set(item.id,item));
-   setHistory([...map.values()].sort((a,b)=>b.savedAt.localeCompare(a.savedAt)).slice(0,32));
+   [...rows,...current].forEach(item=>map.set(item.id,item));
+   // Materialise verified owner-scoped cloud history into device storage so
+   // users retain their own reports even when offline on the next visit.
+   const merged=[...map.values()].sort((a,b)=>b.savedAt.localeCompare(a.savedAt)).slice(0,32);
+   for(const item of [...merged].reverse())saveDeviceResult(item);
+   setHistory(loadDeviceResults());
    const newest=current[0];if(newest)await uploadCloud(newest);
   }catch(err){setCloudOn(false);setCloudStatus(err instanceof Error?err.message:String(err));}
  };
