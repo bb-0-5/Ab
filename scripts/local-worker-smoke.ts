@@ -45,6 +45,23 @@ const receiver=send({id:13,mode:'circuits',frequencyMHz:100,sourceOhms:50,loadOh
  discoveries:chemistry.discoveries});
 assert.ok(receiver.crossDomain.some((x:any)=>x.domain==='circuits'&&x.status==='unsupported'),
  'Circuit simulator must test but not invent isotope electrical properties.');
+const suit=send({id:20,mode:'suit',
+ printGoal:'flight_suit_concept',partWidthMm:80,partLengthMm:135,
+ printerBedXmm:220,printerBedYmm:220,budgetAUD:12,filamentPriceAUDkg:30,
+ minSectionIndexMm4:90,
+ condition:{medium:'air',temperatureK:295,pressurePa:101325,flowSpeedMs:0},
+ discoveries:chemistry.discoveries});
+assert.equal(suit.mode,'bounded_local_fdm_screen');
+assert.equal(suit.viableForHumanFlight,false);
+assert.ok(suit.selected?.printable);
+assert.ok(suit.candidatesEvaluated>=100);
+assert.ok(suit.crossDomain.length>0);
+const hotSuit=send({id:21,mode:'suit',
+ printGoal:'flight_suit_concept',partWidthMm:80,partLengthMm:135,
+ printerBedXmm:220,printerBedYmm:220,budgetAUD:12,filamentPriceAUDkg:30,
+ minSectionIndexMm4:90,
+ condition:{medium:'vacuum',temperatureK:5000,pressurePa:.001,flowSpeedMs:0}});
+assert.equal(hotSuit.selected,null,'Do not fabricate claims of printable hot-vacuum flying armor.');
 const building=send({id:3,mode:'building',preset:'melbourne',
  areaM2:130,targetTempC:22,seed:1441});
 assert.equal(building.seed,1441);
