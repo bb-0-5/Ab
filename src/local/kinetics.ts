@@ -49,6 +49,10 @@ export interface YieldObservation {
   targetFraction:number;
   sideFraction:number;
   source:string; // DOI/URL or auditable lab record ID
+  /** Optional: laboratory run/batch identity for independence-heldout testing. */
+  batchId?:string;
+  /** Optional: fixed chemistry recipe/specification identity, not just product name. */
+  protocolId?:string;
 }
 export interface ReactionPrediction {
   targetFraction:number;sideFraction:number;unreactedFraction:number;
@@ -59,8 +63,18 @@ export interface YieldCalibration {
   status:'held_out_tested'|'not_calibrated';
   reactionId:string;environment:YieldObservation['environment'];
   trainCount:number;holdoutCount:number;temperatureRangeK:[number,number];
+  durationRangeS:[number,number];
+  protocolId:string|null;
+  /** Batch-disjoint holdout is stronger than splitting conditions from the
+   * same experiment; neither alone establishes independent external validity. */
+  validationSplit:'batch_holdout'|'condition_holdout';
+  trainingBatchCount:number;holdoutBatchCount:number;
+  /** Only a measured-and-screened model is eligible for provisional reuse.
+   * Even then it is NOT experimentally validated for new chemistry changes. */
+  reusableAcrossRuns:boolean;
   targetFit:ArrheniusFit;sideFit:ArrheniusFit;
   holdoutMAE:number;holdoutRMSE:number;holdoutBaselineMAE:number;
+  holdoutSideMAE:number;holdoutMaxAbsoluteError:number;
   holdoutBias:number;errorMetric:'absolute_yield_fraction';
   gate:'passes_baseline'|'worse_than_baseline';
   sourceRecords:string[];
@@ -73,7 +87,9 @@ export function checkObservation(r:YieldObservation):void{
     ||![r.temperatureK,r.durationS,r.targetFraction,r.sideFraction].every(Number.isFinite)
     ||r.temperatureK<170||r.temperatureK>5000||r.durationS<=0||r.durationS>1e9
     ||r.targetFraction<0||r.sideFraction<0
-    ||r.targetFraction+r.sideFraction>=1-1e-9) {
+    ||r.targetFraction+r.sideFraction>=1-1e-9
+    ||(r.protocolId!==undefined&&(!r.protocolId.trim()||r.protocolId.length>180))
+    ||(r.batchId!==undefined&&(!r.batchId.trim()||r.batchId.length>180))) {
       throw Error('Measured yield records need IDs, source, compatible environment, finite T/time, and target+side fractions below 1.');
     }
 }
@@ -134,16 +150,28 @@ export function calibrateKnownYields(
   rows.forEach(checkObservation);
   const ids=new Set(rows.map(x=>x.id));
   if(ids.size!==rows.length)throw Error('Duplicate experimental IDs would cause train/holdout leakage.');
-  // Sort with a deterministic group split. Every distinct (T,time) condition
-  // must be confined to EITHER train or holdout. Repeated measurements at the
-  // same condition cannot leak into holdout as separate replicate rows.
+  // Both measured product channels MUST be observable. The previous
+  // log(1e-15) floor fitted imaginary positive rates to *unobserved* channels.
+  // Censored zero yields need a separate detection-limit likelihood model.
+  if(rows.some(row=>rates(row).some(rate=>rate<=0)))
+    throw Error('Cannot calibrate a channel with zero detected yield: supply a measurement detection limit and a censored-likelihood model first.');
+  const protocols=[...new Set(rows.map(r=>r.protocolId??''))];
+  if(protocols.length>1)
+    throw Error('Do not combine different reaction protocols, catalysts or recipes under one reaction ID.');
+  const protocolId=protocols[0]||null;
+  const batchTagged=rows.every(r=>!!r.batchId);
+  const distinctBatches=[...new Set(rows.map(r=>r.batchId).filter(Boolean))];
+  const useBatchHoldout=batchTagged&&distinctBatches.length>=4;
+  // Independent batch groups are preferred. Without them, fallback to
+  // a deterministic split by T/time condition only: clearly weaker evidence.
   const groups=new Map<string,YieldObservation[]>();
   for(const row of rows) {
-    const key=`${row.temperatureK}|${row.durationS}`;
+    const key=useBatchHoldout ? row.batchId! : `${row.temperatureK}|${row.durationS}`;
     const g=groups.get(key)||[];g.push(row);groups.set(key,g);
   }
+  if(new Set(rows.map(r=>`${r.temperatureK}|${r.durationS}`)).size<6)
+    throw Error('Calibration requires six or more distinct temperature/time conditions.');
   const unique=[...groups.entries()].sort(([a],[b])=>a.localeCompare(b));
-  if(unique.length<6)throw Error('Calibration requires six or more distinct temperature/time conditions.');
   const train:YieldObservation[]=[],test:YieldObservation[]=[];
   unique.forEach(([_,records],i)=> (i%4===0?test:train).push(...records));
   if(train.length<4||test.length<2||new Set(train.map(x=>x.temperatureK)).size<3)
@@ -151,21 +179,42 @@ export function calibrateKnownYields(
   const targetFit=fit(train,0),sideFit=fit(train,1);
   const range:[number,number]=[Math.min(...train.map(x=>x.temperatureK)),
     Math.max(...train.map(x=>x.temperatureK))];
+  const durationRangeS:[number,number]=[Math.min(...train.map(x=>x.durationS)),
+    Math.max(...train.map(x=>x.durationS))];
   const prototype:YieldCalibration={
     status:'held_out_tested',reactionId,environment,trainCount:train.length,
-    holdoutCount:test.length,temperatureRangeK:range,targetFit,sideFit,
-    holdoutMAE:0,holdoutRMSE:0,holdoutBaselineMAE:0,holdoutBias:0,
+    holdoutCount:test.length,temperatureRangeK:range,durationRangeS,
+    protocolId,validationSplit:useBatchHoldout?'batch_holdout':'condition_holdout',
+    trainingBatchCount:new Set(train.map(x=>x.batchId).filter(Boolean)).size,
+    holdoutBatchCount:new Set(test.map(x=>x.batchId).filter(Boolean)).size,
+    reusableAcrossRuns:false,targetFit,sideFit,
+    holdoutMAE:0,holdoutRMSE:0,holdoutBaselineMAE:0,holdoutSideMAE:0,
+    holdoutMaxAbsoluteError:0,holdoutBias:0,
     errorMetric:'absolute_yield_fraction',gate:'worse_than_baseline',
     sourceRecords:[...new Set(rows.map(x=>x.source))],
-    warning:'Effective competing first-order fit only, not quantum chemistry. Source provenance and measurement reliability must be independently checked. Zero-rate handling uses a detection floor; held-out error may not generalise. No unmeasured condition is validated.'
+    warning:'Effective first-order fit, NOT quantum chemistry or a verified reaction mechanism. Source labels are user-provided and are NOT automatically authenticated. Only independent laboratory measurements with a verified common protocol support meaningful error estimates; no hypothetical barrier intervention has been validated.'
   };
   const typical=train.reduce((v,r)=>v+r.targetFraction,0)/train.length;
-  const errors=test.map(r=>predictFromCalibration(prototype,r.temperatureK,r.durationS).targetFraction-r.targetFraction);
-  prototype.holdoutMAE=errors.reduce((s,e)=>s+Math.abs(e),0)/errors.length;
-  prototype.holdoutRMSE=Math.sqrt(errors.reduce((s,e)=>s+e**2,0)/errors.length);
-  prototype.holdoutBias=errors.reduce((s,e)=>s+e,0)/errors.length;
-  prototype.holdoutBaselineMAE=test.reduce((s,r)=>s+Math.abs(typical-r.targetFraction),0)/test.length;
+  const residuals=test.map(r=>{
+    const p=predictFromCalibration(prototype,r.temperatureK,r.durationS);
+    return {target:p.targetFraction-r.targetFraction,side:p.sideFraction-r.sideFraction};
+  });
+  const errors=residuals.map(x=>x.target);
+  prototype.holdoutMAE=errors.reduce((sum,e)=>sum+Math.abs(e),0)/errors.length;
+  prototype.holdoutRMSE=Math.sqrt(errors.reduce((sum,e)=>sum+e**2,0)/errors.length);
+  prototype.holdoutBias=errors.reduce((sum,e)=>sum+e,0)/errors.length;
+  prototype.holdoutSideMAE=residuals.reduce((sum,r)=>sum+Math.abs(r.side),0)/residuals.length;
+  prototype.holdoutMaxAbsoluteError=Math.max(...errors.map(Math.abs));
+  prototype.holdoutBaselineMAE=test.reduce((sum,r)=>sum+Math.abs(typical-r.targetFraction),0)/test.length;
   prototype.gate=prototype.holdoutMAE<=prototype.holdoutBaselineMAE?'passes_baseline':'worse_than_baseline';
+  // This is only permission to replay the FIT, not validation of new
+  // material design, catalysts, reaction barriers, or molecular isotopes.
+  prototype.reusableAcrossRuns=prototype.gate==='passes_baseline'&&!!protocolId
+    &&useBatchHoldout&&prototype.holdoutMAE<=0.1;
+  if(!useBatchHoldout)
+    prototype.warning+=' Holdout is by condition within one dataset, NOT an independent experimental batch.';
+  if(!protocolId)
+    prototype.warning+=' Protocol identity not recorded; a reused kinetic fit could mix catalysts/reagents and is prohibited.';
   if(targetFit.activationEnergyJMol<0||sideFit.activationEnergyJMol<0)
     prototype.warning+=' Negative effective activation energy was inferred; do not extrapolate.';
   return prototype;
@@ -201,11 +250,16 @@ export function parseKnownYieldsCSV(csv:string):YieldObservation[]{
   const cells=line.split(',');
   if(cells.length!==header.length)throw Error(`CSV line ${i+2}: wrong column count; quoted fields are not supported.`);
   const get=(key:string)=>cells[header.indexOf(key)].trim();
+  for(const key of ['temperature_k','duration_s','target_fraction','side_fraction'])
+    if(!get(key))throw Error(`CSV line ${i+2}: missing ${key}; a missing yield must NOT become zero.`);
   const record:YieldObservation={id:get('id'),reactionId:get('reaction_id'),
    environment:get('environment') as YieldObservation['environment'],
    temperatureK:Number(get('temperature_k')),durationS:Number(get('duration_s')),
    targetFraction:Number(get('target_fraction')),sideFraction:Number(get('side_fraction')),
-   source:get('source')};
+   source:get('source'),
+   ...(header.includes('batch_id')?{batchId:get('batch_id')}:{}),
+   ...(header.includes('protocol_id')?{protocolId:get('protocol_id')}:{}),
+  };
   checkObservation(record);return record;
  });
 }
