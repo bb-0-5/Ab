@@ -234,7 +234,8 @@ export default function LocalApp(){
        className="mt-2 w-full rounded-xl border border-slate-600 bg-[#0a1821] p-3 text-sm text-white">
        <option value="building">A building — solar, shape and ventilation</option>
        <option value="circuits">An electronic interface — passive impedance matching</option>
-       <option value="chemistry">A toy pathway model — selection versus yield</option>
+       <option value="chemistry">Chemistry — calibrated yields &amp; hypothetical barriers</option>
+       <option value="membrane">Membranes — materials in water, air or vacuum</option>
       </select>
      </label>
      <p className="max-w-md text-xs leading-5 text-slate-400">The goal determines the applicable equations and constraints. Unrelated V8 prime patterns and graphical effects never adjust physical scores.</p>
@@ -267,12 +268,54 @@ export default function LocalApp(){
        </label>)}
      <p className="col-span-full text-xs text-amber-200">For passive, narrow-band RF interfaces only. Not a motherboard signal-integrity signoff or component datasheet.</p>
     </div>}
-    {goal==='chemistry'&&<div className="mt-6 max-w-md">
+    {(goal==='chemistry'||goal==='membrane')&&<div className="mt-6 grid gap-3 md:grid-cols-4">
+      <label className="text-xs text-slate-300">Medium
+       <select aria-label="Operating medium" value={medium} onChange={e=>setMediumDefaults(e.target.value as Medium)}
+        className="mt-2 block w-full rounded-xl border border-slate-600 bg-[#0a1821] p-3 text-white">
+        <option value="air">Air</option><option value="water">Liquid water</option>
+        <option value="vacuum">Vacuum</option></select></label>
+      <label className="text-xs text-slate-300">Temperature (K)
+       <input type="number" min="1" max="10000" value={operatingK} onChange={e=>setOperatingK(+e.target.value)}
+        className="mt-2 block w-full rounded-xl border border-slate-600 bg-[#0a1821] p-3 text-white"/></label>
+      <label className="text-xs text-slate-300">Pressure (Pa)
+       <input type="number" min="0" value={pressurePa} onChange={e=>setPressurePa(+e.target.value)}
+        className="mt-2 block w-full rounded-xl border border-slate-600 bg-[#0a1821] p-3 text-white"/></label>
+      <label className="text-xs text-slate-300">Current speed (m/s)
+       <input type="number" min="0" max="500" step=".5" value={airflow} onChange={e=>setAirflow(+e.target.value)}
+        className="mt-2 block w-full rounded-xl border border-slate-600 bg-[#0a1821] p-3 text-white"/></label>
+      <p className="col-span-full text-xs text-amber-200">No gas convection in a vacuum. Liquid water is not a meaningful medium at 5000 K; high-temperature material stability needs phase and corrosion evidence.</p>
+     </div>}
+     {goal==='membrane'&&<div className="mt-4 max-w-md">
+      <label className="text-xs text-slate-300">Required membrane function
+       <select value={membraneTask} onChange={e=>setMembraneTask(e.target.value as Task)}
+        className="mt-2 block w-full rounded-xl border border-slate-600 bg-[#0a1821] p-3 text-white">
+        <option value="heat_spreader">Spread heat by solid conduction</option>
+        <option value="thermal_barrier">Block conductive heat flow</option>
+        <option value="flow_membrane">Build a fluid-transfer channel</option></select>
+      </label>
+      <p className="mt-3 text-xs text-slate-400">A membrane specifies its needs; the chemistry/material search checks known candidate properties against operating conditions and returns an unmet requirement when none qualify. It cannot guarantee a new substance exists.</p>
+     </div>}
+     {goal==='chemistry'&&<div className="mt-6 max-w-md">
      <label className="text-xs text-slate-300">Minimum feed allowed through: {fmt(minimumAccepted*100)}%
       <input className="mt-3 w-full accent-cyan-400" type="range" min=".1" max="1" step=".05"
        value={minimumAccepted} onChange={e=>setMinimumAccepted(+e.target.value)}/>
      </label>
-     <p className="mt-2 text-xs text-amber-200">Abstract, hypothetical pathway probabilities only: NOT chemical reaction kinetics, molecular wavefunctions, reaction recipe, or actual yield prediction.</p>
+     <div className="mt-4 space-y-3 rounded-xl border border-white/10 p-3">
+       <p className="text-xs text-slate-300">Calibrate a reaction against its measured target AND side-product yields. No fabricated literature records are shipped as observations.</p>
+       <label className="block text-xs text-slate-300">Reaction ID in your data
+        <input value={reactionId} onChange={e=>setReactionId(e.target.value)}
+         placeholder="Unique reaction_id"
+         className="mt-1 block w-full rounded-lg border border-slate-600 bg-[#0a1821] p-2 text-white"/></label>
+       <label className="block text-xs text-slate-300">Reaction duration (seconds)
+        <input type="number" min="0" max="1000000000" value={durationS} onChange={e=>setDurationS(+e.target.value)}
+         className="mt-1 block w-full rounded-lg border border-slate-600 bg-[#0a1821] p-2 text-white"/></label>
+       <label className="block text-xs text-slate-300">Measured yields CSV (stays on this device)
+        <input type="file" accept=".csv,text/csv" onChange={uploadKnownYields}
+         className="mt-2 block w-full text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-slate-600 file:px-3 file:py-2"/>
+        {knownYieldsName&&<span className="block text-cyan-200">{knownYieldsName} loaded</span>}</label>
+       <p className="text-[11px] text-slate-400">Required CSV columns: id, reaction_id, environment, temperature_k, duration_s, target_fraction, side_fraction, source. At least eight observations, six distinct conditions and a real source reference are required.</p>
+      </div>
+      <p className="mt-2 text-xs text-amber-200">No imported observations = no calibrated chemical yields. Kinetic possibilities do not guarantee events within finite time; unknown catalysts or isotope effects cannot be inferred.</p>
     </div>}
     <div className="mt-6 flex flex-wrap items-center gap-3">
      <button onClick={()=>start(goal)} disabled={working}
@@ -340,7 +383,26 @@ export default function LocalApp(){
      <p className="mt-4 text-sm text-amber-200">Use an RF simulator, manufacturer models and impedance/VNA measurements before building real hardware. This simplified circuit model does not optimise a motherboard.</p>
      <details className="mt-3 text-xs text-slate-400"><summary className="cursor-pointer">Model assumptions</summary><ul className="mt-2 list-disc pl-5">{selectedCircuit.limitations.map((x,i)=><li key={i}>{x}</li>)}</ul></details>
     </>}
-    {selectedChem&&<>
+    {selectedMembrane&&<>
+      <p className="mt-3 text-sm text-slate-300">{titleCase(selectedMembrane.task)} · {selectedMembrane.condition.medium} at {fmt(selectedMembrane.condition.temperatureK)} K and {fmt(selectedMembrane.condition.pressurePa,2)} Pa</p>
+      {selectedMembrane.selected?<div className="mt-4">
+       <h4 className="text-xl font-black text-cyan-200">Conditional candidate: {selectedMembrane.selected.label}</h4>
+       <p className="mt-2 text-sm text-amber-200">{selectedMembrane.selected.reason}</p>
+       <div className="mt-3 grid grid-cols-2 gap-3">
+        <Metric label="Indicative thermal conductivity" value={`${fmt(selectedMembrane.selected.thermalConductivityWmK)} W/(m·K)`}/>
+        <Metric label="Metal melt reference" value={`${fmt(selectedMembrane.selected.meltingPointK)} K`}/>
+       </div>
+      </div>:<div className="mt-4 rounded-xl border border-amber-700/40 bg-amber-950/20 p-4 text-sm text-amber-100">
+       No known catalogue material passes the stated constraints. A new material needs independent physical measurements; the engine cannot invent a valid one.
+      </div>}
+      <p className="mt-3 text-sm text-slate-400">Tested {selectedMembrane.totalCandidates} reference candidates; {selectedMembrane.passingCandidates} conditionally pass a thermal-only screen.</p>
+      <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-amber-100">{selectedMembrane.unmetRequirements.map((x,i)=><li key={i}>{x}</li>)}</ul>
+      <details className="mt-3 text-xs text-slate-400"><summary className="cursor-pointer">All tested materials and limits</summary>
+       {selectedMembrane.alternatives.map(item=><p key={item.id} className="mt-2">{item.label}: {item.status} — {item.reason}</p>)}
+       <ul className="mt-3 list-disc pl-5">{selectedMembrane.limitations.map((x,i)=><li key={i}>{x}</li>)}</ul>
+      </details>
+     </>}
+     {selectedChem&&<>
      <p className="mt-4 text-sm text-slate-300">This filters hypothetical routes before processing. It does NOT change a reaction's underlying probabilities.</p>
      <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
       <Metric label="Before: target selectivity" value={`${fmt(selectedChem.baseline.selectivity*100,1)}%`}/>
@@ -349,15 +411,37 @@ export default function LocalApp(){
       <Metric label="Feed processed" value={`${fmt(selectedChem.gate.acceptedFraction*100,1)}%`}/>
      </div>
      <p className="mt-4 text-sm font-semibold text-amber-100">{selectedChem.insight}</p>
-     <p className="mt-3 text-xs text-slate-400">Selected allowed routes: {selectedChem.gate.allowed.join(', ')||'none'} · {selectedChem.candidatesTested} filters checked.</p>
+     <div className="mt-4 rounded-xl border border-white/15 bg-black/20 p-4">
+       <h4 className="font-semibold text-cyan-100">Measured-yield calibration &amp; error</h4>
+       <p className="mt-2 text-xs text-slate-300">{selectedChem.calibrationStatus}</p>
+       {selectedChem.calibration&&<div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Metric label="Train records" value={fmt(selectedChem.calibration.trainCount)}/>
+        <Metric label="Held-out observations" value={fmt(selectedChem.calibration.holdoutCount)}/>
+        <Metric label="Holdout MAE (percentage points)" value={fmt(selectedChem.calibration.holdoutMAE*100,2)}/>
+        <Metric label="Constant-baseline MAE" value={fmt(selectedChem.calibration.holdoutBaselineMAE*100,2)}/>
+       </div>}
+       {selectedChem.barrierScreen&&<p className="mt-3 text-xs text-amber-200">
+        An imaginary change to reaction barriers would predict {fmt(selectedChem.barrierScreen.bestHypothetical.prediction.targetFraction*100,1)}% target versus {fmt(selectedChem.barrierScreen.baseline.targetFraction*100,1)}% fitted baseline.
+        No actual catalyst or membrane mechanism has been shown to produce this shift.
+        {selectedChem.barrierScreen.contextValidated?' Temperature is within fitted bounds.':' Outside measured training temperatures: extrapolation unsupported.'}
+       </p>}
+       <p className="mt-2 text-xs text-amber-200">{selectedChem.caution}</p>
+      </div>
+      <p className="mt-3 text-xs text-slate-400">Selected allowed routes: {selectedChem.gate.allowed.join(', ')||'none'} · {selectedChem.candidatesTested} filters checked.</p>
      <details className="mt-3 text-xs text-slate-400"><summary className="cursor-pointer">Why this is not a chemistry yield prediction</summary><ul className="mt-2 list-disc pl-5">{selectedChem.limitations.map((x,i)=><li key={i}>{x}</li>)}</ul></details>
     </>}
-    {!result&&!working&&<p className="mt-3 text-sm text-slate-400">Choose a domain and run a sweep. Results are saved locally, even without an account.</p>}
+    {result&&<details className="mt-5 rounded-xl border border-cyan-500/20 bg-[#0b2028] p-4">
+       <summary className="cursor-pointer font-bold text-cyan-100">Cross-simulation discoveries · {currentShared.discoveries?.length||0} new / {currentShared.crossDomain?.length||0} checks</summary>
+       <p className="mt-2 text-xs text-slate-300">Findings become typed hypotheses that other simulations can evaluate under their own physics and environmental constraints. Unsupported properties are never treated as measured advantages.</p>
+       {currentShared.discoveries?.slice(0,10).map((d:Discovery)=><div key={d.id} className="mt-2 rounded-lg bg-black/25 p-2 text-xs text-slate-300"><strong className="text-cyan-200">{d.label}</strong> · {d.kind.replaceAll('_',' ')} · {d.evidence}</div>)}
+       {currentShared.crossDomain?.slice(0,12).map((p:Probe,i)=><div key={i} className="mt-1 border-t border-slate-700/40 pt-1 text-[11px] text-slate-400">{titleCase(p.domain)}: {p.status} — {p.message}</div>)}
+      </details>}
+     {!result&&!working&&<p className="mt-3 text-sm text-slate-400">Choose a domain and run a sweep. Results are saved locally, even without an account.</p>}
    </section>
 
    <section className="rounded-2xl border border-white/10 bg-[#0b1720] p-5">
     <details>
-     <summary className="cursor-pointer text-sm font-semibold text-cyan-100">Your computation memory · {history.length} local results</summary>
+     <summary className="cursor-pointer text-sm font-semibold text-cyan-100">Shared discovery memory · {findings.length} hypotheses / {history.length} local runs</summary>
      <p className="mt-3 text-xs text-slate-400">The most recent 32 calculations are stored on this browser. Results are yours: export them or optionally back up summaries to a Supabase project with owner-only RLS.</p>
      <div className="mt-3 space-y-1">{history.slice(0,10).map(item=>
       <button key={item.id} onClick={()=>{setGoal(item.mode);setResultGoal(item.mode);setResult(item.result as Result);setStatus('Restored stored result; no new calculation run.');}}
