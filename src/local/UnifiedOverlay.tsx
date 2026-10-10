@@ -15,6 +15,10 @@ interface OverlayProps {
  condition:OperatingCondition;
  findings:Discovery[];
  metrics:VisualMetrics;
+ /** Engineering trade-off plot: cheap material vs a labelled SECTION PROXY,
+  * NOT certified physical stiffness. */
+ frontier?:Array<{cost:number;section:number;acceptable:boolean;material:string}>;
+ budgetAUD?:number;
  onSelectGoal:(next:VisualGoal)=>void;
 }
 /**
@@ -97,7 +101,9 @@ function WaveRenderer({goal}:{goal:VisualGoal}){
    {[-1,0,1].map(i=><circle key={i} cx={i*59} cy={-13+i*14} r="6" fill="#5eead4"/>)}
   </g>;
 }
-export default function UnifiedOverlay({goal,condition,findings,metrics,onSelectGoal}:OverlayProps){
+export default function UnifiedOverlay({
+ goal,condition,findings,metrics,onSelectGoal,frontier=[],budgetAUD=0,
+}:OverlayProps){
  const selected=DOMAINS.find(x=>x.id===goal);
  return <section aria-label="Unified optimization visualization" className="relative overflow-hidden rounded-3xl border border-cyan-500/25 bg-gradient-to-br from-[#071b27] via-[#081821] to-[#090f1a] p-4 md:p-6">
   <div className="relative z-20 flex flex-wrap items-start justify-between gap-4">
@@ -156,6 +162,33 @@ export default function UnifiedOverlay({goal,condition,findings,metrics,onSelect
     <p className="mt-1 break-words text-sm font-bold text-white">{value}</p>
    </div>)}
   </div>
+  {goal==='suit'&&frontier.length>0&&<div className="mt-3 rounded-2xl border border-cyan-400/15 bg-black/25 p-3">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+     <strong className="text-xs text-cyan-200">Material cost ↔ geometric section trade-off</strong>
+     <span className="text-[10px] text-slate-400">Below budget and above minimum section = candidate, not strength certification</span>
+    </div>
+    {(()=>{
+      const minCost=Math.min(...frontier.map(x=>x.cost),budgetAUD);
+      const maxCost=Math.max(...frontier.map(x=>x.cost),budgetAUD,minCost+.01);
+      const maxSection=Math.max(...frontier.map(x=>x.section),1);
+      const projectX=(v:number)=>30+(v-minCost)/(maxCost-minCost)*540;
+      const projectY=(v:number)=>128-Math.min(1,v/maxSection)*110;
+      const x=projectX(budgetAUD);
+      return <svg viewBox="0 0 620 170" aria-label="Schematic plot of printable material cost versus geometric section bound" role="img"
+        className="mt-2 h-36 w-full">
+       <path d="M30 10 V128 H590" fill="none" stroke="#64748b" strokeWidth="1.5"/>
+       <line x1={x} x2={x} y1="12" y2="128" stroke="#fb7185" strokeDasharray="5 5"/>
+       <text x={Math.min(535,x+5)} y="22" fontSize="11" fill="#fda4af">budget</text>
+       {frontier.map((v,i)=><g key={i}>
+        <circle cx={projectX(v.cost)} cy={projectY(v.section)} r={v.acceptable?7:4.2}
+         fill={v.acceptable?'#5eead4':'#fb7185'} opacity={v.acceptable?1:.55}/>
+        <title>{v.material}: ${v.cost.toFixed(2)} AUD / ${v.section.toFixed(1)} mm⁴ proxy / {v.acceptable?'screened':'fails some constraints'}</title>
+       </g>)}
+       <text x="30" y="156" fontSize="12" fill="#94a3b8">Less material cost →</text>
+       <text x="320" y="156" fontSize="12" fill="#94a3b8">Higher geometric section ↑ (not verified strength)</text>
+      </svg>;
+    })()}
+   </div>}
   <p className="mt-3 text-[11px] leading-5 text-amber-200">{region(goal)} {metrics.remaining}</p>
   <p className="mt-2 text-[11px] text-slate-400">{findings.length} previously recorded typed discoveries available for cross-domain screening. A schematic connection indicates a probe, not a validated physical effect.</p>
  </section>;
