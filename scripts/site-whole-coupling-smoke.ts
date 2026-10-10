@@ -121,6 +121,7 @@ const detached = optimizeWholeHouseSystem({
   maximumCandidates: 48,
 });
 assert.equal(detached.candidatesEvaluated, 48);
+assert.equal(detached.ranked.length, 48, 'Fixed-form joint search must see every evaluated mechanical option.');
 assert.deepEqual(detached.searchCoverage.detached.evaluated, 48);
 assert.equal(detached.archetypeComparisons.length, 1);
 assert.equal(detached.best.configuration.archetype, 'detached');
@@ -128,6 +129,21 @@ assert.equal(detached.best.configuration.archetype, 'detached');
 // The NORMAL four-archetype path must still compare all four types.
 const general = optimizeWholeHouseSystem({ rooms: screenedRoomInput.rooms, maximumCandidates: 48 });
 assert.equal(general.archetypeComparisons.length, 4);
+assert.ok(general.ranked.length <= 12, 'Normal mixed-archetype API must not emit huge candidate arrays.');
+// A linked design must minimise the *marginal* mechanical contribution among
+// screened configurations, not blindly use the generic detached-house winner.
+const mechanicalCost = (c: typeof detached.best) =>
+  (c.annual.ventilationElectricalKWh + c.annual.fanElectricalKWh) * 30
+  + c.manufacturing.ductAndOpeningsKWh + c.manufacturing.controlsAndHeatRecoveryKWh;
+const eligibleMechanical = detached.ranked.filter(x => x.feasible);
+if (eligibleMechanical.length) {
+  const minCost = Math.min(...eligibleMechanical.map(mechanicalCost));
+  const selectedCost = (same.proposed.energy.annualVentilationElectricalKWh
+    + same.proposed.energy.annualFanElectricalKWh) * 30
+    + same.proposed.energy.extraMechanicalManufacturingKWh;
+  assert.ok(selectedCost <= minCost + 0.1,
+    'Linked mechanical winner must minimise added annual electricity plus equipment manufacture.');
+}
 assert.equal(Object.values(general.searchCoverage).reduce((s, x) => s + x.evaluated, 0), 48);
 
 const changedFloorArea = evaluateSiteHouseDesign(
