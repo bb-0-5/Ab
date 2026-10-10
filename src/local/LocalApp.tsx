@@ -205,13 +205,12 @@ export default function LocalApp(){
    if(mode==='building'&&stillSelected&&queueRef.current.length){
     setBatch(p=>({...p,completed:p.completed+1}));
     if(typeof document!=='undefined'&&!document.hidden){
-     const next=queueRef.current.shift()!;
      setTimeout(()=>{
-      if(selectionRef.current.key===runKey&&selectionRef.current.goal==='building'){
-       if(document.hidden){queueRef.current.unshift(next);
-        setStatus('Paused between designs while this tab is hidden.');}
-       else startRef.current('building',{seed:next});
-      }
+      if(selectionRef.current.key===runKey&&selectionRef.current.goal==='building'
+       &&!document.hidden&&!busyRef.current&&queueRef.current.length){
+       const next=queueRef.current.shift()!;
+       startRef.current('building',{seed:next});
+      }else if(document.hidden)setStatus('Paused between designs while this tab is hidden.');
      },80);
     }else setStatus('Paused between designs while this tab is hidden.');
    }else if(mode==='building'){
