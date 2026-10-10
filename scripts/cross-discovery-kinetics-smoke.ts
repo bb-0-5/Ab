@@ -97,6 +97,10 @@ const insulated=screenMembrane(ambient,'thermal_barrier');
 assert.equal(insulated.selected,null,'None of the bounded bulk metals is an acceptable insulation solution.');
 const severe=screenMembrane(extreme,'heat_spreader');
 assert.equal(severe.selected,null,'5000K vacuum cannot auto-conjure a melting-point qualified solid.');
+assert.ok(Math.abs(severe.requiredProperties.minimumReferenceMeltingPointK-6250)<1e-9,
+  'At 5000K with 20% phase safety margin the requested reference melt threshold is 6250K.');
+assert.ok(severe.unmetRequirements.some(x=>x.includes('6250')));
+
 assert.ok(severe.alternatives.every(x=>x.status==='rejected'));
 const isotopes=proposeIsotopeHypotheses(ambient);
 assert.equal(isotopes.length,3);
