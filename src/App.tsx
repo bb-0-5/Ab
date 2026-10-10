@@ -73,6 +73,7 @@ import type { HeightAirflowProfile, HeightAirflowSweepResult } from './lib/heigh
 import { AdaptiveWallCutaway3D, EarthSiteHouse3D, HeightAirflowCutaway3D, HouseAirflowNetwork3D, SoftwareSimulationFallback } from './components/HousePhysics3D';
 import type { WholeHouseOptimizationResult } from './lib/whole_house_optimizer';
 import type { CoupledSiteFlowResult } from './lib/site_whole_house_coupling';
+import { summarizeBuildingDesign } from './lib/building_design_summary';
 import { buildWholeHouseDecisionBrief } from './lib/whole_house_decision_brief';
 import type { BuildingPhysicsValidationReport } from './lib/building_physics_validation';
 import type { AutomaticSiteContextResult } from './lib/site_context';
@@ -4133,60 +4134,8 @@ const HouseView = ({
         )}
       </div>}
 
-      {/* Tab Navigation */}
-      <div className="mb-6 bg-black/30 p-1 rounded-xl border border-white/5">
-        <div className="flex gap-1 flex-wrap">
-        {([
-          { id: 'system', label: 'Whole System', icon: <Activity size={12} /> },
-          { id: 'autopilot', label: 'Existing Home', icon: <Brain size={12} /> },
-          { id: 'siteoptimizer', label: 'Site + Shadow', icon: <Zap size={12} /> },
-          { id: 'airflow', label: 'Airflow', icon: <Wind size={12} /> },
-          { id: 'cycling', label: 'Smart Cycle', icon: <RotateCw size={12} /> },
-        ] as const).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActivePanel(tab.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
-              activePanel === tab.id ? 'bg-emerald-500 text-black' : 'text-gray-500 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            {tab.icon}{tab.label}
-          </button>
-        ))}
-        </div>
-        <details className="mt-1 border-t border-white/5 pt-1">
-          <summary className="cursor-pointer px-3 py-1.5 text-[8px] font-bold text-gray-600 hover:text-gray-300 uppercase tracking-widest">Advanced simulations</summary>
-          <div className="flex gap-1 flex-wrap mt-1">
-          {([
-          { id: 'floorplan', label: 'Floorplan', icon: <Box size={12} /> },
-          { id: 'optimizer', label: 'Lifecycle Optimize', icon: <Target size={12} /> },
-          { id: 'adaptivewall', label: 'Adaptive Wall', icon: <Layers size={12} /> },
-          { id: 'thermal', label: 'Thermal', icon: <Thermometer size={12} /> },
-          { id: 'seasonal', label: '4 Seasons', icon: <RefreshCw size={12} /> },
-          { id: 'natural', label: 'Natural', icon: <Wind size={12} /> },
-          { id: 'electrical', label: 'Electrical', icon: <Zap size={12} /> },
-          { id: 'cooler', label: 'Esky/Beer', icon: <FlaskConical size={12} /> },
-          { id: 'topology', label: 'Topology', icon: <Activity size={12} /> },
-          { id: 'projection', label: '100-Year', icon: <HistoryIcon size={12} /> },
-          { id: 'solar', label: 'Solar', icon: <Cpu size={12} /> },
-          { id: 'deeplearn', label: 'Deep Learn', icon: <Brain size={12} /> },
-          { id: 'ventreadings', label: 'Vent Data', icon: <ArrowUp size={12} /> },
-          { id: 'annualcycle', label: 'Annual', icon: <RotateCw size={12} /> },
-        ] as const).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActivePanel(tab.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
-              activePanel === tab.id ? 'bg-emerald-500 text-black' : 'text-gray-500 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            {tab.icon}{tab.label}
-          </button>
-        ))}
-          </div>
-        </details>
-      </div>
-
+      {/* One-page Building Design workspace. Detailed research panels are
+          still maintained in the codebase but are not navigation defaults. */}
       {/* Panel Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Panel (2/3) */}
@@ -4205,19 +4154,57 @@ const HouseView = ({
                       {Object.entries(SITE_LOCATION_PRESETS).filter(([key]) => key !== 'custom').map(([key, preset]) => <option key={key} value={key}>{preset.name}</option>)}
                     </select>
                     <button onClick={() => useCurrentLocationForSystem(false)} className="px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-[8px] font-bold text-cyan-200 uppercase">Use my location</button>
-                    <button onClick={() => { systemAutoKeyRef.current = ''; void runSiteOptimization(); void runWholeHouseOptimization(); void runSystemEvidence(); }} disabled={siteOptimizationRunning || wholeHouseOptimizationRunning} className="px-3 py-2 rounded-lg bg-emerald-500 text-black disabled:bg-gray-700 disabled:text-gray-500 text-[8px] font-black uppercase">{siteOptimizationRunning || wholeHouseOptimizationRunning ? 'Sweeping…' : 'Re-run automatic sweep'}</button>
-                    <button onClick={() => setSiteDesignSeed(seed => (seed + 7919) % 2147483647)} disabled={siteOptimizationRunning || wholeHouseOptimizationRunning} className="px-3 py-2 rounded-lg border border-cyan-500/35 text-cyan-100 bg-cyan-500/10 disabled:opacity-40 text-[8px] font-black uppercase">Explore another design</button>
-                    <button onClick={downloadSystemReport} disabled={!siteOptimization || !wholeHouseOptimization} className="px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-[8px] font-bold text-purple-200 uppercase disabled:opacity-40">Download JSON</button>
-                    <button onClick={downloadSystemTextBrief} disabled={!wholeHouseOptimization} className="px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-[8px] font-bold text-cyan-200 uppercase disabled:opacity-40">Decision brief (.txt)</button>
+                    <label className="flex items-center gap-2 text-[10px] text-gray-400">Area <input aria-label="Desired home floor area in square metres" type="number" min={35} max={500} step={5} value={siteOptimizationInputs.targetFloorAreaM2} onChange={event => {
+                      const target = Math.max(35, Math.min(500, Number(event.target.value) || 130));
+                      setSiteOptimizationInputs(current => ({
+                        ...current, targetFloorAreaM2: target,
+                        minFloorAreaM2: Math.max(30, Math.round(target * 0.95)),
+                        maxFloorAreaM2: Math.min(600, Math.round(target * 1.05)),
+                      }));
+                    }} className="w-[65px] rounded-lg border border-white/20 bg-black/50 px-2 py-2 text-white" /> m²</label>
+                    <button onClick={() => setSiteDesignSeed(seed => (seed + 7919) % 2147483647)} disabled={siteOptimizationRunning || coupledSiteFlowRunning} className="px-3 py-2 rounded-lg bg-cyan-500 text-black disabled:opacity-40 text-[9px] font-black uppercase">{siteOptimizationRunning || coupledSiteFlowRunning ? 'Exploring…' : 'Explore another design'}</button>
+                    <details className="relative">
+                      <summary className="cursor-pointer rounded-lg border border-white/15 px-3 py-2 text-[9px] text-gray-300">Reports &amp; technical settings</summary>
+                      <div className="absolute right-0 top-full z-30 mt-2 flex w-64 flex-col gap-2 rounded-xl border border-white/15 bg-[#101822] p-3 shadow-xl">
+                        <button onClick={downloadSystemReport} disabled={!siteOptimization || !wholeHouseOptimization} className="rounded-lg bg-white/10 px-3 py-2 text-[9px] text-white disabled:opacity-40">Download full results (JSON)</button>
+                        <button onClick={downloadSystemTextBrief} disabled={!wholeHouseOptimization} className="rounded-lg bg-white/10 px-3 py-2 text-[9px] text-white disabled:opacity-40">Download screening explanation</button>
+                        <div className="text-[9px] text-gray-400">Automatic sweep considers multiple dwelling shapes and ventilation strategies. The numbers are screening estimates, not a building certificate.</div>
+                      </div>
+                    </details>
                   </div>
                 </div>
+                {(() => {
+                  const design = summarizeBuildingDesign(siteOptimization, coupledSiteFlow);
+                  const format = (value: number | null) => value === null ? '—' : Math.round(value).toLocaleString('en-AU');
+                  return <section aria-label="Building design at a glance" className="rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-[#062027] to-[#0d1119] p-5 md:p-7">
+                    <div className="text-[9px] uppercase tracking-[0.2em] text-cyan-300 font-semibold">Your building design · one-page summary</div>
+                    <h2 className="mt-2 text-2xl md:text-3xl font-black tracking-tight text-white">{design.headline}</h2>
+                    <p className="mt-2 max-w-3xl text-sm text-gray-200 leading-relaxed">{design.explanation}</p>
+                    {design.buildingForm && <p className="mt-4 text-base font-bold text-cyan-100">{design.buildingForm} home · {format(design.floorAreaM2)} m² · {design.ventilationStrategy} ventilation</p>}
+                    <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {([
+                        ['Electricity per year', `${format(design.annualElectricalKWh)} kWh`],
+                        ['Energy over design life', `${format(design.estimatedLifecycleEnergyKWh)} kWh`],
+                        ['Building shapes tested', `${format(design.siteFormsTested)}`],
+                        ['Ventilation options tested', `${format(design.mechanicalOptionsTested)}`],
+                      ] as const).map(([label, value]) => <div key={label} className="rounded-xl bg-black/30 p-3">
+                        <div className="text-[10px] text-gray-300">{label}</div>
+                        <div className="mt-1 text-lg font-black text-white">{value}</div>
+                      </div>)}
+                    </div>
+                    <p className="mt-4 text-[11px] text-amber-200 leading-relaxed">{design.caution}</p>
+                  </section>;
+                })()}
                 <div className="flex flex-wrap gap-2 text-[7px] font-mono uppercase">
                   <span className={`rounded-full border px-2 py-1 ${physicsValidation?.readyForScreening ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/5' : 'border-amber-500/30 text-amber-200 bg-amber-500/5'}`}>{physicsValidation ? `${physicsValidation.passed}/${physicsValidation.cases.length} numerical checks` : 'checking physics…'}</span>
                   <span className="rounded-full border border-cyan-500/30 text-cyan-200 bg-cyan-500/5 px-2 py-1">{siteContext ? `${siteContext.source.replaceAll('_', ' ')} · ${siteContext.neighbours.length} neighbours` : 'loading site evidence…'}</span>
                   <span className={`rounded-full border px-2 py-1 ${siteContext?.uncertainty.band === 'low' ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/30 text-amber-200'}`}>{siteContext ? `${siteContext.uncertainty.band} site uncertainty` : 'uncertainty pending'}</span>
                 </div>
                 {(siteOptimizationError || wholeHouseOptimizationError || systemEvidenceError) && <div className="rounded-lg border border-red-500/25 bg-red-500/5 p-3 text-[9px] text-red-300">{siteOptimizationError || wholeHouseOptimizationError || systemEvidenceError}</div>}
-                <EarthSiteHouse3D
+                <details className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <summary className="cursor-pointer text-sm text-cyan-200 font-semibold">See the 3D simulation and technical evidence</summary>
+                  <div className="mt-3">
+                    <EarthSiteHouse3D
                   rooms={rooms}
                   location={{
                     name: siteOptimizationInputs.name,
@@ -4234,6 +4221,11 @@ const HouseView = ({
                   siteContext={siteContext}
                   physicsValidation={physicsValidation}
                 />
+                  </div>
+                </details>
+                <details className="rounded-xl border border-white/10 bg-black/15 p-3">
+                  <summary className="cursor-pointer text-sm text-gray-300 font-semibold">See how designs were compared</summary>
+                  <div className="mt-3">
                 <section aria-label="Geometry to airflow coupled screening" className="rounded-xl border border-cyan-500/25 bg-black/30 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-[11px] font-black text-cyan-200 uppercase tracking-widest">Joint site geometry × mechanical airflow search</h3>
@@ -4307,6 +4299,8 @@ const HouseView = ({
                     </div>;
                   })()}
                 </section>
+                  </div>
+                </details>
               </motion.div>
             )}
             {activePanel === 'floorplan' && (
@@ -7799,7 +7793,7 @@ function App() {
   const [memorySize, setMemorySize] = useState(0);
   const [data, setData] = useState<{ time: number; val: number }[]>([]);
   const [telemetry, setTelemetry] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<AppTab>('sim');
+  const [activeTab, setActiveTab] = useState<AppTab>('house');
   const [houseInitialPanel, setHouseInitialPanel] = useState<HousePanel>('system');
   const pendingPresetVersionRef = useRef<SimVersion | null>(null);
 
@@ -7972,7 +7966,7 @@ function App() {
     return () => clearInterval(interval);
   }, [isSimulating, activeOptimizer, activeVersion, thermalMode, compressionLevel]);
 
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(false);
 
   const categories = [
     {
@@ -8128,52 +8122,26 @@ function App() {
             <h1 className="text-lg md:text-xl font-black tracking-tighter uppercase hidden sm:block">BeyondBound</h1>
           </div>
           
-          <div className="flex-1 flex items-center justify-center gap-2 overflow-x-auto no-scrollbar py-2">
-            <nav className="flex items-center gap-1 bg-white/5 p-1 rounded-lg border border-white/10 shrink-0">
-              {(['sim', 'house', 'codex', 'trajectory', 'selfbuild', 'elements'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => {
-                    console.log("Switching to tab:", tab);
-                    setActiveTab(tab);
-                  }}
-                  className={`px-3 md:px-4 py-1 md:py-1.5 rounded-md text-[10px] md:text-xs font-bold uppercase tracking-widest transition-all ${
-                    activeTab === tab 
-                      ? 'bg-purple-500 text-white shadow-lg' 
-                      : 'text-gray-400 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </nav>
-
-            <div className="h-4 w-px bg-white/10 shrink-0" />
-
-            <nav className="flex items-center gap-1 bg-white/5 p-1 rounded-lg border border-white/10 shrink-0">
-              {(['thermal', 'electrical', 'blockchain', 'math'] as const).map((type) => (
-                <button
-                  key={type}
-                  onClick={() => {
-                    pendingPresetVersionRef.current = null;
-                    setActiveOptimizer(type);
-                    setCurrentChainIndex(0);
-                    setActiveVersion(OPTIMIZATION_GOALS[type].tasks[0].version);
-                  }}
-                  className={`px-3 md:px-4 py-1 md:py-1.5 rounded-md text-[10px] md:text-xs font-bold uppercase tracking-widest transition-all ${
-                    activeOptimizer === type 
-                      ? 'bg-cyan-500 text-black shadow-lg' 
-                      : 'text-gray-400 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  {type}
-                </button>
-              ))}
-            </nav>
+          <div className="flex-1 flex items-center justify-end gap-3">
+            <span className="hidden md:block text-[10px] text-cyan-200 font-semibold">Automatic building design</span>
+            <details className="relative group">
+              <summary className="cursor-pointer select-none rounded-lg border border-white/10 px-3 py-2 text-[10px] font-semibold text-gray-400 hover:text-white">Research tools</summary>
+              <div className="absolute right-0 top-full mt-2 z-[70] w-48 rounded-xl border border-white/20 bg-[#0b1118] p-2 shadow-xl">
+                {([
+                  ['house', 'Building design'],
+                  ['sim', 'Physics experiments'],
+                  ['codex', 'Materials'],
+                  ['trajectory', 'Research memory'],
+                  ['selfbuild', 'Self-build'],
+                ] as const).map(([id, label]) => (
+                  <button key={id} onClick={() => setActiveTab(id)} className="block w-full text-left rounded-md px-3 py-2 text-[10px] text-gray-300 hover:bg-white/10">{label}</button>
+                ))}
+              </div>
+            </details>
           </div>
 
           <div className="flex items-center gap-2 md:gap-4 shrink-0">
-            {activeOptimizer === 'thermal' && (
+            {activeTab !== 'house' && activeOptimizer === 'thermal' && (
               <div className="hidden lg:flex bg-white/5 p-1 rounded-lg border border-white/10">
                 {(['heating', 'cooling'] as const).map((mode) => (
                   <button
