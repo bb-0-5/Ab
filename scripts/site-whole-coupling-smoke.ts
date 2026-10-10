@@ -117,7 +117,8 @@ const detached = optimizeWholeHouseSystem({
   rooms: screenedRoomInput.rooms,
   location: site.location,
   fixedArchetype: 'detached',
-  targetTempC: 18,
+  // Match the same 22°C user balance setpoint used by the coupled run.
+  targetTempC: input.targetIndoorTempC,
   maximumCandidates: 48,
 });
 assert.equal(detached.candidatesEvaluated, 48);

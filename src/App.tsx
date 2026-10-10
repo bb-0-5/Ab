@@ -3800,6 +3800,7 @@ const HouseView = ({
       physicsValidation,
       siteEvidence: siteContext,
       optimizedGeometry: siteOptimization.best,
+      siteClimateEvidence: siteOptimization.weatherContext,
       siteGeometrySearchSeed: siteOptimization.searchSeed,
       optimizedWholeSystem: wholeHouseOptimization.best,
       topDesigns,
@@ -4193,6 +4194,13 @@ const HouseView = ({
                         <div className="mt-1 text-lg font-black text-white">{value}</div>
                       </div>)}
                     </div>
+                    {siteOptimization?.weatherContext && <div className="mt-4 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-[11px] text-gray-200">
+                      <strong>Weather used:</strong> {siteOptimization.weatherContext.mode === 'epw_hourly_temperature'
+                        ? `${siteOptimization.weatherContext.stationName} station temperatures (${siteOptimization.weatherContext.weatherHours} hours; ${siteOptimization.weatherContext.stationDistanceKm?.toFixed(0) ?? '?'} km away)`
+                        : 'Estimated local climate preset; no verified hourly station file'}
+                      . Heating and cooling assumed a {siteOptimization.weatherContext.balanceTemperatureC}°C balance temperature.
+                      <div className="mt-1 text-[10px] text-gray-400">{siteOptimization.weatherContext.mode === 'epw_hourly_temperature' ? 'Hourly dry-bulb temperatures only. Actual solar and building physics remain estimates.' : 'Results depend on an approximate annual weather profile.'}</div>
+                    </div>}
                     <p className="mt-4 text-[11px] text-amber-200 leading-relaxed">{design.caution}</p>
                   </section>;
                 })()}

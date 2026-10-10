@@ -72,6 +72,44 @@ independent reference cases. An apparent win that disappears when assumed
 manufacturing factors change is a finding about the assumptions, **not** a
 verified energy saving.
 
+## One shared climate + indoor setpoint across building and HVAC
+
+The automated one-page Site + Shadow and geometry × ventilation search now
+use **the same balance temperature and climate temperature evidence**.
+Before this fix, Site + Shadow silently multiplied preset 18°C degree days
+against an arbitrary requested indoor temperature, while mechanical ventilation
+screened its own separate balance point. That could make an apparently
+"better" geometry simply an inconsistent climate comparison.
+
+The default climate path now fits the existing 18°C HDD/CDD preset and
+re-integrates degree days at the user's chosen indoor setpoint for both site
+fabric and mechanical ventilation. If the operator has provided a validated
+nearby EnergyPlus EPW file, its **8,760/8,784 hourly dry-bulb observations**
+instead supply degree days to **both** engines (with leap-year annualisation).
+A location without a matching valid station falls back explicitly to the
+fitted preset, with the reason in the result. Site + Shadow's solar/eave
+model continues to use approximate geometric and climatology assumptions:
+**station dry-bulb temperatures are NOT hourly solar radiation or building
+thermal simulation**.
+
+The source, station distance, annualised hours, chosen setpoint and
+resulting heating/cooling degree days are reported in
+`siteOptimization.weatherContext`. The client cannot inject forged
+hourly weather into the server's optimisation routes. Large hourly vectors
+are not persisted into workspace histories. The system remains a reduced-order,
+uncalibrated energy screen: true HVAC heating and cooling balance
+temperatures need not equal the selected indoor thermostat setpoint.
+
+Run `npm run test:site-weather` for fixed 10°C EPW, preset setpoint
+monotonicity, geometry/HVAC climate parity, replay and fallback validation.
+
+To keep those estimates internally reproducible, building optimisation now
+returns its **full-precision computed design geometry**. Previously it rounded
+orientation, eaves, windows and dimensions before returning the selected
+geometry: re-evaluating that "same" design on the downstream HVAC route
+changed the energy calculation. UI values can still be displayed rounded,
+but the geometry sent between physical calculation stages must not be.
+
 ## Offline EPW hourly weather for Whole System
 
 An operator can now supply an **EnergyPlus Weather (EPW)** file instead of

@@ -52,6 +52,9 @@ assert.ok(first.best.totalLifecycleEnergyKWh <= first.baseline.totalLifecycleEne
 assert.ok(first.best.solar.summerShadePercent >= 0 && first.best.solar.summerShadePercent <= 100, 'summer shade must be a percentage');
 assert.ok(first.best.solar.winterSolarAccessPercent >= 0 && first.best.solar.winterSolarAccessPercent <= 100, 'winter access must be a percentage');
 assert.deepEqual(first.best, repeated.best, 'site search must be deterministic for a fixed seed');
+const replayed = evaluateSiteHouseDesign(first.best.design, input);
+assert.deepEqual(replayed, first.best,
+  'Site optimiser winner geometry must replay EXACTLY: never round design fields before downstream calculation.');
 assert.equal(first.searchSeed, input.seed, 'Search seed must be exported for exact replay.');
 assert.deepEqual(first.feasibleShortlist, repeated.feasibleShortlist, 'Shortlists must exactly replay for a fixed seed.');
 
