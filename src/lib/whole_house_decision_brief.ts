@@ -13,7 +13,7 @@ export function buildWholeHouseDecisionBrief(result: WholeHouseOptimizationResul
   const stress = result.embodiedAssumptionStressTest;
   const annualDifference = result.baseline.annual.totalOperationalKWh - best.annual.totalOperationalKWh;
   const lifecycleDifference = result.baseline.totalLifecycleEnergyKWh - best.totalLifecycleEnergyKWh;
-  const sorted = [...result.archetypeComparisons].sort((a, b) => a.lifecycleEnergyKWh - b.lifecycleEnergyKWh);
+  const sorted = [...result.archetypeComparisons].sort((a, b) => Number(b.feasible) - Number(a.feasible) || a.lifecycleEnergyKWh - b.lifecycleEnergyKWh);
 
   return [
     'ABOVEBOUND | BUILDING-ENERGY SCREENING BRIEF',
