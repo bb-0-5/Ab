@@ -22,7 +22,13 @@ type ChemistryResult=RouteSelectivityResult&{
  calibrationStatus:string;discoveries:Discovery[];crossDomain:Probe[];
  priorDiscoveriesTested:number;caution:string;
 };
-type SharedResult={discoveries?:Discovery[];crossDomain?:Probe[];priorDiscoveriesTested?:number};
+type SharedResult={discoveries?:Discovery[];crossDomain?:Probe[];priorDiscoveriesTested?:number;
+ useCaseSweep?:{discoveriesTested:number;scenariosPerDiscovery:number;reports:Array<{
+   discoveryId:string;label:string;probesPerformed:number;
+   compatible:Probe[];rejected:number;unknown:number;note:string;
+ }>};
+ matchedMembraneNeeds?:Array<{needId:string;candidate:{label:string}|null;requirements:string[]}>;
+};
 type BuildingResult={
   seed:number;location:string;areaM2:number;temperatureC:number;
   weather:{mode:string;stationName:string|null;weatherHours:number|null;note:string;stationDistanceKm:number|null};
@@ -439,6 +445,14 @@ export default function LocalApp(){
     {result&&<details className="mt-5 rounded-xl border border-cyan-500/20 bg-[#0b2028] p-4">
        <summary className="cursor-pointer font-bold text-cyan-100">Cross-simulation discoveries · {currentShared.discoveries?.length||0} new / {currentShared.crossDomain?.length||0} checks</summary>
        <p className="mt-2 text-xs text-slate-300">Findings become typed hypotheses that other simulations can evaluate under their own physics and environmental constraints. Unsupported properties are never treated as measured advantages.</p>
+       {currentShared.useCaseSweep&&<p className="mt-3 rounded-lg border border-white/10 p-2 text-xs text-slate-300">
+        Searched {currentShared.useCaseSweep.scenariosPerDiscovery} environmental contexts for {currentShared.useCaseSweep.discoveriesTested} discoveries.
+        {currentShared.useCaseSweep.reports.filter(x=>x.compatible.length>0).length} have at least one conditional use case; none are certified material solutions.
+       </p>}
+       {currentShared.matchedMembraneNeeds?.slice(0,4).map((need,i)=><div key={i} className="mt-2 text-xs text-slate-300">
+        Chemistry rechecked stored membrane request: <strong>{need.candidate?.label||'no supported material'}</strong>.
+        {need.requirements.join(' ')}
+       </div>)}
        {currentShared.discoveries?.slice(0,10).map((d:Discovery)=><div key={d.id} className="mt-2 rounded-lg bg-black/25 p-2 text-xs text-slate-300"><strong className="text-cyan-200">{d.label}</strong> · {d.kind.replaceAll('_',' ')} · {d.evidence}</div>)}
        {currentShared.crossDomain?.slice(0,12).map((p:Probe,i)=><div key={i} className="mt-1 border-t border-slate-700/40 pt-1 text-[11px] text-slate-400">{titleCase(p.domain)}: {p.status} — {p.message}</div>)}
       </details>}
