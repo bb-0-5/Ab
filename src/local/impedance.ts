@@ -25,6 +25,8 @@ export interface MatchCandidate {
  centerDeliveredPowerFraction:number;
  bandAveragePowerFraction:number;
  worstBandPowerFraction:number;
+ /** Worst delivered fraction over five band points and ±5% L/C tolerance corners. */
+ toleranceWorstPowerFraction:number;
  mismatchDb:number;
  sourceMatchReturnLossDb:number;
 }
@@ -54,21 +56,21 @@ function parts():PassivePart[]{
  }
  return out;
 }
-function zPart(p:PassivePart,hz:number):Complex {
+function zPart(p:PassivePart,hz:number,scale=1):Complex {
  const omega=2*Math.PI*hz;
  // Q is a deliberately illustrative, frequency-independent screening value.
  if(p.type==='L'){
-  const react=omega*p.value;
+  const react=omega*p.value*scale;
   return c(react/40, react);
  }
- const react=1/(omega*p.value);
+ const react=1/(omega*p.value*scale);
  return c(react/80,-react);
 }
-function score(topology:MatchTopology,series:PassivePart,shunt:PassivePart,hz:number,rs:number,rl:number) {
+function score(topology:MatchTopology,series:PassivePart,shunt:PassivePart,hz:number,rs:number,rl:number,seriesScale=1,shuntScale=1) {
  const zs=c(rs);
  const load=c(rl);
- const zSeries=zPart(series,hz);
- const zShunt=zPart(shunt,hz);
+ const zSeries=zPart(series,hz,seriesScale);
+ const zShunt=zPart(shunt,hz,shuntScale);
  const branch=add(load,zSeries);
  const zin=topology==='series_then_shunt'?add(zSeries,parallel(load,zShunt)):parallel(branch,zShunt);
  const vin=div(zin,add(zs,zin));
@@ -87,7 +89,9 @@ export function optimizeImpedanceMatch(input:{frequencyMHz:number;sourceOhms:num
   throw new Error('Use 1–1000 MHz, 1–1000 Ω positive resistances and 0–40% fractional bandwidth.');
  }
  const baseline=4*rs*rl/((rs+rl)**2);
- let best:MatchCandidate|null=null;let tested=0;
+ let tested=0;
+ const shortlist:MatchCandidate[]=[];
+ const objective=(v:MatchCandidate)=>v.bandAveragePowerFraction*.75+v.worstBandPowerFraction*.25;
  const componentList=parts();
  for(const topology of ['series_then_shunt','shunt_then_series'] as const) {
   for(const series of componentList)for(const shunt of componentList) {
@@ -103,26 +107,48 @@ export function optimizeImpedanceMatch(input:{frequencyMHz:number;sourceOhms:num
    const worst=Math.min(...probes.map(p=>p.delivered));
    tested++;
    const obj=average*0.75+worst*0.25;
-   if(!best||obj>best.bandAveragePowerFraction*0.75+best.worstBandPowerFraction*0.25) {
-    best={topology,series,shunt,centerDeliveredPowerFraction:center.delivered,
-      bandAveragePowerFraction:average,worstBandPowerFraction:worst,
-      mismatchDb:10*Math.log10(Math.max(center.delivered,1e-15)/Math.max(baseline,1e-15)),
-      sourceMatchReturnLossDb:center.returnLoss};
+   // Avoid repeatedly re-scoring thousands of rejected candidates under
+   // tolerances: keep only the strongest nominal finalists, then test them.
+   if(shortlist.length<12||obj>objective(shortlist[shortlist.length-1])){
+    shortlist.push({topology,series,shunt,centerDeliveredPowerFraction:center.delivered,
+     bandAveragePowerFraction:average,worstBandPowerFraction:worst,
+     toleranceWorstPowerFraction:0,
+     mismatchDb:10*Math.log10(Math.max(center.delivered,1e-15)/Math.max(baseline,1e-15)),
+     sourceMatchReturnLossDb:center.returnLoss});
+    shortlist.sort((a,b)=>objective(b)-objective(a));
+    if(shortlist.length>12)shortlist.pop();
    }
   }
  }
- if(!best)throw new Error('No passive candidate generated.');
+ if(!shortlist.length)throw new Error('No passive candidate generated.');
+ // Add a discrete corner robustness screen: two parts independently vary
+ // by ±5%, over the same five frequency points. This is an assumed
+ // sensitivity screen, NOT component failure-rate or measured yield data.
+ const tolerance=[.95,1,1.05];
+ const freqPoints=[-1,-.5,0,.5,1].map(x=>frequencyMHz*1e6*(1+bandwidth*x));
+ const finalists=shortlist.map(candidate=>{
+  let worst=1;
+  for(const a of tolerance)for(const b of tolerance)for(const hz of freqPoints)
+   worst=Math.min(worst,score(candidate.topology,candidate.series,candidate.shunt,hz,rs,rl,a,b).delivered);
+  return {...candidate,toleranceWorstPowerFraction:worst};
+ });
+ // Prioritise a good nominal band while penalising fragile matching.
+ finalists.sort((a,b)=>(objective(b)*.6+b.toleranceWorstPowerFraction*.4)
+                     -(objective(a)*.6+a.toleranceWorstPowerFraction*.4));
+ const best=finalists[0];
+ const recommended=best.toleranceWorstPowerFraction>baseline+0.005;
  return {requested:{frequencyMHz,sourceOhms:rs,loadOhms:rl,bandFraction:bandwidth},
   baselineDeliveredPowerFraction:baseline,best,tested,
-  recommended:best.bandAveragePowerFraction>baseline+0.005,
-  recommendationReason:best.bandAveragePowerFraction>baseline+0.005
-    ? 'Screened L network transfers more average power than a direct resistive termination under assumed component Q and bandwidth.'
-    : 'Do not add an L matching network: none of the tested parts beats the direct connection under these assumptions.',
+  recommended,
+  recommendationReason:recommended
+    ? 'The screened L network beats the direct connection even at the worst tested ±5% component corner and band frequency, with assumed Q. Bench verification is still required.'
+    : 'Do not add this L network based on the screen: the worst sampled ±5% component corner across the band does not beat the direct connection.',
   microstripExample:suggestMicrostripWidth(rs>=20&&rs<=150?rs:50),
   limitations:[
    '2-element L matching with assumed constant component Q=40 (L) and Q=80 (C); E12 values are examples, not rated parts.',
    'Reported power is delivered fraction relative to available Thevenin source power. Matching cannot create energy.',
-   'No PCB microstrip/stripline electromagnetic geometry, vias, parasitic resonance, tolerance, component self-resonance, power rating or return-path model.',
+   'Part sensitivity includes discrete ±5% L/C nominal values at five frequency points; not a measured tolerance distribution, Monte Carlo yield, or rated component stability.',
+   'No PCB microstrip/stripline electromagnetic geometry, vias, parasitic resonance, temperature dependence, component self-resonance, power rating or return-path model.',
    'Does not optimize motherboard clocks, DRAM buses, PCIe, USB4 or regulated power converters. Prototype only; verify with measured S-parameters, device datasheets and RF simulation.',
   ]};
 }
