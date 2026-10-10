@@ -34,6 +34,7 @@ export interface MatchReport {
  requested:{ frequencyMHz:number;sourceOhms:number;loadOhms:number;bandFraction:number };
  baselineDeliveredPowerFraction:number;
  best:MatchCandidate;
+ frequencyResponse:Array<{frequencyMHz:number;deliveredPowerFraction:number}>;
  tested:number;
  recommended:boolean;
  recommendationReason:string;
@@ -137,8 +138,13 @@ export function optimizeImpedanceMatch(input:{frequencyMHz:number;sourceOhms:num
                      -(objective(a)*.6+a.toleranceWorstPowerFraction*.4));
  const best=finalists[0];
  const recommended=best.toleranceWorstPowerFraction>baseline+0.005;
+ const frequencyResponse=Array.from({length:21},(_,i)=>{
+  const frequencyPointMHz=frequencyMHz*(1+bandwidth*(-1+i/10));
+  const transferred=score(best.topology,best.series,best.shunt,frequencyPointMHz*1e6,rs,rl);
+  return {frequencyMHz:frequencyPointMHz,deliveredPowerFraction:transferred.delivered};
+ });
  return {requested:{frequencyMHz,sourceOhms:rs,loadOhms:rl,bandFraction:bandwidth},
-  baselineDeliveredPowerFraction:baseline,best,tested,
+  baselineDeliveredPowerFraction:baseline,best,frequencyResponse,tested,
   recommended,
   recommendationReason:recommended
     ? 'The screened L network beats the direct connection even at the worst tested ±5% component corner and band frequency, with assumed Q. Bench verification is still required.'
