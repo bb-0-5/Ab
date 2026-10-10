@@ -85,6 +85,37 @@ export interface CoupledSiteFlowResult {
   limitations: string[];
 }
 
+/**
+ * Bounded JOINT SELECTION, not a globally optimal building design.
+ * The site optimiser generates a diverse same-area geometry portfolio;
+ * we evaluate a balanced mechanical sub-sweep against EACH geometry and
+ * compare on the same non-double-counted lifecycle accounting boundary.
+ */
+export interface JointSiteMechanicalSearch {
+  mode: 'bounded_joint_geometry_mechanical_selection';
+  geometryCandidatesEvaluated: number;
+  mechanicalCandidatesEvaluated: number;
+  feasibleEquivalentAreaCandidates: number;
+  maximumMechanicalCandidatesPerSite: number;
+  selected: CoupledSiteFlowCase | null;
+  siteOnlyChoice: CoupledSiteFlowCase;
+  baseline: CoupledSiteFlowCase;
+  ranked: Array<{
+    form: string;
+    areaM2: number;
+    annualElectricalKWh: number;
+    totalLifecycleKWh: number;
+    airflowControl: WholeHouseConfiguration['control'];
+    heatRecoveryEfficiency: number;
+    eligible: boolean;
+  }>;
+  lifecycleSavingsAgainstReferenceKWh: number | null;
+  lifecycleSavingsVsSiteOnlyChoiceKWh: number | null;
+  qualifiesAsImprovement: boolean;
+  outcome: string;
+  limitations: string[];
+}
+
 const round = (n: number, places = 2) => {
   const k = 10 ** places;
   return Math.round(n * k) / k;
@@ -264,6 +295,100 @@ export function screenCoupledSiteAirflow(
       'Comparisons changing floor area by more than 5% fail the equivalence gate; similar area alone does not prove equal amenity or construction constraints.',
       'The mechanical and solar models use simplified independent assumptions; savings remain illustrative until validated against real buildings and engineering standards.',
       'This scenario concerns a detached-house proposal only; apartment archetype comparisons continue as a separate screening question.',
+    ],
+  };
+}
+
+/**
+ * Jointly RANK a bounded geometry x mechanical portfolio:
+ *  - source geometry generation remains site-only and deterministic;
+ *  - mechanical configuration is re-evaluated for EACH generated footprint;
+ *  - both subsystem gates and the equivalent-service (±5% area) rule apply.
+ *
+ * An ineligible site form may be reported for comparison but NEVER "win".
+ * A failed reference gate prevents a defensible savings claim.
+ */
+export function searchCoupledSiteMechanicalPortfolio(
+  site: { baseline: EvaluatedSiteHouseDesign; best: EvaluatedSiteHouseDesign; location: SiteLocationProfile },
+  alternatives: EvaluatedSiteHouseDesign[],
+  config: { lifecycleYears?: number; maximumCandidates?: number; coolingCOP?: number } = {},
+): JointSiteMechanicalSearch {
+  const lifecycleYears = Math.min(100, Math.max(5, Number(config.lifecycleYears) || 30));
+  const coolingCOP = Math.min(8, Math.max(1, Number(config.coolingCOP) || 3.2));
+  const maximumCandidates = Math.min(108, Math.max(48, Math.round(Number(config.maximumCandidates) || 48)));
+  const baseline = evaluateCase(site.baseline, site.location, lifecycleYears, maximumCandidates, coolingCOP, true);
+
+  // Server callers must re-evaluate EVERY proposal using the same site input
+  // before calling this routine. Limit the portfolio independently of callers.
+  const proposals = [site.baseline, site.best, ...alternatives.slice(0, 12)];
+  const seen = new Set<string>();
+  const cases: CoupledSiteFlowCase[] = [];
+  for (const proposal of proposals) {
+    const signature = JSON.stringify(proposal.design);
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    cases.push(evaluateCase(proposal, site.location, lifecycleYears, maximumCandidates, coolingCOP, false));
+  }
+  const siteOnlyChoice = cases.find(candidate =>
+    JSON.stringify(candidate.site.design) === JSON.stringify(site.best.design))!;
+  const areaReference = baseline.layout.declaredFloorAreaM2;
+  const eligible = (candidate: CoupledSiteFlowCase) => candidate.feasible
+    && Math.abs(candidate.layout.declaredFloorAreaM2 - areaReference) <= areaReference * 0.05;
+
+  // Feasible-first deterministic ranking, breaking exact ties by insertion
+  // order. Never compare an ineligible design as though it were a real saving.
+  const rankedCases = [...cases].sort((a, b) =>
+    Number(eligible(b)) - Number(eligible(a))
+    || a.energy.totalLifecycleKWh - b.energy.totalLifecycleKWh);
+  const selected = rankedCases.find(eligible) || null;
+  const feasibleEquivalentAreaCandidates = cases.filter(eligible).length;
+  const mechanicalCandidatesEvaluated = cases.reduce((sum, c) => sum + c.configurationsEvaluated, 0);
+  const verifiedReference = baseline.feasible;
+  const difference = selected && verifiedReference
+    ? baseline.energy.totalLifecycleKWh - selected.energy.totalLifecycleKWh : null;
+  const improvementVsSiteOnly = selected && eligible(siteOnlyChoice)
+    ? siteOnlyChoice.energy.totalLifecycleKWh - selected.energy.totalLifecycleKWh : null;
+  const qualifiesAsImprovement = difference !== null && difference >
+    Math.max(10, baseline.energy.totalLifecycleKWh * 0.001);
+  const outcome = !selected
+    ? 'No jointly feasible comparable-area geometry and ventilation combination was found in the bounded portfolio.'
+    : !verifiedReference
+      ? 'A feasible geometry/ventilation pairing was identified, but the reference fails feasibility screening; energy savings cannot be claimed against it.'
+      : qualifiesAsImprovement
+        ? 'The lowest-lifecycle-energy feasible geometry/ventilation pairing in the tested portfolio beats the reference under stated assumptions; not a global optimum or verified build.'
+        : 'No tested feasible pairing demonstrated an improvement beyond the screening threshold against the reference.';
+
+  return {
+    mode: 'bounded_joint_geometry_mechanical_selection',
+    geometryCandidatesEvaluated: cases.length,
+    mechanicalCandidatesEvaluated,
+    feasibleEquivalentAreaCandidates,
+    maximumMechanicalCandidatesPerSite: maximumCandidates,
+    selected,
+    siteOnlyChoice,
+    baseline,
+    ranked: rankedCases.slice(0, 6).map(item => ({
+      form: item.site.design.form,
+      areaM2: item.site.design.floorAreaM2,
+      annualElectricalKWh: item.energy.annualCombinedElectricalKWh,
+      totalLifecycleKWh: item.energy.totalLifecycleKWh,
+      airflowControl: item.selectedAirflow.control,
+      heatRecoveryEfficiency: item.selectedAirflow.heatRecoveryEfficiency,
+      eligible: eligible(item),
+    })),
+    lifecycleSavingsAgainstReferenceKWh: difference === null ? null : round(difference),
+    lifecycleSavingsVsSiteOnlyChoiceKWh: improvementVsSiteOnly === null ? null : round(improvementVsSiteOnly),
+    qualifiesAsImprovement,
+    outcome,
+    limitations: [
+      'Bounded joint SELECTION across at most 14 site/ventilation pairings. Geometry candidates were generated by a site-only objective, NOT by a fully co-optimised physical model; no global optimality claim.',
+      'Geometry shortlist spans up to three distinct eligible designs per form, plus the site-only choice and the original baseline; untested site designs may outperform them.',
+      'Surrogate rooms are generated, uniformly area-corrected rectangles, not a surveyed architectural plan or measured doorway/cavity network.',
+      'All options are fixed detached-house building archetypes; do not generalise conclusions to apartment party walls or common services.',
+      'Site envelope, windows, sun and embodied construction are counted once; mechanically supplied ventilation, fans and extra equipment are additional. Natural-ventilation credits are removed under mechanical control.',
+      'Site + Shadow and airflow still use approximate, preset degree-day physics at a common 18°C reference. This is not hourly calibrated EnergyPlus/CFD or ASHRAE Standard 140 certified.',
+      'Only comparable floor areas within 5% and project-screen feasible candidates can be selected. Matching floor area alone cannot prove equal liveability.',
+      'Manufacturing allowances are not product EPD evidence; confirm building permissions, costs, surveyed geometry and local hazards before making a real construction choice.',
     ],
   };
 }
