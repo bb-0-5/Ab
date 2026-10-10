@@ -146,9 +146,14 @@ const chemistryMaterial=proposeMaterialDiscoveries(ambient);
 const catalog=searchDiscoveryUseCases([...chemistryMaterial,...isotopes,pastMembrane]);
 const calibratedDiscovery={...chemistryMaterial[0],
   id:'kinetics:toy-rx:air',kind:'kinetic_fit' as const,evidence:'measured_user_data' as const,
-  kinetics:fit,label:'Previously fitted toy kinetics'};
+  kinetics:independentFit,label:'Previously fitted SYNTHETIC toy kinetics'};
+const weakDiscovery={...calibratedDiscovery,kinetics:fit};
+const weakProbe=probeDiscovery(weakDiscovery,{...ambient,temperatureK:330});
+assert.ok(weakProbe.some(x=>x.domain==='chemistry'&&x.status==='unsupported'),
+ 'Same-dataset condition holdout must NEVER gain unconditional cross-domain trust.');
 const chemistryProbe=probeDiscovery(calibratedDiscovery,{...ambient,temperatureK:330});
-assert.ok(chemistryProbe.some(x=>x.domain==='chemistry'&&x.status==='conditional'));
+assert.ok(chemistryProbe.some(x=>x.domain==='chemistry'&&x.status==='conditional'),
+ 'Batched synthetic fixture tests the software gate, NOT independently known chemical yields.');
 const extrapolation=probeDiscovery(calibratedDiscovery,{...ambient,temperatureK:500});
 assert.ok(extrapolation.some(x=>x.domain==='chemistry'&&x.status==='unsupported'));
 assert.ok(chemistryProbe.filter(x=>x.domain!=='chemistry').every(x=>x.status==='unsupported'));
