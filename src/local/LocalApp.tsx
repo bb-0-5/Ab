@@ -402,7 +402,7 @@ export default function LocalApp(){
         <input type="file" accept=".csv,text/csv" onChange={uploadKnownYields}
          className="mt-2 block w-full text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-slate-600 file:px-3 file:py-2"/>
         {knownYieldsName&&<span className="block text-cyan-200">{knownYieldsName} loaded</span>}</label>
-       <p className="text-[11px] text-slate-400">Required CSV columns: id, reaction_id, environment, temperature_k, duration_s, target_fraction, side_fraction, source. At least eight observations, six distinct conditions and a real source reference are required.</p>
+       <p className="text-[11px] text-slate-400">Required CSV: id, reaction_id, environment, temperature_k, duration_s, target_fraction, side_fraction, source. Optional batch_id and protocol_id enable stronger, batch-disjoint validation. Zero or missing side yield cannot be fitted without a detection-limit model. ≥8 observations and ≥6 distinct conditions required; no source labels are verified automatically.</p>
       </div>
       <p className="mt-2 text-xs text-amber-200">No imported observations = no calibrated chemical yields. Kinetic possibilities do not guarantee events within finite time; unknown catalysts or isotope effects cannot be inferred.</p>
     </div>}
@@ -546,9 +546,17 @@ export default function LocalApp(){
        {selectedChem.calibration&&<div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Metric label="Train records" value={fmt(selectedChem.calibration.trainCount)}/>
         <Metric label="Held-out observations" value={fmt(selectedChem.calibration.holdoutCount)}/>
-        <Metric label="Holdout MAE (percentage points)" value={fmt(selectedChem.calibration.holdoutMAE*100,2)}/>
-        <Metric label="Constant-baseline MAE" value={fmt(selectedChem.calibration.holdoutBaselineMAE*100,2)}/>
+        <Metric label="Holdout target MAE (pp)" value={fmt(selectedChem.calibration.holdoutMAE*100,2)}/>
+        <Metric label="Holdout side-product MAE (pp)" value={fmt(selectedChem.calibration.holdoutSideMAE*100,2)}/>
+        <Metric label="Constant-baseline target MAE (pp)" value={fmt(selectedChem.calibration.holdoutBaselineMAE*100,2)}/>
        </div>}
+       {selectedChem.calibration&&<p className="mt-3 text-xs text-amber-200">
+        Validation type: {selectedChem.calibration.validationSplit.replaceAll('_',' ')}.
+        {selectedChem.calibration.reusableAcrossRuns
+          ?' May be reused provisionally for the same reaction, protocol, medium and fitted conditions.'
+          :' No automatic learned rate transfer: independent batch evidence and a consistent reaction protocol are required.'}
+        {selectedChem.calibration.warning}
+       </p>}
        {selectedChem.barrierScreen&&<p className="mt-3 text-xs text-amber-200">
         An imaginary change to reaction barriers would predict {fmt(selectedChem.barrierScreen.bestHypothetical.prediction.targetFraction*100,1)}% target versus {fmt(selectedChem.barrierScreen.baseline.targetFraction*100,1)}% fitted baseline.
         No actual catalyst or membrane mechanism has been shown to produce this shift.

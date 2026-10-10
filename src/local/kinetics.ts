@@ -88,8 +88,8 @@ export function checkObservation(r:YieldObservation):void{
     ||r.temperatureK<170||r.temperatureK>5000||r.durationS<=0||r.durationS>1e9
     ||r.targetFraction<0||r.sideFraction<0
     ||r.targetFraction+r.sideFraction>=1-1e-9
-    ||(r.protocolId!==undefined&&(!r.protocolId.trim()||r.protocolId.length>180))
-    ||(r.batchId!==undefined&&(!r.batchId.trim()||r.batchId.length>180))) {
+    ||(r.protocolId!==undefined&&(typeof r.protocolId!=='string'||!r.protocolId.trim()||r.protocolId.length>180))
+    ||(r.batchId!==undefined&&(typeof r.batchId!=='string'||!r.batchId.trim()||r.batchId.length>180))) {
       throw Error('Measured yield records need IDs, source, compatible environment, finite T/time, and target+side fractions below 1.');
     }
 }
@@ -233,7 +233,8 @@ export function screenHypotheticalBarriers(model:YieldCalibration,temperatureK:n
   }
   candidates.sort((x,y)=>y.prediction.targetFraction-x.prediction.targetFraction);
   return {baseline,scenarios:candidates,bestHypothetical:candidates[0],
-    contextValidated:temperatureK>=model.temperatureRangeK[0]&&temperatureK<=model.temperatureRangeK[1],
+    contextValidated:temperatureK>=model.temperatureRangeK[0]&&temperatureK<=model.temperatureRangeK[1]
+      &&durationS>=model.durationRangeS[0]&&durationS<=model.durationRangeS[1],
     limitation:'Barrier changes are imaginary scenario parameters, NOT verified catalysts, membranes, fields, or feasible mechanisms. Even held-out calibration does not validate these counterfactual interventions.'};
 }
 export function parseKnownYieldsCSV(csv:string):YieldObservation[]{

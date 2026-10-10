@@ -105,6 +105,13 @@ context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
      &&d.kinetics?.reactionId===(request.reactionId||'')
      &&d.kinetics.environment===condition.medium
      &&d.kinetics.gate==='passes_baseline'
+     &&d.kinetics.reusableAcrossRuns===true
+     &&Number.isFinite(d.kinetics.holdoutMAE)
+     &&Number.isFinite(d.kinetics.holdoutBaselineMAE)
+     &&d.kinetics.holdoutMAE<=d.kinetics.holdoutBaselineMAE
+     &&d.kinetics.validationSplit==='batch_holdout'
+     &&typeof d.kinetics.protocolId==='string'
+     &&d.kinetics.protocolId.length>0
      &&condition.temperatureK>=d.kinetics.temperatureRangeK[0]
      &&condition.temperatureK<=d.kinetics.temperatureRangeK[1]);
    if(!request.knownYieldsCSV&&previousFit?.kinetics){
@@ -118,11 +125,11 @@ context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
     calibration=calibrateKnownYields(observations,reactionId,condition.medium);
     barrierScreen=screenHypotheticalBarriers(calibration,condition.temperatureK,
       Math.max(0,request.timeS??3600));
-    calibrationStatus=`Held-out MAE ${(calibration.holdoutMAE*100).toFixed(1)} percentage points across ${calibration.holdoutCount} observations; ${calibration.gate}.`;
+    calibrationStatus=`Held-out MAE ${(calibration.holdoutMAE*100).toFixed(1)} percentage points; side-product MAE ${(calibration.holdoutSideMAE*100).toFixed(1)} points; ${calibration.validationSplit.replaceAll('_',' ')} across ${calibration.holdoutCount} observations; ${calibration.gate}. ${calibration.reusableAcrossRuns?'Eligible for provisional same-protocol replay.':'Not eligible for automatic replay without stronger independent batch/protocol evidence.'}`;
     discoveries.push({id:`kinetics:${reactionId}:${condition.medium}`,
       kind:'kinetic_fit',producer:'chemistry',label:`Effective kinetics fit: ${reactionId}`,
       createdAt:'measured_yield_fit_v1',
-      evidence:calibration.gate==='passes_baseline'?'measured_user_data':'hypothesis',
+      evidence:calibration.reusableAcrossRuns?'measured_user_data':'hypothesis',
       source:calibration.sourceRecords.join(' | ').slice(0,220),
       kinetics:calibration,condition});
    }
