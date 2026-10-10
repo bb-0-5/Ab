@@ -1,203 +1,44 @@
-# Deploy BeyondBound to abovebound.org
+# Static local-first deployment
 
-BeyondBound is not a static-only site. Its Express API, `/ws` WebSocket endpoint,
-background optimizer, and persistent discovery state need an always-on Node server.
-The production layout is:
+All runtime simulations are Web Workers in the user's own browser.
+There is **no AWS, Express API, WebSocket, Docker, Supabase Edge Function
+or paid cloud compute** in the new runtime.
 
-```text
-Browser -> https://abovebound.org -> Cloudflare Tunnel -> AWS Docker host -> BeyondBound
+```sh
+npm ci
+npm run test:all
+npm run build
 ```
 
-Cloudflare terminates HTTPS and proxies WebSockets. The AWS security group does not
-need public HTTP or HTTPS ports because `cloudflared` makes an outbound connection.
+Upload `dist/` to HTTPS static hosting, such as Cloudflare Pages,
+GitHub Pages or comparable CDN. Serve hashed worker assets as JavaScript
+and test on a real mobile device: source files are not required on
+the runtime machine. Vite's relative base supports project subpaths.
 
-## 1. Create the AWS host
+## Cloudflare Pages option (no origin server)
+Connect the GitHub repository `bb-0-5/Ab` to Cloudflare Pages; set:
+- framework preset: Vite
+- build command: `npm run build`
+- output directory: `dist`
+- no runtime environment variables needed for device-only operation
 
-Use one Amazon Linux 2023 EC2 instance in `ap-southeast-2` to start. A `t3.small`
-is enough for the current JavaScript optimizer; use `t3.medium` if builds run out
-of memory or several users will be active at once.
+Before linking `abovebound.org`, verify a `*.pages.dev` preview:
+single page loads, Worker script loads, building/impedance/probability
+runs finish and local history reloads across refresh. Then install the
+owner-only Supabase migration in the correct, intentionally selected
+project and test two separate authenticated identities.
 
-Attach at least 16 GB of encrypted EBS storage. Allow outbound internet access.
-For administration, prefer AWS Systems Manager Session Manager. If SSH is used,
-restrict port 22 to your current IP; do not open ports 80, 443, or 3000.
+**Do not point the apex hostname to Pages while the old Cloudflare Tunnel
+is the only working production origin.** Plan DNS cutover after backups.
+The previous app's Docker volume `discovery_memory.json` is NOT
+automatically migrated. Export it and independently verify records
+before retiring AWS. Removing AWS-oriented files from this repository
+does not stop or delete any cloud resources, routes or billable volumes.
+Stop/retire those separately after successful static deployment.
 
-Install Docker using the Amazon Linux 2023 packages:
-
-```bash
-sudo yum update -y
-sudo yum install -y docker git
-sudo service docker start
-sudo usermod -a -G docker ec2-user
-sudo systemctl enable docker
-```
-
-Log out and back in so the Docker group change applies. Install the Docker Compose
-plugin if `docker compose version` is not available on the image.
-
-## 2. Upload the repository
-
-Put this repository at `/opt/beyondbound`. A private Git repository is easiest, but
-SCP, SFTP, or an archive uploaded through S3 also works. Do not upload `node_modules`,
-`dist`, `.env`, or `discovery_memory.json`; the container rebuilds or persists them.
-
-```bash
-sudo mkdir -p /opt/beyondbound
-sudo chown ec2-user:ec2-user /opt/beyondbound
-cd /opt/beyondbound
-```
-
-After the files are present:
-
-```bash
-cp .env.production.example .env.production
-chmod 600 .env.production
-```
-
-Fill in the real values. `TUNNEL_TOKEN` is required. BeyondBound's optimizer and
-neural simulations run locally and do not call an external AI API. Supabase remains
-optional for login and cloud history; leave its two values blank for local-only mode.
-
-## 3. Create the Cloudflare Tunnel
-
-In the Cloudflare dashboard:
-
-1. Go to **Networking -> Tunnels** and create a remotely managed tunnel named
-   `abovebound-production`.
-2. Copy its token into `TUNNEL_TOKEN` in `.env.production` on AWS.
-3. Add a **Published application** route for `abovebound.org`.
-4. Set the service type to HTTP and the service URL to `http://app:3000`.
-5. Add a second route for `www.abovebound.org` to the same service if the `www`
-   hostname should work too.
-
-The deployed tunnel currently uses `http://beyondbound:3000`. The Compose
-`app` service includes `beyondbound` as a Docker-network alias, so either
-`http://app:3000` or `http://beyondbound:3000` resolves to the same app.
-Do not change the live tunnel configuration without checking its active host.
-
-
-The hostname route creates the required Cloudflare DNS record. Keep Cloudflare's
-Network -> WebSockets setting enabled.
-
-## 4. Build and start
-
-Run from `/opt/beyondbound`:
-
-```bash
-docker compose --env-file .env.production up -d --build
-docker compose --env-file .env.production ps
-docker compose --env-file .env.production logs --tail=100 app cloudflared
-```
-
-Check the local origin on AWS:
-
-```bash
-curl --fail http://127.0.0.1:3000/api/health
-```
-
-Then check the public route:
-
-```bash
-curl --fail https://abovebound.org/api/health
-```
-
-Open `https://abovebound.org`, start a simulation, and confirm the browser Network
-panel shows a successful `wss://abovebound.org/ws` connection.
-
-## Release-verifiable manual deployment
-
-Pushing to GitHub **does not update the live AWS Docker host**. Cloudflare is
-a tunnel and DNS/CDN layer here, not the origin app's CI deployer.
-
-The GitHub source at `bb-0-5/Ab` includes an operator-triggered script,
-`scripts/deploy-on-host.sh`. It is deliberately not connected to a GitHub
-Action or an unattended Cloudflare trigger. An operator with SSH/SSM access
-to the existing host should first confirm:
-
-- `/opt/beyondbound` is the real deployed checkout and contains an ignored
-  production `.env.production`; inspect any newer host-only changes.
-- `git remote -v` points to `https://github.com/bb-0-5/Ab.git` (change
-  it deliberately if the old checkout still points to the source repo).
-- No uncommitted application changes will be lost, and the original
-  `beyondbound-data` Docker volume is the correct persistent store.
-- The operator has Docker access, curl, git, network access for images,
-  enough disk space for the backup and a usable rollback procedure.
-
-Once verified, run **on the AWS host**, not in the ChatGPT shell:
-
-```bash
-cd /opt/beyondbound
-bash scripts/deploy-on-host.sh
-```
-
-The script refuses dirty/non-main/mismatched-origin checkout, accepts only
-fast-forward changes, backs up the named Docker data volume before updates,
-rebuilds using `.env.production`, and checks that
-`http://127.0.0.1:3000/api/health` reports the **new Git commit SHA**.
-It attempts to roll back the application code/images if local health fails.
-Data migrations and external services are NOT automatically rolled back.
-
-When first installing on an older checkout that does not yet include the
-script, fetch the reviewed `main` branch after a manual backup, then use
-the script for later updates; alternatively follow the manual deployment
-steps below with `ABOVEBOUND_RELEASE_SHA=$(git rev-parse HEAD)` exported
-in the shell.
-
-After a successful deployment, compare the public endpoint
-`https://abovebound.org/api/health` → `releaseSha` to
-`git rev-parse HEAD`. A healthy Cloudflare Tunnel alone does not prove
-the latest code is live.
-
-## 5. Updates and backups
-
-After uploading or pulling new code:
-
-```bash
-docker compose --env-file .env.production up -d --build
-docker image prune -f
-```
-
-The named Docker volume `beyondbound-data` holds `discovery_memory.json`. Back it up
-before major upgrades:
-
-```bash
-docker run --rm -v beyondbound-data:/data -v "$PWD":/backup \
-  alpine tar czf /backup/beyondbound-data-backup.tgz -C /data .
-```
-
-Do not run more than one app replica against this file-based store. Before scaling
-horizontally, move shared simulation state to Supabase/Postgres or another shared
-database and use a shared pub/sub layer for WebSocket broadcasts.
-
-## Optional offline EPW station climate
-
-Whole System can use operator-supplied hourly temperatures when the station
-coordinates are within 75 km of the selected site. The site/weather pairing is
-validated every run and rejected if timestamps are missing, duplicated or
-unordered, or if dry-bulb readings are missing/invalid.
-
-1. Obtain a legally usable EnergyPlus Weather (`.epw`) file for the location.
-   Check station provenance, actual weather years and how representative it is.
-2. Place it in the persistent `beyondbound-data` Docker volume at
-   `/app/data/weather/site.epw`. Do not commit the file or secret paths.
-3. Add `ABOVEBOUND_EPW_FILE=weather/site.epw` to `.env.production`.
-4. Rebuild/restart with `docker compose --env-file .env.production up -d --build`.
-5. Open Whole System and verify the climate badge and exported report say
-   `epw_hourly_temperature`; inspect the station distance and comparison.
-   When it says `preset_fitted_degree_days`, do not imply EPW was used.
-
-With no configured EPW, the app works exactly as before using the preset
-degree-day profile. A station within 75 km may still differ significantly in
-elevation, land cover and microclimate. This does NOT turn the separate
-Site + Shadow model into an hourly model or validate energy performance.
-
-## 6. AWS research compute
-
-The current optimizer is a lightweight genetic search written in TypeScript. It
-does not train a neural network and will not benefit from a permanently running GPU.
-Keep the web app on CPU.
-
-When there is a concrete training dataset and objective, split research into queued,
-containerized jobs. Store datasets, checkpoints, and model artifacts in S3, then use
-SageMaker Training or AWS Batch for on-demand CPU/GPU jobs. Spot training plus
-checkpointing can reduce cost. Feed only validated model outputs back into the web
-application; do not run expensive training in the request/WebSocket process.
+## Security
+Only publishable Supabase keys are accepted in the optional cloud UI;
+server service-role keys are forbidden in frontend code. Apply
+`supabase/migrations/20261011000000_ab_computation_memory.sql`
+and verify RLS. Supabase anonymous auth identities will not be recoverable
+from another device until an identity-linking login flow is implemented.

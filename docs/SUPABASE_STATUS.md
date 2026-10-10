@@ -1,33 +1,36 @@
-# AboveBound persistence and Supabase integration status
+# AboveBound local-first memory
 
-## Verified source behavior
+The CURRENT `src/main.tsx` entry loads `src/local/LocalApp.tsx`, a static
+one-page app. Browser Worker executes all simulations. Results are written to
+this device's localStorage (latest 32) and can be exported to JSON.
 
-The imported AboveBound application runs an Express API and a React/Vite client.
-`server.ts` currently persists discovery and anonymous workspace history in
-`${DATA_DIR}/discovery_memory.json` (production: the `beyondbound-data` Docker
-volume). It does **not** import the Supabase SDK, contain Supabase SQL migrations,
-or read `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` in the imported source.
+Optional user-configured Supabase:
+- User selects a project URL and `sb_publishable_` key in the app's
+  collapsed memory disclosure. No server secret is used or shipped.
+- Apply `supabase/migrations/20261011000000_ab_computation_memory.sql` to
+  the **intended** project. Two connected projects currently exist but it is
+  **not confirmed which one belongs to AboveBound**, so NO live project or
+  data was modified.
+- Enable anonymous sign-ins. GoTrue provides an anonymous JWT; the
+  `ab_computation_memory` table enforces user-id ownership with RLS for
+  SELECT/INSERT/UPDATE/DELETE, and denies unauthenticated writes/reads.
+- User-owned compact summaries are sent via Supabase PostgREST, never
+  temperature vectors, site maps or full optimizer state.
+- Anonymous accounts are **not portable across devices**. To recover on a
+  new device, permanent identity linking/sign-in must be added separately.
+- Local storage works offline. Supabase networking may be unavailable:
+  a failed sync must not stop the computation or wipe local results.
 
-The browser's anonymous workspace ID is stored in localStorage and forwarded in
-`X-AboveBound-Workspace`. This value is chosen by the client and **is not proof
-of user identity**. Do not use it alone as an RLS ownership predicate.
+### Migration caveat
+Old AWS Express `discovery_memory.json` is NOT automatically migrated to
+Supabase or localStorage. It must be exported by the old operator first, before
+the AWS service is retired. Legacy `src/App.tsx` and `server.ts` are left
+in the repository for this historical export only, but they are not used by
+the active browser app or its build.
 
-## Before enabling Supabase
-
-1. Identify the Supabase project used by AboveBound (do not assume the
-   separately connected Hexfield project is the same one).
-2. Define which data will be persisted: simulations, anonymous workspace events,
-   user projects, public read-only research results, and backups.
-3. Decide between authenticated accounts and intentionally public anonymous
-   sessions. For private data, use Supabase Auth user IDs with restrictive RLS.
-4. Create reviewed SQL migrations, with RLS enabled on every exposed table.
-   Restrict SELECT, INSERT, UPDATE and DELETE to the correct owner; avoid
-   permissive `TO authenticated` policies without an ownership predicate.
-5. Keep service-role and database credentials server-side, in production
-   environment secrets (never `VITE_*` variables, git, or public client code).
-6. Build a data migration and rollback plan for the existing Docker volume,
-   then test the API and RLS with at least two distinct user sessions.
-
-**Current status:** Supabase has not been linked or modified by this source
-migration. The Docker volume remains the source of truth for deployed state,
-and pushing to GitHub does not redeploy the live AWS application.
+### Go-live requirements
+Static asset hosting (e.g. Cloudflare Pages), HTTPS, correctly configured
+Supabase project, enabled anonymous authentication, and cross-user RLS tests
+must all be verified. An existing Cloudflare Tunnel aimed at AWS is NOT
+a deploy target for a static build. Changing DNS/tunnels prematurely can
+take down the current public site.

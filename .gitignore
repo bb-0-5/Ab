@@ -15,3 +15,6 @@ site-context/
 discovery_memory.json
 *.tgz
 .codex-*
+
+# Local automatic design reports (user-owned; not committed)
+runs/

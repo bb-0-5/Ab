@@ -1,13 +1,10 @@
-name: CI
-
+name: Local-first CI
 on:
   push:
     branches: [main]
   pull_request:
-
 permissions:
   contents: read
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -18,9 +15,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Check deploy script syntax (does not deploy)
-        run: bash -n scripts/deploy-on-host.sh
-      - name: Validate Docker Compose configuration
-        run: TUNNEL_TOKEN=ci-placeholder docker compose config --quiet
       - run: npm ci
       - run: npm run test:all
+      - name: Verify no API backend is required by static assets
+        run: |
+          test -f dist/index.html
+          test -n "$(find dist/assets -type f -name '*.js' -print -quit)"
+          ! grep -R -E '(/api/house/optimize-site|/ws|aws-sdk)' dist/assets/*.js
