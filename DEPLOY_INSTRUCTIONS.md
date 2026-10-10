@@ -103,6 +103,50 @@ curl --fail https://abovebound.org/api/health
 Open `https://abovebound.org`, start a simulation, and confirm the browser Network
 panel shows a successful `wss://abovebound.org/ws` connection.
 
+## Release-verifiable manual deployment
+
+Pushing to GitHub **does not update the live AWS Docker host**. Cloudflare is
+a tunnel and DNS/CDN layer here, not the origin app's CI deployer.
+
+The GitHub source at `bb-0-5/Ab` includes an operator-triggered script,
+`scripts/deploy-on-host.sh`. It is deliberately not connected to a GitHub
+Action or an unattended Cloudflare trigger. An operator with SSH/SSM access
+to the existing host should first confirm:
+
+- `/opt/beyondbound` is the real deployed checkout and contains an ignored
+  production `.env.production`; inspect any newer host-only changes.
+- `git remote -v` points to `https://github.com/bb-0-5/Ab.git` (change
+  it deliberately if the old checkout still points to the source repo).
+- No uncommitted application changes will be lost, and the original
+  `beyondbound-data` Docker volume is the correct persistent store.
+- The operator has Docker access, curl, git, network access for images,
+  enough disk space for the backup and a usable rollback procedure.
+
+Once verified, run **on the AWS host**, not in the ChatGPT shell:
+
+```bash
+cd /opt/beyondbound
+bash scripts/deploy-on-host.sh
+```
+
+The script refuses dirty/non-main/mismatched-origin checkout, accepts only
+fast-forward changes, backs up the named Docker data volume before updates,
+rebuilds using `.env.production`, and checks that
+`http://127.0.0.1:3000/api/health` reports the **new Git commit SHA**.
+It attempts to roll back the application code/images if local health fails.
+Data migrations and external services are NOT automatically rolled back.
+
+When first installing on an older checkout that does not yet include the
+script, fetch the reviewed `main` branch after a manual backup, then use
+the script for later updates; alternatively follow the manual deployment
+steps below with `ABOVEBOUND_RELEASE_SHA=$(git rev-parse HEAD)` exported
+in the shell.
+
+After a successful deployment, compare the public endpoint
+`https://abovebound.org/api/health` → `releaseSha` to
+`git rev-parse HEAD`. A healthy Cloudflare Tunnel alone does not prove
+the latest code is live.
+
 ## 5. Updates and backups
 
 After uploading or pulling new code:
