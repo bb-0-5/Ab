@@ -707,8 +707,22 @@ async function startServer() {
           return aClimateDistance - bClimateDistance || b.lifecycleEnergySavedPercent - a.lifecycleEnergySavedPercent;
         })
         .slice(0, 16);
+      const location = { ...SITE_LOCATION_PRESETS.custom, ...(req.body?.location || {}) };
+      const weather = hourlyWeatherForSite({
+        latitudeDeg: Number(location.latitudeDeg),
+        longitudeDeg: Number(location.longitudeDeg),
+      });
       const result = optimizeSiteGeometry({
         ...(req.body || {}),
+        // The operator's weather file is the ONLY source of an hourly profile.
+        // Client-supplied arrays and station provenance are always overridden.
+        hourlyOutdoorTemperaturesC: weather.profile?.outdoorTemperaturesC,
+        hourlyWeatherSource: weather.profile ? {
+          stationName: weather.profile.stationName,
+          source: weather.profile.source,
+          stationDistanceKm: weather.stationDistanceKm!,
+        } : undefined,
+        weatherFallbackReason: weather.fallbackReason,
         learnedDesigns: relevantLearning.map(record => record.design),
       });
       const workspace = workspaceFor(req);
@@ -720,6 +734,7 @@ async function startServer() {
         stats: {
           candidatesEvaluated: result.candidatesEvaluated,
           priorDesignsUsed: relevantLearning.length,
+          weatherMode: result.weatherContext.mode,
           improvement: result.improvement,
         },
         state: { input: req.body || {}, best: result.best },
@@ -766,7 +781,23 @@ async function startServer() {
         || !req.body?.proposedDesign) {
         return res.status(400).json({ error: "Site inputs and proposed design geometry are required." });
       }
-      const siteInput = raw as SiteGeometryOptimizationInput;
+      const rawSiteInput = raw as SiteGeometryOptimizationInput;
+      const siteLocation = { ...SITE_LOCATION_PRESETS.custom, ...(rawSiteInput.location || {}) };
+      const weather = hourlyWeatherForSite({
+        latitudeDeg: Number(siteLocation.latitudeDeg),
+        longitudeDeg: Number(siteLocation.longitudeDeg),
+      });
+      const siteInput: SiteGeometryOptimizationInput = {
+        ...rawSiteInput,
+        // The browser cannot forge the weather used to rank building energy.
+        hourlyOutdoorTemperaturesC: weather.profile?.outdoorTemperaturesC,
+        hourlyWeatherSource: weather.profile ? {
+          stationName: weather.profile.stationName,
+          source: weather.profile.source,
+          stationDistanceKm: weather.stationDistanceKm!,
+        } : undefined,
+        weatherFallbackReason: weather.fallbackReason,
+      };
       // Derive the reference from CURRENT inputs, never from a forged client
       // geometry. Artificially energy-hungry baselines must not create fake
       // lifecycle savings.
@@ -777,6 +808,8 @@ async function startServer() {
       const coupled = screenCoupledSiteAirflow({ location, baseline, best }, {
         lifecycleYears: siteInput.lifecycleYears,
         coolingCOP: siteInput.coolingCOP,
+        targetTempC: siteInput.targetIndoorTempC,
+        hourlyOutdoorTemperaturesC: siteInput.hourlyOutdoorTemperaturesC,
         maximumCandidates: 108,
       });
       // A small portfolio comes from the site-only seed sweep. Do NOT trust
@@ -792,6 +825,8 @@ async function startServer() {
         { location, baseline, best }, candidates, {
           lifecycleYears: siteInput.lifecycleYears,
           coolingCOP: siteInput.coolingCOP,
+          targetTempC: siteInput.targetIndoorTempC,
+          hourlyOutdoorTemperaturesC: siteInput.hourlyOutdoorTemperaturesC,
           maximumCandidates: 48,
         },
       );
@@ -807,8 +842,10 @@ async function startServer() {
           proposedAreaM2: result.proposed.site.design.floorAreaM2,
           improvementAccepted: result.decision.qualifiesAsImprovement,
           lifecycleEnergySavingsKWh: result.decision.lifecycleEnergySavingsKWh,
+          weatherMode: weather.profile ? 'epw_hourly_temperature' : 'preset_fitted_degree_days',
         },
-        state: { input: { siteInput, proposedDesign: req.body.proposedDesign }, result },
+        // Never persist the 8,760-hour weather array in per-request workspaces.
+        state: { input: { siteInput: rawSiteInput, proposedDesign: req.body.proposedDesign }, result },
       });
       saveToDisk();
       return res.json(result);
