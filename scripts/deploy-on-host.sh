@@ -43,8 +43,13 @@ if ! git merge-base --is-ancestor "$previous" "$target"; then
   exit 1
 fi
 if [[ "$previous" == "$target" ]]; then
-  echo "Nothing to deploy; checkout already at $target."
-  exit 0
+  # Source may already be fetched without having been built/deployed.
+  running="$(curl --silent --max-time 5 http://127.0.0.1:3000/api/health || true)"
+  if [[ "$running" == *"\"releaseSha\":\"$target\""* ]]; then
+    echo "Already deployed and verified at $target."
+    exit 0
+  fi
+  echo "Checkout is current, but the running service has not verified this release. Rebuilding it."
 fi
 
 # Take a persistent-volume backup BEFORE changing any live source or images.
