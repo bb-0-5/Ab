@@ -7,6 +7,7 @@ import {
 import {
  defaultCondition,checkCondition,proposeIsotopeHypotheses,proposeMaterialDiscoveries,
  screenMembrane,membraneNeed,probeDiscovery,searchDiscoveryUseCases,extractDiscoveriesFromHistory,
+ screenEnvironmentHeatExchange,
  type OperatingCondition,
 } from '../src/local/cross_domain';
 
@@ -67,6 +68,21 @@ assert.throws(()=>transitionStateEventProbability({temperatureK:0,activationEnth
  activationEntropyJMolK:0,durationS:1}),/bounded/);
 
 const ambient=defaultCondition('air');
+const airCalm=screenEnvironmentHeatExchange({...ambient,flowSpeedMs:0});
+const airMoving=screenEnvironmentHeatExchange({...ambient,flowSpeedMs:12});
+const waterMoving=screenEnvironmentHeatExchange({...defaultCondition('water'),flowSpeedMs:12});
+const vacuumOnly=screenEnvironmentHeatExchange(defaultCondition('vacuum'));
+assert.ok(airMoving.heatFluxWm2!>airCalm.heatFluxWm2!);
+assert.ok(waterMoving.heatFluxWm2!>airMoving.heatFluxWm2!);
+assert.equal(vacuumOnly.regime,'thermal_radiation_only');
+assert.equal(vacuumOnly.coefficientWm2K,null);
+assert.ok(vacuumOnly.heatFluxWm2!>0);
+const extremeRadiation=screenEnvironmentHeatExchange({
+ medium:'vacuum',temperatureK:5000,pressurePa:.001,flowSpeedMs:0,
+});
+assert.ok(extremeRadiation.heatFluxWm2!>vacuumOnly.heatFluxWm2!,
+ 'High temperature vacuum radiative flux is not zero merely because convection vanishes.');
+
 const nearVacuum=defaultCondition('vacuum');
 const water=defaultCondition('water');
 const extreme:OperatingCondition={medium:'vacuum',temperatureK:5000,
@@ -90,6 +106,15 @@ assert.ok(probeDiscovery(isotopes[0],ambient).every(x=>x.status==='unsupported')
 const pastMembrane=membraneNeed(extreme,'flow_membrane');
 const chemistryMaterial=proposeMaterialDiscoveries(ambient);
 const catalog=searchDiscoveryUseCases([...chemistryMaterial,...isotopes,pastMembrane]);
+const calibratedDiscovery={...chemistryMaterial[0],
+  id:'kinetics:toy-rx:air',kind:'kinetic_fit' as const,evidence:'measured_user_data' as const,
+  kinetics:fit,label:'Previously fitted toy kinetics'};
+const chemistryProbe=probeDiscovery(calibratedDiscovery,{...ambient,temperatureK:330});
+assert.ok(chemistryProbe.some(x=>x.domain==='chemistry'&&x.status==='conditional'));
+const extrapolation=probeDiscovery(calibratedDiscovery,{...ambient,temperatureK:500});
+assert.ok(extrapolation.some(x=>x.domain==='chemistry'&&x.status==='unsupported'));
+assert.ok(chemistryProbe.filter(x=>x.domain!=='chemistry').every(x=>x.status==='unsupported'));
+
 assert.equal(catalog.discoveriesTested,7);
 assert.ok(catalog.reports.some(x=>x.compatible.length>0));
 assert.ok(catalog.reports.filter(x=>x.discoveryId.startsWith('isotope:')).every(x=>x.compatible.length===0));
