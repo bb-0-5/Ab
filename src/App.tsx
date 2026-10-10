@@ -3735,6 +3735,8 @@ const HouseView = ({
       optimizedWholeSystem: wholeHouseOptimization.best,
       topDesigns,
       improvement: wholeHouseOptimization.improvement,
+      searchCoverage: wholeHouseOptimization.searchCoverage,
+      embodiedAssumptionStressTest: wholeHouseOptimization.embodiedAssumptionStressTest,
       limitations: [
         'Not a building permit, energy rating, engineering certificate or substitute for a calibrated whole-building model.',
         'Open footprint data does not prove internal layouts, construction assemblies, occupancy or legal shared boundaries.',
