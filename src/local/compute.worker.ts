@@ -17,7 +17,7 @@ type BuildRequest={
 type CircuitRequest={id:number;mode:'circuits';frequencyMHz:number;sourceOhms:number;loadOhms:number};
 type ChemistryRequest={id:number;mode:'chemistry';minimumAcceptedFraction:number};
 type WorkerRequest=BuildRequest|CircuitRequest|ChemistryRequest;
-const context=self as DedicatedWorkerGlobalScope;
+const context=self as unknown as DedicatedWorkerGlobalScope;
 context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
  const request=e.data;
  try{
