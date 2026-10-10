@@ -30,6 +30,12 @@ export interface Discovery {
   * medium and training-temperature envelope when holdout gate passes. */
  kinetics?:YieldCalibration;
  task?:Task;
+ requiredProperties?:{
+  minimumReferenceMeltingPointK:number;
+  minimumThermalConductivityWmK:number|null;
+  maximumThermalConductivityWmK:number|null;
+  requiresFluidTransport:boolean;
+ };
 }
 export interface Probe {
  discoveryId:string;domain:'chemistry'|'membrane'|'building'|'circuits';
@@ -40,6 +46,7 @@ export interface Probe {
 export interface MaterialReport {
  condition:OperatingCondition;task:Task;targetDescription:string;
  totalCandidates:number;passingCandidates:number;
+ requiredProperties:NonNullable<Discovery['requiredProperties']>;
  environmentHeatTransfer:ReturnType<typeof screenEnvironmentHeatExchange>;
  selected:MaterialOption|null;alternatives:MaterialOption[];
  unmetRequirements:string[];discoveries:Discovery[];crossDomain:Probe[];
@@ -168,10 +175,17 @@ export function proposeIsotopeHypotheses(c:OperatingCondition):Discovery[] {
     phaseLimitK:null,thermalConductivityWmK:null},
  }));
 }
+export function requiredMaterialProperties(c:OperatingCondition,task:Task){
+ return {minimumReferenceMeltingPointK:c.temperatureK/0.8,
+  minimumThermalConductivityWmK:task==='heat_spreader'?150:task==='flow_membrane'?10:null,
+  maximumThermalConductivityWmK:task==='thermal_barrier'?5:null,
+  requiresFluidTransport:task==='flow_membrane'&&c.medium!=='vacuum'};
+}
 export function membraneNeed(c:OperatingCondition,task:Task):Discovery{
  return {...iso(`membrane:${task}`,c,'membrane'),kind:'membrane_need',
-  label:`Membrane request: ${task.replaceAll('_',' ')}`,
-  evidence:'hypothesis',source:'User-design requirement; not a measured material property.',task};
+  label:`Membrane request: ${task.replaceAll('_', ' ')}`,
+  evidence:'hypothesis',source:'User-design property envelope; not a measured material.',task,
+  requiredProperties:requiredMaterialProperties(c,task)};
 }
 export function probeDiscovery(d:Discovery,condition:OperatingCondition):Probe[] {
  const domains:Probe['domain'][]=['membrane','building','circuits','chemistry'];
@@ -234,11 +248,12 @@ export function screenMembrane(c:OperatingCondition,task:Task,prior:Discovery[]=
    task==='thermal_barrier'?'Minimise thermal conduction':
     'Allow channel flow without unacceptable losses',
   totalCandidates:options.length,passingCandidates:passing.length,
+  requiredProperties:requiredMaterialProperties(c,task),
   environmentHeatTransfer:screenEnvironmentHeatExchange(c),
   selected:passing[0]||null,alternatives:options,
   unmetRequirements:conditionIssue?[conditionIssue]:
    passing.length?['Mechanical stress, assembly geometry, oxidation/corrosion and material certification not evaluated.']:
-    ['No catalogue material passes the bounded physical-property screen. A new material needs independently measured phase limits and transport properties before selection.'],
+    [`No catalogue material meets required reference melt >${(c.temperatureK/0.8).toFixed(0)} K and task-specific thermal transport bounds. Design specification exists but no substance is established. Independent phase, mechanical and transport evidence required.`],
   discoveries:fresh,crossDomain,
   limitations:[
    'Melting points are metal fixed-point reference values (NIST); thermal conductivities are rounded room-temperature illustrative values, not measured samples.',
