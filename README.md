@@ -30,6 +30,39 @@ result. Users can also select a **passive RF impedance match** or a
 - One-page UI intentionally has no simulation tabs or parameter maze.
   Technical details and history are behind collapsible disclosures.
 
+## Single-screen visual laboratory + machine-printable components
+
+The home screen now includes a unified SVG field linking **building,
+chemistry, membranes, circuits, and Iron Man-inspired costume design**.
+Every domain has a clickable node, contextual physical constraints and
+a shared discovery indicator; scenes are intentionally **schematic**,
+not a rendered CFD, electromagnetic or quantum result. No additional
+tabs are required. The fabrication case draws an artistic full-body
+sci-fi suit, with the printed part's actual scope carefully separated.
+
+The new suit design goal automatically sweeps **126** combinations
+(PLA/PETG/TPU × frame thickness × frame rim), minimizes modeled
+production cost **only after** filtering by 3D printer bed size,
+user budget, ambient temperature and a required geometric frame-section
+index. Its result shows gram/material savings versus a solid plaque,
+assumed AUD cost and a cost-vs-section cloud on the same visual display.
+
+If a candidate passes, **Download STL** exports a closed, watertight
+triangulated decorative frame in millimetres for a home FDM slicer.
+This is a single cosmetic costume component, not a wearable structural
+system; the user must check slicing, nozzle/material compatibility and
+physical fit. No automatically validated filament strength is inferred.
+
+**Flight status is always unqualified/false.** No real Iron Man flight,
+propulsion, exoskeleton load or human safety capacity is established
+by local costume printing. Real flight demands fundamentally
+independent evidence, tests and safety engineering.
+
+See [Printable/Overlay Constraints](docs/PRINTABLE_CONSTRAINT_OVERLAY.md)
+and run `npm run test:fabrication`, which tests closed STL mesh,
+printer-bed/budget/temperature rejection, repeatability and a
+non-flying output.
+
 ## Shared discoveries and entropy-based chemistry
 
 Every local Worker task produces typed **discoveries** with provenance,
