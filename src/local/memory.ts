@@ -47,9 +47,13 @@ export function configureCloud(url:string,publishableKey:string){
  if(!/^sb_publishable_[A-Za-z0-9_-]{8,}$/.test(publishableKey.trim()))
   throw Error('Use a Supabase PUBLISHABLE key only, never a service_role or secret key.');
  const cfg={url:clean,publishableKey:publishableKey.trim()};
+ const previous=cloudConfig();
  localStorage.setItem(CONFIG_KEY,JSON.stringify(cfg));
- // Never allow an old project's authenticated session to flow to another.
- localStorage.removeItem(SESSION_KEY);
+ // Only changing projects/keys invalidates identity. Clicking Connect again
+ // with an unchanged project MUST NOT create a fresh, unrecoverable anonymous
+ // account and orphan its previously saved reports.
+ if(previous?.url!==cfg.url||previous?.publishableKey!==cfg.publishableKey)
+  localStorage.removeItem(SESSION_KEY);
  return cfg;
 }
 type Session={access_token:string;refresh_token:string;expires_at:number;user:{id:string}};
