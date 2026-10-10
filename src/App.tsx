@@ -8120,7 +8120,7 @@ function App() {
       </AnimatePresence>
       <header className="border-b border-white/10 bg-black/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 cursor-pointer shrink-0" onClick={() => setShowSplash(true)}>
+          <div className="flex items-center gap-3 cursor-pointer shrink-0" onClick={() => { setActiveTab('house'); setHouseInitialPanel('system'); }}>
             <div className="w-8 h-8 bg-cyan-500 rounded flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.5)]">
               <Activity size={20} className="text-black" />
             </div>
