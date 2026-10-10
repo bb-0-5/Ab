@@ -103,6 +103,13 @@ temperatures need not equal the selected indoor thermostat setpoint.
 Run `npm run test:site-weather` for fixed 10°C EPW, preset setpoint
 monotonicity, geometry/HVAC climate parity, replay and fallback validation.
 
+To keep those estimates internally reproducible, building optimisation now
+returns its **full-precision computed design geometry**. Previously it rounded
+orientation, eaves, windows and dimensions before returning the selected
+geometry: re-evaluating that "same" design on the downstream HVAC route
+changed the energy calculation. UI values can still be displayed rounded,
+but the geometry sent between physical calculation stages must not be.
+
 ## Offline EPW hourly weather for Whole System
 
 An operator can now supply an **EnergyPlus Weather (EPW)** file instead of
