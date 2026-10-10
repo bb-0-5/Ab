@@ -184,7 +184,7 @@ export default function UnifiedOverlay({
          fill={v.acceptable?'#5eead4':'#fb7185'} opacity={v.acceptable?1:.55}/>
         <title>{v.material}: ${v.cost.toFixed(2)} AUD / ${v.section.toFixed(1)} mm⁴ proxy / {v.acceptable?'screened':'fails some constraints'}</title>
        </g>)}
-       <text x="30" y="156" fontSize="12" fill="#94a3b8">Less material cost →</text>
+       <text x="30" y="156" fontSize="12" fill="#94a3b8">Cost increases →</text>
        <text x="320" y="156" fontSize="12" fill="#94a3b8">Higher geometric section ↑ (not verified strength)</text>
       </svg>;
     })()}
