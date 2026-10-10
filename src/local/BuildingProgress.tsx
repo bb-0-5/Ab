@@ -3,7 +3,6 @@ import type {BuildingCampaign,BuildingRun} from './building_campaign';
 const n=(value:number,digits=0)=>Number.isFinite(value)?value.toLocaleString('en-AU',{maximumFractionDigits:digits}):'—';
 type Props={campaign:BuildingCampaign;running:boolean;batch:{total:number;completed:number};
  current:BuildingRun|null;onContinue:()=>void;onStop:()=>void};
-const plus=(value:number)=>value>0?'+':'';
 
 function Massing({best}:{best:NonNullable<BuildingRun['best']>}){
  const polys=best.geometry.filter(p=>p.length>=3&&p.every(q=>Number.isFinite(q.x)&&Number.isFinite(q.y)));
@@ -113,6 +112,18 @@ export default function BuildingProgress({campaign,running,batch,current,onConti
      className="rounded-xl border border-rose-300/40 px-5 py-3 text-sm font-bold text-rose-100">Stop search</button>}
    </div>
   </div>
+  {campaign.best?.scenarios?.length? <details className="mt-4 rounded-xl border border-slate-600/50 bg-black/20 p-3" open>
+   <summary className="cursor-pointer text-sm font-bold text-cyan-100">Compare actual finalists screened in the best run</summary>
+   <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[520px] text-left text-xs">
+    <thead className="border-b border-white/20 text-slate-300"><tr><th className="py-2">Footprint form</th><th>Annual electricity</th><th>30-year lifecycle</th><th>Ventilation</th><th>Constraint gate</th></tr></thead>
+    <tbody>{campaign.best.scenarios.map((row,i)=><tr key={i} className="border-b border-white/10 text-slate-200">
+     <td className="py-2">{row.form.replaceAll('_',' ')} · {n(row.areaM2,1)} m²</td>
+     <td>{n(row.annualElectricalKWh)} kWh</td><td>{n(row.totalLifecycleKWh)} kWh</td>
+     <td>{row.airflowControl.replaceAll('_',' ')}</td>
+     <td className={row.eligible?'text-emerald-300':'text-amber-300'}>{row.eligible?'Eligible':'Rejected'}</td>
+    </tr>)}</tbody></table></div>
+   <p className="mt-2 text-xs text-slate-400">These finalists share the best run's assumptions. Ineligible cases are shown for inspection but cannot win.</p>
+  </details>:null}
   <div className="mt-4 grid gap-4 lg:grid-cols-2">
    {best?<Massing best={best}/>:<div className="rounded-xl border border-amber-500/20 bg-amber-950/10 p-4 text-sm text-amber-200">No design has passed all selected constraints yet. Try another batch or revise the inputs.</div>}
    <div className="space-y-4">
