@@ -98,6 +98,80 @@ solver, a calibrated site weather model or ASHRAE 140 validation.
 To run deterministic parser, station-distance and optimiser coupling checks:
 `npm run test:weather`. No weather data is needed for normal operation.
 
+## One-page design experience — no parameter tab maze
+
+The homepage now opens directly into **Automatic building design**, without
+the six-module tab ribbon, splash screen or the five-module House toolbar.
+Research labs remain available behind **Research tools**, not as primary
+navigation. The actual building design view is one page:
+
+- Choose an approximate location and desired floor area, or use device location.
+- The application **automatically** searches site orientation, footprint,
+  solar/shadow geometry, room layout, mechanical ventilation and heat
+  recovery. The user does **not** select every combination.
+- The first thing visible is a short, plain-language *Building design summary*:
+  selected form, floor area, air strategy, estimated annual electricity,
+  lifetime modeled energy and number of options screened. If no feasible
+  combination exists, the headline explicitly says so and suppresses bogus
+  performance figures. Screening caveats remain visible.
+- **Explore another design** advances the deterministic geometry seed to
+  sample a different portfolio automatically; repeated input/seed gives
+  repeatable results within the same saved-learning state.
+- 3D physics, intermediate candidate tables, technical evidence and
+  full machine-readable reports live behind expandable sections. They do
+  not crowd the default one-page presentation.
+
+Site optimization no longer waits for manual V12 simulation initialization
+or nonempty engine room arrays; the whole-system model can use its explicitly
+labelled default room surrogate until real plans are available.
+A single pass explores hundreds/thousands of constrained combinations,
+not every possible permutation. The counts in the summary are the evaluated
+sample, **not** a claim of complete design-space coverage.
+
+`npm run test:one-page` checks the human summary, refusal to invent outcomes
+when feasible options are absent, and deterministic replay.
+
+## Automatic bounded geometry × HVAC portfolio search
+
+**Whole System** now runs a second-stage geometry × mechanical optimisation,
+rather than reporting only the top geometry under the site-only objective.
+
+1. Site + Shadow's deterministic search keeps **up to three feasible,
+   roughly equivalent-area (within 5%) and geometrically distinct designs
+   per form**, for a maximum 12-design shortlist.
+2. The server **re-evaluates every submitted geometry** under the current site
+   constraints, including the baseline and the site-only winner. It ignores
+   any client-side energy/feasibility assertions.
+Users can press **Explore another design** to cycle through a new repeatable
+site-search seed; the chosen seed appears beside the climate/site anchor
+and in the downloaded JSON report. Replaying a seed produces the same
+geometry portfolio for the same site inputs (note that separately stored
+warm-start examples can also affect the server search).
+
+3. Each form receives a bounded, fairly interleaved detached-house airflow
+   sweep (balanced, wet-room transfer and demand zoning). It combines site
+   envelope/solar/construction with mechanical fan, ventilation, ducts,
+   controls and heat recovery *once*, removing conflicting natural-ventilation
+   cooling credit.
+4. It selects the **lowest modelled lifecycle energy** among options passing
+   both screening constraints and the equal-area gate. No infeasible option
+   can be selected.
+5. The interface shows the chosen geometry, ventilation strategy, annual and
+   lifecycle figures, number of pairs evaluated, and the gap versus the
+   original site-only choice. JSON reports include the bounded portfolio.
+
+This is a **bounded joint selection** over a portfolio initially generated
+by a site-only optimizer, not a globally optimal joint building/plant design.
+Candidates outside that portfolio, surveyed room geometry, independent hourly
+thermal benchmarks, EPD manufacturing evidence and genuine real-site
+construction constraints remain out of scope. The 3D scene still renders
+the **site-only** geometry; the paired result shows its distinct chosen form
+and configuration until the visualisation is explicitly switched over.
+That distinction is intentional.
+
+`npm run test:coupled-site` covers feasibility, replay, equal-service area
+and reconciled energy accounting, including the portfolio path.
+
 ## Linked site form + mechanical airflow screening
 
 **House → Whole System** now includes a second, separately labelled screen

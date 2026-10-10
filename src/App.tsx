@@ -73,6 +73,7 @@ import type { HeightAirflowProfile, HeightAirflowSweepResult } from './lib/heigh
 import { AdaptiveWallCutaway3D, EarthSiteHouse3D, HeightAirflowCutaway3D, HouseAirflowNetwork3D, SoftwareSimulationFallback } from './components/HousePhysics3D';
 import type { WholeHouseOptimizationResult } from './lib/whole_house_optimizer';
 import type { CoupledSiteFlowResult } from './lib/site_whole_house_coupling';
+import { summarizeBuildingDesign } from './lib/building_design_summary';
 import { buildWholeHouseDecisionBrief } from './lib/whole_house_decision_brief';
 import type { BuildingPhysicsValidationReport } from './lib/building_physics_validation';
 import type { AutomaticSiteContextResult } from './lib/site_context';
@@ -2776,6 +2777,8 @@ const HouseView = ({
   });
   const [sitePresetKey, setSitePresetKey] = useState('bendigo');
   const [siteOptimization, setSiteOptimization] = useState<SiteGeometryOptimizationResult | null>(null);
+  // Replayable design exploration without exposing another panel of knobs.
+  const [siteDesignSeed, setSiteDesignSeed] = useState(481516);
   const [siteOptimizationError, setSiteOptimizationError] = useState('');
   const [siteOptimizationRunning, setSiteOptimizationRunning] = useState(false);
   const [siteOptimizationApplied, setSiteOptimizationApplied] = useState(false);
@@ -3621,6 +3624,7 @@ const HouseView = ({
     setCoupledSiteFlowError('');
     try {
       const siteRequest = {
+          seed: siteDesignSeed,
           location: {
             name: siteOptimizationInputs.name,
             latitudeDeg: siteOptimizationInputs.latitudeDeg,
@@ -3690,8 +3694,8 @@ const HouseView = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           siteInput,
-          baselineDesign: result.baseline.design,
           proposedDesign: result.best.design,
+          candidateDesigns: result.feasibleShortlist.map(candidate => candidate.design),
         }),
       });
       const payload = await response.json();
@@ -3708,7 +3712,8 @@ const HouseView = ({
   };
 
   const runWholeHouseOptimization = async () => {
-    if (!rooms.length) return;
+    // The engine has a documented fallback room sketch when V12 is not yet
+    // initialized: searching a building must not require starting a simulation.
     const runId = ++wholeRunSequenceRef.current;
     setWholeHouseOptimizationRunning(true);
     setWholeHouseOptimizationError('');
@@ -3795,6 +3800,7 @@ const HouseView = ({
       physicsValidation,
       siteEvidence: siteContext,
       optimizedGeometry: siteOptimization.best,
+      siteGeometrySearchSeed: siteOptimization.searchSeed,
       optimizedWholeSystem: wholeHouseOptimization.best,
       topDesigns,
       improvement: wholeHouseOptimization.improvement,
@@ -3894,10 +3900,10 @@ const HouseView = ({
     `${room.id}:${room.x}:${room.y}:${room.width}:${room.height}:${room.ceilingHeight}`).join('|');
 
   useEffect(() => {
-    if (activePanel !== 'system' || rooms.length === 0) return;
+    if (activePanel !== 'system') return;
     // Indoor target, design life, hazard requirements and every site field
     // must invalidate previous coupled results, not only latitude and area.
-    const key = JSON.stringify({ site: siteOptimizationInputs, rooms: systemRoomGeometryKey });
+    const key = JSON.stringify({ site: siteOptimizationInputs, seed: siteDesignSeed, rooms: systemRoomGeometryKey });
     if (systemAutoKeyRef.current === key) return;
     // Debounce successive changes rather than racing costly 1,800-form sweeps.
     const timer = window.setTimeout(() => {
@@ -3908,7 +3914,7 @@ const HouseView = ({
       void runSystemEvidence();
     }, 220);
     return () => window.clearTimeout(timer);
-  }, [activePanel, systemRoomGeometryKey, siteOptimizationInputs]);
+  }, [activePanel, systemRoomGeometryKey, siteOptimizationInputs, siteDesignSeed]);
 
   const selectedAirflowRoom = rooms.find(room => room.id === selectedAirflowRoomId) || rooms[0] || null;
   const selectedHeightProfile = thermalGrid?.heightProfiles?.find(profile => profile.roomId === selectedAirflowRoom?.id) || null;
@@ -3996,8 +4002,9 @@ const HouseView = ({
           every panel. Panels previously held their own copies, so their
           "% lifecycle saving" headlines were computed over different horizons
           and shown side by side as if comparable. */}
-      <div className="mb-4 rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-3">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+      <details className="mb-4 rounded-lg border border-cyan-500/15 bg-cyan-500/[0.02] p-3">
+        <summary className="cursor-pointer text-[10px] text-gray-400">Advanced model settings and shared assumptions</summary>
+        <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="text-[10px] font-black uppercase tracking-wider text-cyan-300">
             Shared site model &bull; applies to every panel
           </div>
@@ -4056,9 +4063,9 @@ const HouseView = ({
             </div>
           </div>
         )}
-      </div>
+      </details>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className={activePanel === 'system' ? 'hidden' : 'flex items-center justify-between mb-6'}>
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center border border-emerald-500/30">
             <Box size={24} className="text-emerald-400" />
@@ -4128,60 +4135,8 @@ const HouseView = ({
         )}
       </div>}
 
-      {/* Tab Navigation */}
-      <div className="mb-6 bg-black/30 p-1 rounded-xl border border-white/5">
-        <div className="flex gap-1 flex-wrap">
-        {([
-          { id: 'system', label: 'Whole System', icon: <Activity size={12} /> },
-          { id: 'autopilot', label: 'Existing Home', icon: <Brain size={12} /> },
-          { id: 'siteoptimizer', label: 'Site + Shadow', icon: <Zap size={12} /> },
-          { id: 'airflow', label: 'Airflow', icon: <Wind size={12} /> },
-          { id: 'cycling', label: 'Smart Cycle', icon: <RotateCw size={12} /> },
-        ] as const).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActivePanel(tab.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
-              activePanel === tab.id ? 'bg-emerald-500 text-black' : 'text-gray-500 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            {tab.icon}{tab.label}
-          </button>
-        ))}
-        </div>
-        <details className="mt-1 border-t border-white/5 pt-1">
-          <summary className="cursor-pointer px-3 py-1.5 text-[8px] font-bold text-gray-600 hover:text-gray-300 uppercase tracking-widest">Advanced simulations</summary>
-          <div className="flex gap-1 flex-wrap mt-1">
-          {([
-          { id: 'floorplan', label: 'Floorplan', icon: <Box size={12} /> },
-          { id: 'optimizer', label: 'Lifecycle Optimize', icon: <Target size={12} /> },
-          { id: 'adaptivewall', label: 'Adaptive Wall', icon: <Layers size={12} /> },
-          { id: 'thermal', label: 'Thermal', icon: <Thermometer size={12} /> },
-          { id: 'seasonal', label: '4 Seasons', icon: <RefreshCw size={12} /> },
-          { id: 'natural', label: 'Natural', icon: <Wind size={12} /> },
-          { id: 'electrical', label: 'Electrical', icon: <Zap size={12} /> },
-          { id: 'cooler', label: 'Esky/Beer', icon: <FlaskConical size={12} /> },
-          { id: 'topology', label: 'Topology', icon: <Activity size={12} /> },
-          { id: 'projection', label: '100-Year', icon: <HistoryIcon size={12} /> },
-          { id: 'solar', label: 'Solar', icon: <Cpu size={12} /> },
-          { id: 'deeplearn', label: 'Deep Learn', icon: <Brain size={12} /> },
-          { id: 'ventreadings', label: 'Vent Data', icon: <ArrowUp size={12} /> },
-          { id: 'annualcycle', label: 'Annual', icon: <RotateCw size={12} /> },
-        ] as const).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActivePanel(tab.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
-              activePanel === tab.id ? 'bg-emerald-500 text-black' : 'text-gray-500 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            {tab.icon}{tab.label}
-          </button>
-        ))}
-          </div>
-        </details>
-      </div>
-
+      {/* One-page Building Design workspace. Detailed research panels are
+          still maintained in the codebase but are not navigation defaults. */}
       {/* Panel Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Panel (2/3) */}
@@ -4193,25 +4148,67 @@ const HouseView = ({
                   <div>
                     <div className="text-[8px] text-gray-500 uppercase tracking-widest">Automatic site anchor</div>
                     <div className="text-[11px] font-bold text-white mt-1">{siteOptimizationInputs.name}</div>
-                    <div className="text-[8px] font-mono text-cyan-300">{siteOptimizationInputs.latitudeDeg.toFixed(3)}°, {siteOptimizationInputs.longitudeDeg.toFixed(3)}°</div>
+                    <div className="text-[8px] font-mono text-cyan-300">{siteOptimizationInputs.latitudeDeg.toFixed(3)}°, {siteOptimizationInputs.longitudeDeg.toFixed(3)}° · design seed {siteOptimization?.searchSeed ?? siteDesignSeed}</div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <select value={sitePresetKey} onChange={event => selectSitePreset(event.target.value)} className="bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[9px] text-gray-300">
                       {Object.entries(SITE_LOCATION_PRESETS).filter(([key]) => key !== 'custom').map(([key, preset]) => <option key={key} value={key}>{preset.name}</option>)}
                     </select>
                     <button onClick={() => useCurrentLocationForSystem(false)} className="px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-[8px] font-bold text-cyan-200 uppercase">Use my location</button>
-                    <button onClick={() => { systemAutoKeyRef.current = ''; void runSiteOptimization(); void runWholeHouseOptimization(); void runSystemEvidence(); }} disabled={siteOptimizationRunning || wholeHouseOptimizationRunning} className="px-3 py-2 rounded-lg bg-emerald-500 text-black disabled:bg-gray-700 disabled:text-gray-500 text-[8px] font-black uppercase">{siteOptimizationRunning || wholeHouseOptimizationRunning ? 'Sweeping…' : 'Re-run automatic sweep'}</button>
-                    <button onClick={downloadSystemReport} disabled={!siteOptimization || !wholeHouseOptimization} className="px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-[8px] font-bold text-purple-200 uppercase disabled:opacity-40">Download JSON</button>
-                    <button onClick={downloadSystemTextBrief} disabled={!wholeHouseOptimization} className="px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-[8px] font-bold text-cyan-200 uppercase disabled:opacity-40">Decision brief (.txt)</button>
+                    <label className="flex items-center gap-2 text-[10px] text-gray-400">Area <input aria-label="Desired home floor area in square metres" type="number" min={35} max={500} step={5} value={siteOptimizationInputs.targetFloorAreaM2} onChange={event => {
+                      const target = Math.max(35, Math.min(500, Number(event.target.value) || 130));
+                      setSiteOptimizationInputs(current => ({
+                        ...current, targetFloorAreaM2: target,
+                        minFloorAreaM2: Math.max(30, Math.round(target * 0.95)),
+                        maxFloorAreaM2: Math.min(600, Math.round(target * 1.05)),
+                      }));
+                    }} className="w-[65px] rounded-lg border border-white/20 bg-black/50 px-2 py-2 text-white" /> m²</label>
+                    <button onClick={() => setSiteDesignSeed(seed => (seed + 7919) % 2147483647)} disabled={siteOptimizationRunning || coupledSiteFlowRunning} className="px-3 py-2 rounded-lg bg-cyan-500 text-black disabled:opacity-40 text-[9px] font-black uppercase">{siteOptimizationRunning || coupledSiteFlowRunning ? 'Exploring…' : 'Explore another design'}</button>
+                    <details className="relative">
+                      <summary className="cursor-pointer rounded-lg border border-white/15 px-3 py-2 text-[9px] text-gray-300">Reports &amp; technical settings</summary>
+                      <div className="absolute right-0 top-full z-30 mt-2 flex w-64 flex-col gap-2 rounded-xl border border-white/15 bg-[#101822] p-3 shadow-xl">
+                        <button onClick={downloadSystemReport} disabled={!siteOptimization || !wholeHouseOptimization} className="rounded-lg bg-white/10 px-3 py-2 text-[9px] text-white disabled:opacity-40">Download full results (JSON)</button>
+                        <button onClick={downloadSystemTextBrief} disabled={!wholeHouseOptimization} className="rounded-lg bg-white/10 px-3 py-2 text-[9px] text-white disabled:opacity-40">Download screening explanation</button>
+                        <div className="text-[9px] text-gray-400">Automatic sweep considers multiple dwelling shapes and ventilation strategies. The numbers are screening estimates, not a building certificate.</div>
+                      </div>
+                    </details>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2 text-[7px] font-mono uppercase">
+                {(() => {
+                  const design = summarizeBuildingDesign(siteOptimization, coupledSiteFlow);
+                  const format = (value: number | null) => value === null ? '—' : Math.round(value).toLocaleString('en-AU');
+                  return <section aria-label="Building design at a glance" className="rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-[#062027] to-[#0d1119] p-5 md:p-7">
+                    <div className="text-[9px] uppercase tracking-[0.2em] text-cyan-300 font-semibold">Your building design · one-page summary</div>
+                    <h2 className="mt-2 text-2xl md:text-3xl font-black tracking-tight text-white">{design.headline}</h2>
+                    <p className="mt-2 max-w-3xl text-sm text-gray-200 leading-relaxed">{design.explanation}</p>
+                    {design.buildingForm && <p className="mt-4 text-base font-bold text-cyan-100">{design.buildingForm} home · {format(design.floorAreaM2)} m² · {design.ventilationStrategy} ventilation</p>}
+                    <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {([
+                        ['Electricity per year', `${format(design.annualElectricalKWh)} kWh`],
+                        ['Energy over design life', `${format(design.estimatedLifecycleEnergyKWh)} kWh`],
+                        ['Building shapes tested', `${format(design.siteFormsTested)}`],
+                        ['Ventilation options tested', `${format(design.mechanicalOptionsTested)}`],
+                      ] as const).map(([label, value]) => <div key={label} className="rounded-xl bg-black/30 p-3">
+                        <div className="text-[10px] text-gray-300">{label}</div>
+                        <div className="mt-1 text-lg font-black text-white">{value}</div>
+                      </div>)}
+                    </div>
+                    <p className="mt-4 text-[11px] text-amber-200 leading-relaxed">{design.caution}</p>
+                  </section>;
+                })()}
+                <details className="text-[9px] text-gray-400">
+                  <summary className="cursor-pointer">Calculation checks &amp; evidence sources</summary>
+                  <div className="flex flex-wrap gap-2 text-[7px] font-mono uppercase mt-2">
                   <span className={`rounded-full border px-2 py-1 ${physicsValidation?.readyForScreening ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/5' : 'border-amber-500/30 text-amber-200 bg-amber-500/5'}`}>{physicsValidation ? `${physicsValidation.passed}/${physicsValidation.cases.length} numerical checks` : 'checking physics…'}</span>
                   <span className="rounded-full border border-cyan-500/30 text-cyan-200 bg-cyan-500/5 px-2 py-1">{siteContext ? `${siteContext.source.replaceAll('_', ' ')} · ${siteContext.neighbours.length} neighbours` : 'loading site evidence…'}</span>
                   <span className={`rounded-full border px-2 py-1 ${siteContext?.uncertainty.band === 'low' ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/30 text-amber-200'}`}>{siteContext ? `${siteContext.uncertainty.band} site uncertainty` : 'uncertainty pending'}</span>
-                </div>
+                  </div>
+                </details>
                 {(siteOptimizationError || wholeHouseOptimizationError || systemEvidenceError) && <div className="rounded-lg border border-red-500/25 bg-red-500/5 p-3 text-[9px] text-red-300">{siteOptimizationError || wholeHouseOptimizationError || systemEvidenceError}</div>}
-                <EarthSiteHouse3D
+                <details className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <summary className="cursor-pointer text-sm text-cyan-200 font-semibold">See the 3D simulation and technical evidence</summary>
+                  <div className="mt-3">
+                    <EarthSiteHouse3D
                   rooms={rooms}
                   location={{
                     name: siteOptimizationInputs.name,
@@ -4228,9 +4225,14 @@ const HouseView = ({
                   siteContext={siteContext}
                   physicsValidation={physicsValidation}
                 />
+                  </div>
+                </details>
+                <details className="rounded-xl border border-white/10 bg-black/15 p-3">
+                  <summary className="cursor-pointer text-sm text-gray-300 font-semibold">See how designs were compared</summary>
+                  <div className="mt-3">
                 <section aria-label="Geometry to airflow coupled screening" className="rounded-xl border border-cyan-500/25 bg-black/30 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-[11px] font-black text-cyan-200 uppercase tracking-widest">Site geometry → actual room layout → airflow</h3>
+                    <h3 className="text-[11px] font-black text-cyan-200 uppercase tracking-widest">Joint site geometry × mechanical airflow search</h3>
                     <span className="text-[8px] font-mono text-gray-400">
                       {coupledSiteFlowRunning ? 'Re-evaluating designs…' : coupledSiteFlow ? 'Linked screening complete' : 'Awaiting site design'}
                     </span>
@@ -4241,6 +4243,47 @@ const HouseView = ({
                     const fmt = (value: number) => Math.round(value).toLocaleString('en-AU');
                     const accepted = result.decision.qualifiesAsImprovement;
                     return <div className="mt-3 space-y-3">
+                      {result.jointSearch && (() => {
+                        const joint = result.jointSearch;
+                        return <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/[0.06] p-3 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h4 className="text-[11px] font-black text-cyan-200 uppercase">Lowest-energy tested geometry + HVAC pairing</h4>
+                            <span className="text-[8px] font-mono text-gray-300">{joint.geometryCandidatesEvaluated} geometries · {joint.mechanicalCandidatesEvaluated} airflow calculations · {joint.feasibleEquivalentAreaCandidates} valid pairs</span>
+                          </div>
+                          <p className={`rounded-md border px-3 py-2 text-[10px] ${joint.qualifiesAsImprovement ? 'border-emerald-500/30 text-emerald-100' : 'border-amber-500/30 text-amber-100'}`}>{joint.outcome}</p>
+                          {joint.selected && <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <div className="p-2 rounded-lg bg-black/30"><div className="text-[8px] text-gray-400">Selected building</div><strong className="text-[11px] text-white">{joint.selected.site.design.form.replaceAll('_', ' ')}</strong></div>
+                            <div className="p-2 rounded-lg bg-black/30"><div className="text-[8px] text-gray-400">Ventilation</div><strong className="text-[11px] text-white">{joint.selected.selectedAirflow.control.replaceAll('_', ' ')}</strong></div>
+                            <div className="p-2 rounded-lg bg-black/30"><div className="text-[8px] text-gray-400">Lifecycle energy</div><strong className="text-[11px] text-cyan-200">{fmt(joint.selected.energy.totalLifecycleKWh)} kWh</strong></div>
+                            <div className="p-2 rounded-lg bg-black/30"><div className="text-[8px] text-gray-400">Benefit vs site-only choice</div><strong className="text-[11px] text-cyan-200">{joint.lifecycleSavingsVsSiteOnlyChoiceKWh === null ? 'Not comparable' : `${fmt(joint.lifecycleSavingsVsSiteOnlyChoiceKWh)} kWh`}</strong></div>
+                          </div>}
+                          {joint.selected && (() => {
+                            const polygons = joint.selected.site.footprintPolygons;
+                            const points = polygons.flat();
+                            const xs = points.map(point => point.x);
+                            const ys = points.map(point => point.y);
+                            const minX = Math.min(...xs);
+                            const minY = Math.min(...ys);
+                            const width = Math.max(1, Math.max(...xs) - minX);
+                            const height = Math.max(1, Math.max(...ys) - minY);
+                            return <div className="rounded-lg border border-cyan-500/20 bg-black/35 px-3 py-2">
+                              <div className="text-[8px] uppercase tracking-wider text-cyan-200 mb-1">Selected joint footprint · schematic, not surveyed</div>
+                              <svg role="img" aria-label="Selected joint building footprint geometry" viewBox={`${minX - 1} ${minY - 1} ${width + 2} ${height + 2}`} className="w-full h-[170px]">
+                                {polygons.map((polygon, index) => <polygon key={index} points={polygon.map(point => `${point.x},${point.y}`).join(' ')} fill="rgba(34,211,238,0.13)" stroke="rgb(103,232,249)" strokeWidth="0.15" />)}
+                              </svg>
+                              <div className="text-[8px] text-gray-400">{joint.selected.site.design.floorAreaM2.toFixed(1)} m² · orientation {joint.selected.site.design.orientationDeg.toFixed(0)}° · generated room areas adjusted to conserve floor area. Actual adjacency unverified.</div>
+                            </div>;
+                          })()}
+                          <div className="space-y-1">
+                            {joint.ranked.slice(0, 4).map((candidate, index) =>
+                              <div key={index} className="flex flex-wrap gap-2 items-center justify-between border-t border-white/10 pt-1.5 text-[9px]">
+                                <span className={candidate.eligible ? 'text-gray-200' : 'text-amber-300'}>#{index + 1} · {candidate.form.replaceAll('_', ' ')} · {candidate.areaM2.toFixed(1)} m² · {candidate.airflowControl.replaceAll('_', ' ')} {candidate.eligible ? '✓' : '— fails screen'}</span>
+                                <strong className="font-mono text-cyan-100">{fmt(candidate.totalLifecycleKWh)} kWh</strong>
+                              </div>)}
+                          </div>
+                          <p className="text-[9px] text-amber-100/80">Bounded selection across generated geometry candidates, not full physical co-optimisation or a certified building recommendation. The rendered 3D form above still follows the separate site optimiser; use these joint results for the selected combination and see the downloaded JSON for its geometry.</p>
+                        </div>;
+                      })()}
                       <p className={`rounded-lg border px-3 py-2 text-[10px] ${accepted ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200' : 'border-amber-500/35 bg-amber-500/10 text-amber-100'}`}>
                         <strong>{accepted ? 'Linked design clears both screening gates.' : 'Not a supported net improvement.'}</strong> {result.decision.reason}
                       </p>
@@ -4260,6 +4303,8 @@ const HouseView = ({
                     </div>;
                   })()}
                 </section>
+                  </div>
+                </details>
               </motion.div>
             )}
             {activePanel === 'floorplan' && (
@@ -7752,7 +7797,7 @@ function App() {
   const [memorySize, setMemorySize] = useState(0);
   const [data, setData] = useState<{ time: number; val: number }[]>([]);
   const [telemetry, setTelemetry] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<AppTab>('sim');
+  const [activeTab, setActiveTab] = useState<AppTab>('house');
   const [houseInitialPanel, setHouseInitialPanel] = useState<HousePanel>('system');
   const pendingPresetVersionRef = useRef<SimVersion | null>(null);
 
@@ -7925,7 +7970,7 @@ function App() {
     return () => clearInterval(interval);
   }, [isSimulating, activeOptimizer, activeVersion, thermalMode, compressionLevel]);
 
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(false);
 
   const categories = [
     {
@@ -8074,59 +8119,33 @@ function App() {
       </AnimatePresence>
       <header className="border-b border-white/10 bg-black/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 cursor-pointer shrink-0" onClick={() => setShowSplash(true)}>
+          <div className="flex items-center gap-3 cursor-pointer shrink-0" onClick={() => { setActiveTab('house'); setHouseInitialPanel('system'); }}>
             <div className="w-8 h-8 bg-cyan-500 rounded flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.5)]">
               <Activity size={20} className="text-black" />
             </div>
             <h1 className="text-lg md:text-xl font-black tracking-tighter uppercase hidden sm:block">BeyondBound</h1>
           </div>
           
-          <div className="flex-1 flex items-center justify-center gap-2 overflow-x-auto no-scrollbar py-2">
-            <nav className="flex items-center gap-1 bg-white/5 p-1 rounded-lg border border-white/10 shrink-0">
-              {(['sim', 'house', 'codex', 'trajectory', 'selfbuild', 'elements'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => {
-                    console.log("Switching to tab:", tab);
-                    setActiveTab(tab);
-                  }}
-                  className={`px-3 md:px-4 py-1 md:py-1.5 rounded-md text-[10px] md:text-xs font-bold uppercase tracking-widest transition-all ${
-                    activeTab === tab 
-                      ? 'bg-purple-500 text-white shadow-lg' 
-                      : 'text-gray-400 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </nav>
-
-            <div className="h-4 w-px bg-white/10 shrink-0" />
-
-            <nav className="flex items-center gap-1 bg-white/5 p-1 rounded-lg border border-white/10 shrink-0">
-              {(['thermal', 'electrical', 'blockchain', 'math'] as const).map((type) => (
-                <button
-                  key={type}
-                  onClick={() => {
-                    pendingPresetVersionRef.current = null;
-                    setActiveOptimizer(type);
-                    setCurrentChainIndex(0);
-                    setActiveVersion(OPTIMIZATION_GOALS[type].tasks[0].version);
-                  }}
-                  className={`px-3 md:px-4 py-1 md:py-1.5 rounded-md text-[10px] md:text-xs font-bold uppercase tracking-widest transition-all ${
-                    activeOptimizer === type 
-                      ? 'bg-cyan-500 text-black shadow-lg' 
-                      : 'text-gray-400 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  {type}
-                </button>
-              ))}
-            </nav>
+          <div className="flex-1 flex items-center justify-end gap-3">
+            <span className="hidden md:block text-[10px] text-cyan-200 font-semibold">Automatic building design</span>
+            <details className="relative group">
+              <summary className="cursor-pointer select-none rounded-lg border border-white/10 px-3 py-2 text-[10px] font-semibold text-gray-400 hover:text-white">Research tools</summary>
+              <div className="absolute right-0 top-full mt-2 z-[70] w-48 rounded-xl border border-white/20 bg-[#0b1118] p-2 shadow-xl">
+                {([
+                  ['house', 'Building design'],
+                  ['sim', 'Physics experiments'],
+                  ['codex', 'Materials'],
+                  ['trajectory', 'Research memory'],
+                  ['selfbuild', 'Self-build'],
+                ] as const).map(([id, label]) => (
+                  <button key={id} onClick={() => setActiveTab(id)} className="block w-full text-left rounded-md px-3 py-2 text-[10px] text-gray-300 hover:bg-white/10">{label}</button>
+                ))}
+              </div>
+            </details>
           </div>
 
           <div className="flex items-center gap-2 md:gap-4 shrink-0">
-            {activeOptimizer === 'thermal' && (
+            {activeTab !== 'house' && activeOptimizer === 'thermal' && (
               <div className="hidden lg:flex bg-white/5 p-1 rounded-lg border border-white/10">
                 {(['heating', 'cooling'] as const).map((mode) => (
                   <button
@@ -8155,9 +8174,9 @@ function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <main className="max-w-7xl mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Simulation & Controls */}
-        <div className="lg:col-span-8 space-y-6">
+        <div className={activeTab === 'house' ? 'lg:col-span-12 space-y-6' : 'lg:col-span-8 space-y-6'}>
           <div
             className={activeTab === 'sim'
               ? 'relative aspect-video lg:aspect-auto lg:h-[600px]'
@@ -8626,8 +8645,8 @@ function App() {
           ))}
         </div>
 
-        {/* Right Column: Blueprints & Config */}
-        <div className="lg:col-span-4 space-y-6">
+        {/* Legacy simulation controls never crowd the one-page design. */}
+        <div className={activeTab === 'house' ? 'hidden' : 'lg:col-span-4 space-y-6'}>
           <AutonomousCore state={autonomousState} />
           
           <SimulationChainUI 

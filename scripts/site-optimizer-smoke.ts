@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import {
   evaluateSiteHouseDesign,
   optimizeSiteGeometry,
+  evaluateSiteReference,
+  assertSiteDesignWellFormed,
   SITE_LOCATION_PRESETS,
   type SiteHouseDesign,
 } from '../src/lib/site_geometry_optimizer';
@@ -34,12 +36,24 @@ const repeated = optimizeSiteGeometry(input);
 assert.equal(first.sunPath.length, 9, 'sun summary should include three hours for two solstices and an equinox');
 assert.ok(first.candidatesEvaluated >= 800, 'site search should include random and refinement candidates');
 assert.equal(first.best.feasible, true, 'selected site design must satisfy every screening constraint');
+assert.deepEqual(evaluateSiteReference(input), first.baseline,
+  'Server-derived reference must equal the site search baseline, not client assertions.');
+assert.doesNotThrow(() => assertSiteDesignWellFormed(first.best.design),
+  'Selected generated geometry must pass strict HTTP validation.');
+assert.throws(() => assertSiteDesignWellFormed({ ...first.best.design, widthM: Number.NaN }), /invalid widthM/,
+  'Nonfinite client dimensions must be rejected.');
+assert.throws(() => assertSiteDesignWellFormed({ ...first.best.design, roofPitchDeg: -90 }), /invalid roofPitchDeg/,
+  'Invalid client geometry must be rejected.');
+assert.throws(() => assertSiteDesignWellFormed({ ...first.best.design, form: 'space_dragon' }), /unsupported form/,
+  'Unknown forms must not bypass site screening.');
 assert.equal(first.best.complianceChecks.every(check => check.passed), true, 'all selected-design constraints must pass');
 assert.ok(first.best.design.floorAreaM2 >= 110 && first.best.design.floorAreaM2 <= 150, 'selected area must remain usable');
 assert.ok(first.best.totalLifecycleEnergyKWh <= first.baseline.totalLifecycleEnergyKWh, 'search must not return a higher-energy feasible design');
 assert.ok(first.best.solar.summerShadePercent >= 0 && first.best.solar.summerShadePercent <= 100, 'summer shade must be a percentage');
 assert.ok(first.best.solar.winterSolarAccessPercent >= 0 && first.best.solar.winterSolarAccessPercent <= 100, 'winter access must be a percentage');
 assert.deepEqual(first.best, repeated.best, 'site search must be deterministic for a fixed seed');
+assert.equal(first.searchSeed, input.seed, 'Search seed must be exported for exact replay.');
+assert.deepEqual(first.feasibleShortlist, repeated.feasibleShortlist, 'Shortlists must exactly replay for a fixed seed.');
 
 const courtyard: SiteHouseDesign = {
   form: 'courtyard', orientationDeg: 90, floorAreaM2: 130,

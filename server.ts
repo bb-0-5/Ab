@@ -12,8 +12,8 @@ import { runExistingHomeAutopilot } from "./src/lib/existing_home_autopilot";
 import { optimizeHvacCycle, type HvacCycleStrategy } from "./src/lib/hvac_cycle_optimizer";
 import { discoverAdaptiveWall, type AdaptiveWallStrategy } from "./src/lib/adaptive_wall_optimizer";
 import { optimizeRoomLifecycle } from "./src/lib/room_lifecycle_optimizer";
-import { optimizeSiteGeometry, evaluateSiteHouseDesign, SITE_LOCATION_PRESETS, type SiteHouseDesign, type SiteGeometryOptimizationInput } from "./src/lib/site_geometry_optimizer";
-import { screenCoupledSiteAirflow } from "./src/lib/site_whole_house_coupling";
+import { optimizeSiteGeometry, evaluateSiteHouseDesign, evaluateSiteReference, assertSiteDesignWellFormed, SITE_LOCATION_PRESETS, type SiteHouseDesign, type SiteGeometryOptimizationInput } from "./src/lib/site_geometry_optimizer";
+import { screenCoupledSiteAirflow, searchCoupledSiteMechanicalPortfolio } from "./src/lib/site_whole_house_coupling";
 import { optimizeWholeHouseSystem } from "./src/lib/whole_house_optimizer";
 import { runBuildingPhysicsValidation, type BuildingPhysicsValidationReport } from "./src/lib/building_physics_validation";
 import { buildAutomaticSiteContext, makeSiteContextCacheKey, type GeoJsonFeatureCollection } from "./src/lib/site_context";
@@ -763,18 +763,39 @@ async function startServer() {
     try {
       const raw = req.body?.siteInput;
       if (!raw || typeof raw !== "object"
-        || !req.body?.baselineDesign || !req.body?.proposedDesign) {
-        return res.status(400).json({ error: "Site inputs and baseline/proposed design geometries are required." });
+        || !req.body?.proposedDesign) {
+        return res.status(400).json({ error: "Site inputs and proposed design geometry are required." });
       }
       const siteInput = raw as SiteGeometryOptimizationInput;
-      const baseline = evaluateSiteHouseDesign(req.body.baselineDesign, siteInput);
+      // Derive the reference from CURRENT inputs, never from a forged client
+      // geometry. Artificially energy-hungry baselines must not create fake
+      // lifecycle savings.
+      const baseline = evaluateSiteReference(siteInput);
+      assertSiteDesignWellFormed(req.body.proposedDesign);
       const best = evaluateSiteHouseDesign(req.body.proposedDesign, siteInput);
       const location = { ...SITE_LOCATION_PRESETS.custom, ...(siteInput.location || {}) };
-      const result = screenCoupledSiteAirflow({ location, baseline, best }, {
+      const coupled = screenCoupledSiteAirflow({ location, baseline, best }, {
         lifecycleYears: siteInput.lifecycleYears,
         coolingCOP: siteInput.coolingCOP,
         maximumCandidates: 108,
       });
+      // A small portfolio comes from the site-only seed sweep. Do NOT trust
+      // its scores/feasibility; re-evaluate all proposed geometries server-side.
+      const submitted = Array.isArray(req.body?.candidateDesigns)
+        ? req.body.candidateDesigns.slice(0, 12)
+        : [];
+      const candidates = submitted.map((design: unknown) => {
+        assertSiteDesignWellFormed(design);
+        return evaluateSiteHouseDesign(design, siteInput);
+      });
+      const jointSearch = searchCoupledSiteMechanicalPortfolio(
+        { location, baseline, best }, candidates, {
+          lifecycleYears: siteInput.lifecycleYears,
+          coolingCOP: siteInput.coolingCOP,
+          maximumCandidates: 48,
+        },
+      );
+      const result = { ...coupled, jointSearch };
       const workspace = workspaceFor(req);
       appendWorkspaceRecord(workspace, {
         type: "coupled_site_airflow_screen",
@@ -787,7 +808,7 @@ async function startServer() {
           improvementAccepted: result.decision.qualifiesAsImprovement,
           lifecycleEnergySavingsKWh: result.decision.lifecycleEnergySavingsKWh,
         },
-        state: { input: { siteInput, baselineDesign: req.body.baselineDesign, proposedDesign: req.body.proposedDesign }, result },
+        state: { input: { siteInput, proposedDesign: req.body.proposedDesign }, result },
       });
       saveToDisk();
       return res.json(result);
