@@ -210,6 +210,7 @@ export default function LocalApp(){
    }
   };
   instance.onerror=e=>{if(id!==requestId.current)return;setWorking(false);
+   queueRef.current=[];setBatch({total:0,completed:0});
    setStatus('Local worker error: '+(e.message||'Failed to load computation.'))};
   instance.postMessage({...input,id,mode,discoveries:prior,
     ...(mode==='building'&&epwText?{epwText}:{}),
