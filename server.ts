@@ -12,7 +12,8 @@ import { runExistingHomeAutopilot } from "./src/lib/existing_home_autopilot";
 import { optimizeHvacCycle, type HvacCycleStrategy } from "./src/lib/hvac_cycle_optimizer";
 import { discoverAdaptiveWall, type AdaptiveWallStrategy } from "./src/lib/adaptive_wall_optimizer";
 import { optimizeRoomLifecycle } from "./src/lib/room_lifecycle_optimizer";
-import { optimizeSiteGeometry, type SiteHouseDesign } from "./src/lib/site_geometry_optimizer";
+import { optimizeSiteGeometry, evaluateSiteHouseDesign, SITE_LOCATION_PRESETS, type SiteHouseDesign, type SiteGeometryOptimizationInput } from "./src/lib/site_geometry_optimizer";
+import { screenCoupledSiteAirflow } from "./src/lib/site_whole_house_coupling";
 import { optimizeWholeHouseSystem } from "./src/lib/whole_house_optimizer";
 import { runBuildingPhysicsValidation, type BuildingPhysicsValidationReport } from "./src/lib/building_physics_validation";
 import { buildAutomaticSiteContext, makeSiteContextCacheKey, type GeoJsonFeatureCollection } from "./src/lib/site_context";
@@ -749,6 +750,49 @@ async function startServer() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Site geometry optimization failed.";
       res.status(400).json({ error: message });
+    }
+  });
+
+  // Link the site optimiser's EXACT proposed geometry to a single detached
+  // dwelling mechanical-airflow search. Recompute both user-submitted
+  // designs on the server: NEVER trust client-supplied savings, scores, or
+  // apparent compliance flags. This is independent of the four-archetype
+  // early-design comparison and deliberately does not apply EPW to a
+  // non-hourly Site + Shadow envelope model.
+  app.post("/api/house/optimize-site-airflow", (req, res) => {
+    try {
+      const raw = req.body?.siteInput;
+      if (!raw || typeof raw !== "object"
+        || !req.body?.baselineDesign || !req.body?.proposedDesign) {
+        return res.status(400).json({ error: "Site inputs and baseline/proposed design geometries are required." });
+      }
+      const siteInput = raw as SiteGeometryOptimizationInput;
+      const baseline = evaluateSiteHouseDesign(req.body.baselineDesign, siteInput);
+      const best = evaluateSiteHouseDesign(req.body.proposedDesign, siteInput);
+      const location = { ...SITE_LOCATION_PRESETS.custom, ...(siteInput.location || {}) };
+      const result = screenCoupledSiteAirflow({ location, baseline, best }, {
+        lifecycleYears: siteInput.lifecycleYears,
+        maximumCandidates: 108,
+      });
+      const workspace = workspaceFor(req);
+      appendWorkspaceRecord(workspace, {
+        type: "coupled_site_airflow_screen",
+        category: "house",
+        version: "v12",
+        summary: result.decision.reason,
+        stats: {
+          proposedForm: result.proposed.site.design.form,
+          proposedAreaM2: result.proposed.site.design.floorAreaM2,
+          improvementAccepted: result.decision.qualifiesAsImprovement,
+          lifecycleEnergySavingsKWh: result.decision.lifecycleEnergySavingsKWh,
+        },
+        state: { input: { siteInput, baselineDesign: req.body.baselineDesign, proposedDesign: req.body.proposedDesign }, result },
+      });
+      saveToDisk();
+      return res.json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Site/airflow coupling failed.";
+      return res.status(400).json({ error: message });
     }
   });
 
