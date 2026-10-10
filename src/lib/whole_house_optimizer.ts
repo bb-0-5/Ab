@@ -163,6 +163,7 @@ export interface EmbodiedAssumptionStressTest {
 export interface WholeHouseOptimizationResult {
   location: SiteLocationProfile;
   candidatesEvaluated: number;
+  searchCoverage: Record<DwellingArchetype, { evaluated: number; feasible: number }>;
   baseline: EvaluatedWholeHouseConfiguration;
   best: EvaluatedWholeHouseConfiguration;
   ranked: EvaluatedWholeHouseConfiguration[];
@@ -674,6 +675,10 @@ export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}
     || a.totalLifecycleEnergyKWh - b.totalLifecycleEnergyKWh
   ));
   const best = evaluated[0] || baseline;
+  const searchCoverage = Object.fromEntries(archetypes.map(id => [id, {
+    evaluated: evaluated.filter(candidate => candidate.configuration.archetype === id).length,
+    feasible: evaluated.filter(candidate => candidate.configuration.archetype === id && candidate.feasible).length,
+  }])) as Record<DwellingArchetype, { evaluated: number; feasible: number }>;
   const bestByArchetype = new Map<DwellingArchetype, EvaluatedWholeHouseConfiguration>();
   evaluated.forEach(candidate => {
     const current = bestByArchetype.get(candidate.configuration.archetype);
@@ -738,6 +743,7 @@ export function optimizeWholeHouseSystem(rawInput: WholeHouseOptimizerInput = {}
   return {
     location,
     candidatesEvaluated: evaluated.length,
+    searchCoverage,
     baseline,
     best,
     ranked: evaluated.slice(0, 12),
