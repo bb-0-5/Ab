@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import BuildingProgress from './BuildingProgress';
 import EvidenceVisualizer from './EvidenceVisualizer';
 import ResearchBoard from './ResearchBoard';
@@ -93,8 +93,11 @@ function Metric({label,value,detail}:{label:string;value:string;detail?:string})
  </div>;
 }
 
+const PrintablePreview=lazy(()=>import('./PrintablePreview'));
+
 export default function LocalApp(){
  const [goal,setGoal]=useState<Goal>('building');
+ const [showPrintable3D,setShowPrintable3D]=useState(false);
  const [preset,setPreset]=useState('melbourne');
  const [area,setArea]=useState(130);
  const [temperature,setTemperature]=useState(22);
@@ -593,6 +596,15 @@ export default function LocalApp(){
       </div>:<p className="mt-4 text-sm text-amber-200">
        No candidate satisfies the required budget, print-bed, illustrative thermal stability and minimum frame section together.
       </p>}
+      {selectedSuit.selected&&<div className="mt-4">
+       <button type="button" onClick={()=>setShowPrintable3D(v=>!v)}
+        className="rounded-lg border border-cyan-400/50 px-4 py-2.5 text-sm font-bold text-cyan-100">
+        {showPrintable3D?'Hide printable 3D inspection':'Inspect the actual printable part in 3D'}
+       </button>
+       {showPrintable3D&&<Suspense fallback={<p className="mt-3 text-xs text-slate-400">Preparing geometry viewer…</p>}>
+        <PrintablePreview candidate={selectedSuit.selected}/>
+       </Suspense>}
+      </div>}
       {selectedSuit.selected&&<div className="mt-4 flex flex-wrap items-center gap-3">
        <strong className="text-cyan-200">{selectedSuit.selected.material} · {fmt(selectedSuit.selected.thicknessMm,1)} mm thick · {fmt(selectedSuit.selected.rimWidthMm,1)} mm rim</strong>
        <button onClick={saveSTL} className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100">Download STL for slicer check (mm)</button>
