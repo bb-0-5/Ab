@@ -147,6 +147,44 @@ provenance, but an ORD record needs real outcome extraction and
 identical-context grouping before use; no cross-reaction pooled
 yield claim is made here.
 
+## 4A. Stronger independent-batch screening and unobserved yields
+
+The calibration path now accepts optional `batch_id` and `protocol_id`
+CSV columns. A `protocol_id` must identify an unchanged experimental
+recipe, including catalysts, solvent or gas, reagents and concentrations;
+merely sharing a product/reaction name is not enough. Contradictory
+protocols are rejected rather than pooled.
+
+If all observations identify at least **four distinct batches**, the fit
+holds out entire batches: no batch can appear in training and evaluation.
+Otherwise it runs the original deterministic *condition-grouped*
+split, which is explicitly labelled **weaker** and is not automatically
+eligible for learned-model replay. The original holdout test can measure
+interpolation on nearby conditions but not robustness to a different
+laboratory or measurement apparatus.
+
+The app separately displays MAE of the **target** and **side-product**
+yield, maximum target error, training temperature/time range, and a
+constant-mean target-yield baseline. Only a batch-disjoint,
+same-protocol fit that beats the baseline with target MAE ≤0.1 may be
+replayed provisionally for the exact reaction and compatible medium.
+This 10-percentage-point screening gate is an intentionally
+conservative **software threshold**, not a generally accepted
+experimental-chemistry accuracy standard. It does not validate barrier
+interventions, catalysts or material chemistry.
+
+A missing CSV yield is rejected instead of becoming `Number('')=0`.
+Zero measured target or side yield is **censored** or below detection
+from the perspective of the logarithmic Arrhenius fit; the app refuses
+to infer positive rates from such values until a real detection-limit
+and censored-likelihood model is implemented. Missing side products are
+never assumed to be zero.
+
+Sources are entered by users and **not independently authenticated**
+by AboveBound. No measured, sourced reaction-yield dataset has yet
+been installed. Synthetic mathematical unit tests demonstrate the
+split and numerical error computations only.
+
 ## 5. Scope of automatic learning
 
 A finding first enters as a HYPOTHESIS or reference material datum,
