@@ -8174,9 +8174,9 @@ function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <main className="max-w-7xl mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Simulation & Controls */}
-        <div className="lg:col-span-8 space-y-6">
+        <div className={activeTab === 'house' ? 'lg:col-span-12 space-y-6' : 'lg:col-span-8 space-y-6'}>
           <div
             className={activeTab === 'sim'
               ? 'relative aspect-video lg:aspect-auto lg:h-[600px]'
@@ -8645,8 +8645,8 @@ function App() {
           ))}
         </div>
 
-        {/* Right Column: Blueprints & Config */}
-        <div className="lg:col-span-4 space-y-6">
+        {/* Legacy simulation controls never crowd the one-page design. */}
+        <div className={activeTab === 'house' ? 'hidden' : 'lg:col-span-4 space-y-6'}>
           <AutonomousCore state={autonomousState} />
           
           <SimulationChainUI 
