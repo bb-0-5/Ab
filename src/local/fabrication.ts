@@ -228,3 +228,37 @@ export function checkPanelMesh(candidate:FabCandidate){
  return {triangles:tris.length,uniqueEdges:edges.size,nonManifoldEdges:bad,
   watertight:bad===0};
 }
+
+/**
+ * Automatic co-search across three generic printable polymers. This searches
+ * the *lowest modeled material cost* that meets geometric and thermal filters.
+ * It is NOT evidence of strength or mechanical performance.
+ */
+export function optimizeFabricationPortfolio(
+ input:Omit<FabInput,'filament'>,
+):FabResult{
+ const scans=(['PLA','PETG','TPU'] as const).map(filament=>
+   optimizePrintablePanel({...input,filament}));
+ const good=scans.flatMap(x=>x.selected?[x.selected]:[]);
+ good.sort((a,b)=>a.estimatedTotalCostAUD-b.estimatedTotalCostAUD||
+   a.massG-b.massG);
+ const chosen=good[0]||null;
+ const parent=scans[0];
+ return {
+  ...parent,
+  candidatesEvaluated:scans.reduce((sum,x)=>sum+x.candidatesEvaluated,0),
+  rejected:scans.reduce((sum,x)=>sum+x.rejected,0),
+  selected:chosen,
+  alternatives:scans.flatMap(x=>x.alternatives).sort(
+   (a,b)=>a.estimatedTotalCostAUD-b.estimatedTotalCostAUD).slice(0,12),
+  bestCostUpperBoundAUD:chosen?.estimatedTotalCostAUD??null,
+  feasibleForDecorativePrint:!!chosen,
+  missingConstraints:chosen
+   ?['Minimized modeled cost under hard budget, bed, phase proxy and geometric section constraints, NOT under a verified structural strength target.']
+   :[...new Set(scans.flatMap(x=>x.missingConstraints))],
+  limitations:[
+   ...parent.limitations,
+   'Three generic printer filament classes screened at an assumed local price per kg. This is not material-supplier market pricing and does not account for different filament feed systems.',
+  ],
+ };
+}
