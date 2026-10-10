@@ -72,6 +72,7 @@ import type { AdaptiveWallOptimizationResult } from './lib/adaptive_wall_optimiz
 import type { HeightAirflowProfile, HeightAirflowSweepResult } from './lib/height_airflow';
 import { AdaptiveWallCutaway3D, EarthSiteHouse3D, HeightAirflowCutaway3D, HouseAirflowNetwork3D, SoftwareSimulationFallback } from './components/HousePhysics3D';
 import type { WholeHouseOptimizationResult } from './lib/whole_house_optimizer';
+import { buildWholeHouseDecisionBrief } from './lib/whole_house_decision_brief';
 import type { BuildingPhysicsValidationReport } from './lib/building_physics_validation';
 import type { AutomaticSiteContextResult } from './lib/site_context';
 import {
@@ -3722,7 +3723,7 @@ const HouseView = ({
   const downloadSystemReport = () => {
     if (!siteOptimization || !wholeHouseOptimization) return;
     const topDesigns = [...wholeHouseOptimization.archetypeComparisons]
-      .sort((a, b) => a.lifecycleEnergyKWh - b.lifecycleEnergyKWh)
+      .sort((a, b) => Number(b.feasible) - Number(a.feasible) || a.lifecycleEnergyKWh - b.lifecycleEnergyKWh)
       .slice(0, 3);
     const report = {
       reportType: 'BeyondBound building-energy screening report',
@@ -3735,6 +3736,9 @@ const HouseView = ({
       optimizedWholeSystem: wholeHouseOptimization.best,
       topDesigns,
       improvement: wholeHouseOptimization.improvement,
+      searchCoverage: wholeHouseOptimization.searchCoverage,
+      embodiedAssumptionStressTest: wholeHouseOptimization.embodiedAssumptionStressTest,
+      decisionBrief: buildWholeHouseDecisionBrief(wholeHouseOptimization),
       limitations: [
         'Not a building permit, energy rating, engineering certificate or substitute for a calibrated whole-building model.',
         'Open footprint data does not prove internal layouts, construction assemblies, occupancy or legal shared boundaries.',
@@ -3745,6 +3749,18 @@ const HouseView = ({
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = `beyondbound-screening-${wholeHouseOptimization.location.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadSystemTextBrief = () => {
+    if (!wholeHouseOptimization) return;
+    const content = buildWholeHouseDecisionBrief(wholeHouseOptimization);
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `abovebound-decision-brief-${wholeHouseOptimization.location.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.txt`;
     anchor.click();
     URL.revokeObjectURL(url);
   };
@@ -4111,7 +4127,8 @@ const HouseView = ({
                     </select>
                     <button onClick={() => useCurrentLocationForSystem(false)} className="px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-[8px] font-bold text-cyan-200 uppercase">Use my location</button>
                     <button onClick={() => { systemAutoKeyRef.current = ''; void runSiteOptimization(); void runWholeHouseOptimization(); void runSystemEvidence(); }} disabled={siteOptimizationRunning || wholeHouseOptimizationRunning} className="px-3 py-2 rounded-lg bg-emerald-500 text-black disabled:bg-gray-700 disabled:text-gray-500 text-[8px] font-black uppercase">{siteOptimizationRunning || wholeHouseOptimizationRunning ? 'Sweeping…' : 'Re-run automatic sweep'}</button>
-                    <button onClick={downloadSystemReport} disabled={!siteOptimization || !wholeHouseOptimization} className="px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-[8px] font-bold text-purple-200 uppercase disabled:opacity-40">Download report</button>
+                    <button onClick={downloadSystemReport} disabled={!siteOptimization || !wholeHouseOptimization} className="px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-[8px] font-bold text-purple-200 uppercase disabled:opacity-40">Download JSON</button>
+                    <button onClick={downloadSystemTextBrief} disabled={!wholeHouseOptimization} className="px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-[8px] font-bold text-cyan-200 uppercase disabled:opacity-40">Decision brief (.txt)</button>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 text-[7px] font-mono uppercase">
