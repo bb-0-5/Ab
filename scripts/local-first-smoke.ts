@@ -20,6 +20,10 @@ assert.ok(unmatched.best.worstBandPowerFraction<=unmatched.best.bandAveragePower
 assert.ok(unmatched.best.toleranceWorstPowerFraction>=0);
 assert.ok(unmatched.best.toleranceWorstPowerFraction<=1);
 assert.ok(unmatched.best.toleranceWorstPowerFraction<=unmatched.best.centerDeliveredPowerFraction+1e-9);
+assert.equal(unmatched.frequencyResponse.length,21,'Plot actual sampled frequency response');
+assert.ok(unmatched.frequencyResponse.every(p=>p.deliveredPowerFraction>=0&&p.deliveredPowerFraction<=1));
+assert.ok(unmatched.frequencyResponse.every(p=>p.frequencyMHz>=85&&p.frequencyMHz<=115));
+
 if(unmatched.recommended)
  assert.ok(unmatched.best.toleranceWorstPowerFraction>unmatched.baselineDeliveredPowerFraction+0.005,
    'A robust recommendation must actually beat the no-network baseline at tolerance corners.');
