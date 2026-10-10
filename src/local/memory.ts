@@ -10,7 +10,7 @@
 export interface MemoryEntry{
  id:string;
  savedAt:string;
- mode:'building'|'circuits'|'chemistry';
+ mode:'building'|'circuits'|'chemistry'|'membrane';
  label:string;
  input:Record<string,number|string>;
  result:unknown;
@@ -112,16 +112,27 @@ function compact(entry:MemoryEntry){
  // Keep summary only in Supabase, never upload complete simulation arrays,
  // site maps or hourly weather data.
  const result=entry.result as any;
- const scalarResult=entry.mode==='building'?{
-  best:result.best,
-  location:result.location,weather:result.weather,
+ const scalarResult:any=entry.mode==='building'?{
+  best:result.best,location:result.location,weather:result.weather,
   siteCandidates:result.siteCandidates,mechanicalCandidates:result.mechanicalCandidates,
   comparisonSupported:result.comparisonSupported,qualifiesAsImprovement:result.qualifiesAsImprovement,
   savingsVsBaselineKWh:result.savingsVsBaselineKWh,
  }:entry.mode==='circuits'?{best:result.best,requested:result.requested,
   baselineDeliveredPowerFraction:result.baselineDeliveredPowerFraction,tested:result.tested}
- :{baseline:result.baseline,gate:result.gate,candidatesTested:result.candidatesTested};
+ :entry.mode==='membrane'?{condition:result.condition,task:result.task,
+  selected:result.selected,unmetRequirements:result.unmetRequirements,
+  passingCandidates:result.passingCandidates,totalCandidates:result.totalCandidates}
+ :{baseline:result.baseline,gate:result.gate,candidatesTested:result.candidatesTested,
+   calibration:result.calibration?{
+    reactionId:result.calibration.reactionId,environment:result.calibration.environment,
+    holdoutMAE:result.calibration.holdoutMAE,holdoutRMSE:result.calibration.holdoutRMSE,
+    holdoutBaselineMAE:result.calibration.holdoutBaselineMAE,
+    gate:result.calibration.gate,holdoutCount:result.calibration.holdoutCount,
+   }:null,calibrationStatus:result.calibrationStatus};
  if(entry.mode==='building'&&scalarResult.best)scalarResult.best={...scalarResult.best,geometry:undefined};
+ // Share bounded typed material/need hypotheses between devices, not huge
+ // raw experimental CSVs or local EPW/weather arrays.
+ if(Array.isArray(result.discoveries))scalarResult.discoveries=result.discoveries.slice(0,12);
  return {...entry,result:scalarResult};
 }
 export async function uploadCloud(entry:MemoryEntry):Promise<void>{
