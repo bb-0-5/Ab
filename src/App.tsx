@@ -4202,7 +4202,6 @@ const HouseView = ({
                   <span className={`rounded-full border px-2 py-1 ${physicsValidation?.readyForScreening ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/5' : 'border-amber-500/30 text-amber-200 bg-amber-500/5'}`}>{physicsValidation ? `${physicsValidation.passed}/${physicsValidation.cases.length} numerical checks` : 'checking physics…'}</span>
                   <span className="rounded-full border border-cyan-500/30 text-cyan-200 bg-cyan-500/5 px-2 py-1">{siteContext ? `${siteContext.source.replaceAll('_', ' ')} · ${siteContext.neighbours.length} neighbours` : 'loading site evidence…'}</span>
                   <span className={`rounded-full border px-2 py-1 ${siteContext?.uncertainty.band === 'low' ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/30 text-amber-200'}`}>{siteContext ? `${siteContext.uncertainty.band} site uncertainty` : 'uncertainty pending'}</span>
-                </div>
                   </div>
                 </details>
                 {(siteOptimizationError || wholeHouseOptimizationError || systemEvidenceError) && <div className="rounded-lg border border-red-500/25 bg-red-500/5 p-3 text-[9px] text-red-300">{siteOptimizationError || wholeHouseOptimizationError || systemEvidenceError}</div>}
