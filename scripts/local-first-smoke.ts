@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { optimizeImpedanceMatch } from '../src/local/impedance';
 import { optimizeRouteSelectivity, ILLUSTRATIVE_ROUTES } from '../src/local/selectivity';
+import { microstripImpedance, suggestMicrostripWidth } from '../src/local/pcb';
 
 // Passive RF power conservation, relative to an ideal Thevenin source.
 const matched=optimizeImpedanceMatch({frequencyMHz:100,sourceOhms:50,loadOhms:50});
@@ -18,6 +19,17 @@ assert.deepEqual(unmatched,optimizeImpedanceMatch({frequencyMHz:100,sourceOhms:5
 assert.throws(()=>optimizeImpedanceMatch({frequencyMHz:1e6,sourceOhms:50,loadOhms:100}),/1–1000/);
 assert.throws(()=>optimizeImpedanceMatch({frequencyMHz:100,sourceOhms:-1,loadOhms:100}),/1–1000/);
 assert.ok(Math.abs(unmatched.baselineDeliveredPowerFraction-8/9)<1e-10);
+
+const pcb=suggestMicrostripWidth(50,.18,4.2);
+assert.ok(Math.abs(pcb.predictedImpedanceOhms-50)<1e-7);
+assert.ok(pcb.traceWidthMm>.1&&pcb.traceWidthMm<1,
+  'Quasi-static FR4 microstrip example must have plausible mm scale.');
+const narrower=microstripImpedance(.2,.18,4.2);
+const wider=microstripImpedance(.5,.18,4.2);
+assert.ok(narrower.impedance>wider.impedance,
+  'A wider microstrip above the same ground plane must have lower impedance.');
+assert.throws(()=>microstripImpedance(0,.18,4.2),/positive finite/);
+assert.throws(()=>suggestMicrostripWidth(0),/Target/);
 
 // A passive gate can reduce side products in a toy process, but must not
 // imply that total target output from the same input material has increased.
