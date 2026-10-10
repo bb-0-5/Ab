@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import BuildingProgress from './BuildingProgress';
+import EvidenceVisualizer from './EvidenceVisualizer';
 import {advanceSeed,addBuildingRun,buildingKey,loadCampaign,saveCampaign,weatherFingerprint,
  type BuildingCampaign,type BuildingRun} from './building_campaign';
 import type { MatchReport } from './impedance';
@@ -516,6 +517,8 @@ export default function LocalApp(){
      <button onClick={exportCurrent} disabled={!result}
       className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 disabled:opacity-30">Save detailed JSON</button>
     </div>
+    {selectedCircuit&&<EvidenceVisualizer circuit={selectedCircuit}/>}
+    {selectedChem&&<EvidenceVisualizer chemistry={selectedChem}/>}
     {selectedBuilding&&<>
      <p className={`mt-4 rounded-xl border p-3 text-sm ${selectedBuilding.qualifiesAsImprovement?'border-emerald-700/50 bg-emerald-950/20 text-emerald-200':'border-amber-800/40 bg-amber-950/20 text-amber-200'}`}>
       {selectedBuilding.best
