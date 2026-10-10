@@ -12,7 +12,7 @@ import { optimizeRouteSelectivity } from './selectivity';
 import { calibrateKnownYields,parseKnownYieldsCSV,screenHypotheticalBarriers } from './kinetics';
 import {
   defaultCondition,membraneNeed,screenMembrane,proposeMaterialDiscoveries,
-  proposeIsotopeHypotheses,probeDiscovery,checkCondition,
+  proposeIsotopeHypotheses,probeDiscovery,checkCondition,searchDiscoveryUseCases,
   type Discovery,type OperatingCondition,type Task,
 } from './cross_domain';
 
@@ -37,7 +37,9 @@ context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
   ):[];
   if(request.mode==='membrane'){
    const report=screenMembrane(request.condition,request.task,prior);
-   context.postMessage({id:request.id,kind:'result',mode:'membrane',result:report});
+   const useCaseSweep=searchDiscoveryUseCases([...prior,...report.discoveries].slice(0,16),12);
+   context.postMessage({id:request.id,kind:'result',mode:'membrane',
+    result:{...report,useCaseSweep,priorDiscoveriesTested:prior.length}});
    return;
   }
   if(request.mode==='circuits'){
@@ -53,8 +55,10 @@ context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
    };
    const discoveries=[finding];
    const crossDomain=[...prior,...discoveries].slice(0,20).flatMap(x=>probeDiscovery(x,condition));
+   const useCaseSweep=searchDiscoveryUseCases([...prior,...discoveries],12);
    context.postMessage({id:request.id,kind:'result',mode:'circuits',
-    result:{...raw,discoveries,crossDomain}});
+    result:{...raw,discoveries,crossDomain,useCaseSweep,
+      priorDiscoveriesTested:prior.length}});
    return;
   }
   if(request.mode==='chemistry'){
@@ -80,8 +84,19 @@ context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
       condition});
    }
    const crossDomain=[...discoveries,...prior].slice(0,20).flatMap(x=>probeDiscovery(x,condition));
+   const useCaseSweep=searchDiscoveryUseCases([...discoveries,...prior],12);
+   // Every V5 membrane request stored in device memory becomes a fresh
+   // context-specific material search. No guaranteed candidate if the
+   // requirement is outside known metal phase/transport properties.
+   const matchedMembraneNeeds=prior.filter(d=>d.kind==='membrane_need'&&d.task)
+    .slice(0,6).map(need=>{
+      const screen=screenMembrane(need.condition,need.task!,discoveries);
+      return {needId:need.id,condition:need.condition,
+        candidate:screen.selected,requirements:screen.unmetRequirements};
+    });
    const results={...toy,calibration,barrierScreen,calibrationStatus,
-    discoveries,crossDomain,priorDiscoveriesTested:prior.length,
+    discoveries,crossDomain,useCaseSweep,matchedMembraneNeeds,
+    priorDiscoveriesTested:prior.length,
     caution:'No molecular wavefunctions, entropy-derived barriers or isotope chemistry are solved from first principles. A possible event may have an infinitesimal finite-horizon probability.'};
    context.postMessage({id:request.id,kind:'result',mode:'chemistry',result:results});
    return;
@@ -152,6 +167,7 @@ context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
    limitations:joint.limitations,
    discoveries:[membraneNeed(defaultCondition('air'),'thermal_barrier')],
    crossDomain:prior.slice(0,20).flatMap(d=>probeDiscovery(d,defaultCondition('air'))),
+   useCaseSweep:searchDiscoveryUseCases(prior,12),
    priorDiscoveriesTested:prior.length,
   };
   context.postMessage({id:request.id,kind:'result',mode:'building',result:results});
