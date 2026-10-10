@@ -1,13 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MatchReport } from './impedance';
 import type { RouteSelectivityResult } from './selectivity';
+import type { YieldCalibration } from './kinetics';
+import {
+  defaultCondition,extractDiscoveriesFromHistory,
+  type MaterialReport,type OperatingCondition,type Medium,type Task,type Discovery,type Probe,
+} from './cross_domain';
 import {
   cloudConfig, configureCloud, connectCloud, isCloudConnected,
   loadDeviceResults, readCloud, saveDeviceResult, uploadCloud,
   type MemoryEntry,
 } from './memory';
 
-type Goal='building'|'circuits'|'chemistry';
+type Goal='building'|'circuits'|'chemistry'|'membrane';
+type ChemistryResult=RouteSelectivityResult&{
+ calibration:YieldCalibration|null;
+ barrierScreen:null|{baseline:{targetFraction:number;sideFraction:number;eventProbability:number};
+  bestHypothetical:{deltaTargetBarrierJMol:number;deltaSideBarrierJMol:number;
+    prediction:{targetFraction:number;sideFraction:number}};
+  contextValidated:boolean;limitation:string};
+ calibrationStatus:string;discoveries:Discovery[];crossDomain:Probe[];
+ priorDiscoveriesTested:number;caution:string;
+};
+type SharedResult={discoveries?:Discovery[];crossDomain?:Probe[];priorDiscoveriesTested?:number};
 type BuildingResult={
   seed:number;location:string;areaM2:number;temperatureC:number;
   weather:{mode:string;stationName:string|null;weatherHours:number|null;note:string;stationDistanceKm:number|null};
@@ -18,7 +33,7 @@ type BuildingResult={
   comparisonSupported:boolean;qualifiesAsImprovement:boolean;
   savingsVsBaselineKWh:number|null;explanation:string;limitations:string[];
 };
-type Result=BuildingResult|MatchReport|RouteSelectivityResult;
+type Result=BuildingResult|MatchReport|ChemistryResult|MaterialReport;
 type WorkerMessage={id:number;kind:'progress'|'error'|'result';mode?:Goal;message?:string;error?:string;result?:Result};
 const LOCALES:{[key:string]:string}={
   melbourne:'Melbourne, Victoria',bendigo:'Bendigo, Victoria',
@@ -72,6 +87,15 @@ export default function LocalApp(){
  const [source,setSource]=useState(50);
  const [load,setLoad]=useState(100);
  const [minimumAccepted,setMinimumAccepted]=useState(.5);
+ const [medium,setMedium]=useState<Medium>('air');
+ const [operatingK,setOperatingK]=useState(295);
+ const [pressurePa,setPressurePa]=useState(101325);
+ const [airflow,setAirflow]=useState(1);
+ const [membraneTask,setMembraneTask]=useState<Task>('heat_spreader');
+ const [knownYieldsCSV,setKnownYieldsCSV]=useState('');
+ const [knownYieldsName,setKnownYieldsName]=useState('');
+ const [reactionId,setReactionId]=useState('');
+ const [durationS,setDurationS]=useState(3600);
  const [epwText,setEpwText]=useState('');
  const [epwName,setEpwName]=useState('');
  const [result,setResult]=useState<Result|null>(null);
@@ -92,10 +116,14 @@ export default function LocalApp(){
   const id=++requestId.current;
   setWorking(true);setStatus('Starting a local calculation…');
   setResult(null);setResultGoal(null);
+  const condition:OperatingCondition={medium,temperatureK:operatingK,pressurePa,flowSpeedMs:airflow};
+  const prior=extractDiscoveriesFromHistory(loadDeviceResults(),24);
   const input:Record<string,string|number>=mode==='building'
    ?{preset,areaM2:area,seed:overrides?.seed??seed,targetTempC:temperature}
    :mode==='circuits'?{frequencyMHz:frequency,sourceOhms:source,loadOhms:load}
-   :{minimumAcceptedFraction:minimumAccepted};
+   :mode==='chemistry'?{minimumAcceptedFraction:minimumAccepted,
+      reactionId,timeS:durationS,medium,temperatureK:operatingK}
+   :{task:membraneTask,medium,temperatureK:operatingK,pressurePa};
   instance.onmessage=(e:MessageEvent<WorkerMessage>)=>{
    const m=e.data;
    if(m.id!==requestId.current)return;
@@ -108,7 +136,9 @@ export default function LocalApp(){
    setStatus('Completed locally. No server performed this calculation.');
    const name=mode==='building'
     ?`${LOCALES[preset]||preset} · ${area} m² · seed ${overrides?.seed??seed}`
-    :mode==='circuits'?`${frequency} MHz · ${source} → ${load} Ω`:'Hypothetical pathway selectivity';
+    :mode==='circuits'?`${frequency} MHz · ${source} → ${load} Ω`
+     :mode==='membrane'?`${membraneTask} · ${medium} · ${operatingK} K`
+     :'Measured-yield / hypothetical chemistry exploration';
    const entry:MemoryEntry={
     id:crypto.randomUUID(),mode,label:name,input,
     savedAt:new Date().toISOString(),result:value,
@@ -119,10 +149,13 @@ export default function LocalApp(){
   };
   instance.onerror=e=>{if(id!==requestId.current)return;setWorking(false);
    setStatus('Local worker error: '+(e.message||'Failed to load computation.'))};
-  instance.postMessage({...input,id,mode,
+  instance.postMessage({...input,id,mode,discoveries:prior,
     ...(mode==='building'&&epwText?{epwText}:{}),
+    ...((mode==='chemistry'||mode==='membrane')?{condition}:{}),
+    ...(mode==='chemistry'&&knownYieldsCSV?{knownYieldsCSV}:{}),
   });
- },[preset,area,temperature,seed,frequency,source,load,minimumAccepted,epwText,cloudOn]);
+ },[preset,area,temperature,seed,frequency,source,load,minimumAccepted,epwText,cloudOn,
+   medium,operatingK,pressurePa,airflow,membraneTask,knownYieldsCSV,reactionId,durationS]);
  useEffect(()=>{start('building');return()=>worker.current?.terminate();},[]); // initial simulation only
  const reseed=()=>{const next=(seed+7919)%2147483647;setSeed(next);start('building',{seed:next});};
  const uploadFile=async(e:React.ChangeEvent<HTMLInputElement>)=>{
@@ -130,6 +163,17 @@ export default function LocalApp(){
   if(file.size>5*1024*1024){setStatus('Choose an EPW under 5 MB.');return;}
   try{setEpwText(await file.text());setEpwName(file.name);setStatus('Weather file ready; run search to use it locally.');}
   catch{setStatus('Could not read weather file on this device.');}
+ };
+ const uploadKnownYields=async(e:React.ChangeEvent<HTMLInputElement>)=>{
+  const file=e.target.files?.[0];if(!file)return;
+  if(file.size>2_000_000){setStatus('Yield CSV must be under 2 MB.');return;}
+  try{setKnownYieldsCSV(await file.text());setKnownYieldsName(file.name);
+   setStatus('Measured-yield CSV loaded locally. Specify its reaction_id for calibration.');
+  }catch{setStatus('Cannot read the measured yield CSV.');}
+ };
+ const setMediumDefaults=(next:Medium)=>{
+  setMedium(next);const c=defaultCondition(next);
+  setOperatingK(c.temperatureK);setPressurePa(c.pressurePa);setAirflow(c.flowSpeedMs);
  };
  const saveCloud=async()=>{
   setCloudStatus('Checking private project connection…');
@@ -156,7 +200,10 @@ export default function LocalApp(){
  };
  const selectedBuilding=resultGoal==='building'?result as BuildingResult:null;
  const selectedCircuit=resultGoal==='circuits'?result as MatchReport:null;
- const selectedChem=resultGoal==='chemistry'?result as RouteSelectivityResult:null;
+ const selectedChem=resultGoal==='chemistry'?result as ChemistryResult:null;
+ const selectedMembrane=resultGoal==='membrane'?result as MaterialReport:null;
+ const findings=extractDiscoveriesFromHistory(history,24);
+ const currentShared=(result||{}) as SharedResult;
 
  return <div className="min-h-screen bg-[#071016] text-slate-100 selection:bg-cyan-700">
   <header className="border-b border-white/10 px-4 py-4 md:px-8">
