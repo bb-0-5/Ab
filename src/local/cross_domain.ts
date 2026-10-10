@@ -7,6 +7,7 @@
  * Temperature/medium must be explicit: 5000 K in vacuum is a different
  * physical regime from 300 K in water or moving air.
  */
+import type { YieldCalibration } from './kinetics';
 export type Medium='vacuum'|'air'|'water';
 export interface OperatingCondition {
  medium:Medium;temperatureK:number;pressurePa:number;
@@ -25,6 +26,9 @@ export interface Discovery {
   id:string;thermalConductivityWmK:number|null;phaseLimitK:number|null;
   atomicNumber?:number;massNumber?:number;
  };
+ /** Tested fitted rates may be replayed only within the original reaction,
+  * medium and training-temperature envelope when holdout gate passes. */
+ kinetics?:YieldCalibration;
  task?:Task;
 }
 export interface Probe {
@@ -149,9 +153,18 @@ export function probeDiscovery(d:Discovery,condition:OperatingCondition):Probe[]
   if(d.kind==='membrane_need')return unknown('Unfulfilled material-property request; chemistry or materials evidence must supply an independently tested candidate.');
   if(d.kind==='isotope_hypothesis')return unknown(
    'Atomic number/mass do not identify isotope-dependent melting, thermal conductivity, electronics or reaction yield. Cannot assign a physical advantage without measurements.');
-  if(d.kind==='kinetic_fit')return domain==='chemistry'
-    ?unknown('Condition-specific empirical fit may be reused only for its reaction/medium/temperature range; no isotope or material property inferred.')
-    :unknown('A chemical yield fit is not a material, membrane, building or RF constitutive law.');
+  if(d.kind==='kinetic_fit'){
+    if(domain!=='chemistry')
+      return unknown('A calibrated chemical yield curve is NOT a material, membrane, building or RF constitutive law.');
+    const fit=d.kinetics;
+    if(!fit||fit.gate!=='passes_baseline'||fit.environment!==condition.medium)
+      return unknown('Missing or inadequate held-out calibration or wrong reaction medium.');
+    if(condition.temperatureK<fit.temperatureRangeK[0]||condition.temperatureK>fit.temperatureRangeK[1])
+      return unknown('Requested temperature is outside measured training range; extrapolation not supported.');
+    return {discoveryId:d.id,domain,condition,status:'conditional',
+      message:`Re-usable for the SAME reaction ID and medium only. Held-out MAE ${(fit.holdoutMAE*100).toFixed(2)} percentage points; still not an independently validated kinetic law.`,
+      score:Math.max(0,1-fit.holdoutMAE)};
+  }
   if(d.kind==='rf_interface')return domain==='circuits'
     ?unknown('RF impedance estimate requires source/load, frequency and stackup at this operating condition.')
     :unknown('A passive electrical match cannot establish structural, membrane or chemical suitability.');
