@@ -1036,6 +1036,38 @@ export function EarthSiteHouse3D({
       </div>)}
       </div>
     </div>}
+    {wholeHouse && (() => {
+      const stress = wholeHouse.embodiedAssumptionStressTest;
+      const winnerChanged = stress.verdict === 'ranking_changes';
+      const warning = stress.verdict !== 'stable_within_test';
+      return <section aria-label="Embodied energy assumption stress test" className={`rounded-xl border p-4 ${warning ? 'border-amber-500/35 bg-amber-500/10' : 'border-emerald-500/25 bg-emerald-500/5'}`}>
+        <div className="flex flex-wrap justify-between gap-2 items-center">
+          <h4 className={`text-[10px] font-black uppercase tracking-widest ${warning ? 'text-amber-200' : 'text-emerald-300'}`}>How reliable is that winner?</h4>
+          <span className="text-[9px] font-mono text-white">{stress.baselineWinnerWins}/{stress.scenariosEvaluated} hypothetical cases</span>
+        </div>
+        <p className="mt-2 text-[10px] text-gray-200 leading-relaxed">
+          {stress.verdict === 'no_feasible_design'
+            ? 'No design met the project-defined constraints, so there is no supported winner.'
+            : stress.verdict === 'incomplete_feasible_coverage'
+              ? `Only ${stress.feasibleArchetypes}/4 dwelling types had feasible candidates. The ranking cannot be treated as a complete comparison.`
+              : winnerChanged
+                ? 'The best dwelling type CHANGES when the assumed construction-energy figures change. Treat the first-place result as provisional, not a verified recommendation.'
+                : 'First place stays the same across this small what-if test, but its construction-energy assumptions are still unverified.'}
+        </p>
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+          {(Object.keys(DWELLING_ARCHETYPES) as Array<keyof typeof DWELLING_ARCHETYPES>).map(id =>
+            <div key={id} className="rounded-lg border border-white/10 bg-black/25 p-2">
+              <div className="text-[8px] text-gray-300">{DWELLING_ARCHETYPES[id].label}</div>
+              <div className="text-sm font-black text-cyan-200">{stress.winnerCounts[id]}/{stress.scenariosEvaluated}</div>
+              <div className="text-[7px] text-gray-500">{wholeHouse.searchCoverage[id].evaluated} configurations · {wholeHouse.searchCoverage[id].feasible} feasible</div>
+            </div>,
+          )}
+        </div>
+        <p className="mt-2 text-[8px] text-amber-100/80">
+          Each dwelling type's UNSOURCED building embodied energy is independently varied −25%, unchanged or +25% (81 deterministic combinations). These are illustrative stress cases, NOT probabilities, measured uncertainty ranges or code certification. Comparable product EPDs and site data are needed for a decision.
+        </p>
+      </section>;
+    })()}
     {wholeHouse && <details className="rounded-xl border border-white/10 bg-black/25 p-3">
       <summary className="cursor-pointer text-[9px] font-bold text-gray-300 uppercase tracking-widest">Winning configuration, balance and model limits</summary>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 text-[8px] text-gray-400">
