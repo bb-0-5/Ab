@@ -19,12 +19,14 @@ import {discoverAdaptiveWall,type AdaptiveWallOptimizationInput} from './adaptiv
 import {optimizeRoomLifecycle,type RoomLifecycleOptimizationInput} from './room_lifecycle_optimizer';
 import {runExistingHomeAutopilot,type ExistingHomeAutopilotInput} from './existing_home_autopilot';
 import {runBuildingPhysicsValidation} from './building_physics_validation';
+import {buildAutomaticSiteContext,type GeoJsonFeatureCollection,type SiteContextRoom} from './site_context';
 
 export const BROWSER_HOUSE_ENDPOINTS=[
  '/api/house/optimize-site','/api/house/optimize-site-airflow',
  '/api/house/optimize-whole-system','/api/house/optimize-room',
  '/api/house/optimize-hvac-cycle','/api/house/optimize-adaptive-wall',
  '/api/house/existing-home-autopilot','/api/house/validation-report',
+ '/api/house/site-context',
 ] as const;
 export type HouseEndpoint=typeof BROWSER_HOUSE_ENDPOINTS[number];
 
@@ -50,10 +52,24 @@ const obj=(value:unknown):Record<string,unknown>=>{
   throw new Error('Simulation request must be an object.');
  return value as Record<string,unknown>;
 };
-export function runHouseComputation(path:HouseEndpoint,payload:unknown={}):unknown {
+export function runHouseComputation(path:HouseEndpoint,payload:unknown={},
+ cachedGeoJson?:GeoJsonFeatureCollection|null):unknown {
  if(path==='/api/house/validation-report')return runBuildingPhysicsValidation();
  const raw=obj(payload);
  switch(path){
+  case '/api/house/site-context':{
+   const loc=raw.location&&typeof raw.location==='object'&&!Array.isArray(raw.location)
+    ?raw.location as Record<string,unknown>:{};
+   const location={...SITE_LOCATION_PRESETS.custom,...loc};
+   if(!Number.isFinite(Number(location.latitudeDeg))
+    ||!Number.isFinite(Number(location.longitudeDeg)))throw new Error('Invalid site location');
+   return buildAutomaticSiteContext({
+    location:location as typeof SITE_LOCATION_PRESETS.custom,
+    rooms:Array.isArray(raw.rooms)?raw.rooms as SiteContextRoom[]:[],
+    searchRadiusM:Number(raw.searchRadiusM)||120,
+    cachedGeoJson:cachedGeoJson||null,
+   });
+  }
   case '/api/house/optimize-site':{
    return optimizeSiteGeometry(siteInput(raw));
   }
