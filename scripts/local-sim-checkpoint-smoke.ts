@@ -22,4 +22,16 @@ assert.equal(engineCheckpoint(endpoint,{method:'POST',body:JSON.stringify({state
 assert.equal(engineCheckpoint(endpoint,{method:'POST',body:JSON.stringify({})},'test_user')?.status,400);
 assert.deepEqual(await engineCheckpoint(endpoint,{method:'GET'},'test_user')?.json(),payload,
  'oversize invalid writes must not overwrite a good checkpoint');
+const historyUrl=new URL('https://abovebound.org/api/workspace');
+const saveEvent=engineCheckpoint(new URL('https://abovebound.org/api/workspace/events'),
+ {method:'POST',body:JSON.stringify({
+  type:'manual_checkpoint',category:'thermal',version:'v6',
+  summary:'Genuine V6 screenshot-less metrics checkpoint',stats:{efficiency:.5},
+ })},'test_user');
+assert.equal(saveEvent?.status,200);
+const workspace=await engineCheckpoint(historyUrl,{method:'GET'},'test_user')?.json();
+assert.equal(workspace.recordCount,1);
+assert.equal(workspace.records[0].version,'v6');
+assert.equal(workspace.records[0].stats.efficiency,.5);
+assert.equal((await engineCheckpoint(historyUrl,{method:'GET'},'other_user')?.json()).recordCount,0);
 console.log('Original V0–V13 checkpoint save/load: real browser storage, isolation, size guard and error handling passed.');
