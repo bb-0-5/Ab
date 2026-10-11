@@ -90,6 +90,16 @@ export class V7Engine {
   private _framesSinceCapture: number = 0;
   private _optimizeInterval: number = 30;
   private _framesSinceOptimize: number = 0;
+  // A proposed change is evaluated only after V1–V6 have recomputed.
+  // At most ONE upstream parameter may be under test at a time.
+  private _pendingTrial: {
+    index: number; before: number; proposed: number; baselineScore: number;
+  } | null = null;
+  private _nextParamIndex = 0;
+  private _revision = 0;
+  private _appliedRevision = 0;
+  acceptedTrials = 0;
+  rejectedTrials = 0;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -219,125 +229,98 @@ export class V7Engine {
   }
 
   /**
-   * Run one optimization step: evaluate metrics, decide parameter adjustments.
-   * Uses hill-climbing: try small perturbations, keep what improves the score.
+   * Sequential, bounded coordinate search. Unlike a visual-only hill-climber,
+   * this evaluates the SAME proposed parameter after the upstream chain
+   * recomputes its flow metrics. A degraded score rolls back to the previous
+   * parameter value before probing a different dimension.
+   *
+   * V6 is a dynamic model, not a controlled physical experiment. These deltas
+   * are screening feedback, not evidence of measured causal improvement.
    */
   private _optimizeStep() {
     if (!this._latestMetrics) return;
-
     const score = this._computeScore(this._latestMetrics);
+    if (!Number.isFinite(score)) {
+      this.recommendations = [];
+      this._revision++;
+      return;
+    }
     this.currentScore = score;
-
-    // Record snapshot
     this.snapshots.push({
       frame: this._framesSinceCapture,
       metrics: { ...this._latestMetrics },
-      params: this.params.map(p => ({ name: p.name, value: p.value })),
+      params: this.params.map(p => ({ name:p.name,value:p.value })),
       score,
     });
     if (this.snapshots.length > this.maxSnapshots) this.snapshots.shift();
-
-    // Update best
-    if (score > this.bestScore) {
+    if (this.snapshots.length === 1 || score > this.bestScore) {
       this.bestScore = score;
-      this.bestParams = this.params.map(p => ({ name: p.name, value: p.value }));
+      this.bestParams = this.params.map(p => ({ name:p.name,value:p.value }));
     }
-
-    // Hill climbing: pick one parameter to perturb
     this.recommendations = [];
-    const paramIdx = this.snapshots.length % this.params.length;
-    const param = this.params[paramIdx];
-
-    // If we have at least 2 snapshots, check if last move helped
-    if (this.snapshots.length >= 2) {
-      const prev = this.snapshots[this.snapshots.length - 2];
-      const metricDelta = score - prev.score;
-      param.lastMetricDelta = metricDelta;
-
-      if (metricDelta >= 0) {
-        // Last direction was good or neutral — continue same direction
-        const delta = param.lastDelta !== 0 ? param.lastDelta : param.step;
-        const newVal = Math.max(param.min, Math.min(param.max, param.value + delta));
-        if (newVal !== param.value) {
-          this.recommendations.push({
-            target: param.target,
-            key: param.key,
-            newValue: newVal,
-            reason: `${param.name}: continuing direction (score +${metricDelta.toFixed(3)})`,
-          });
-          param.lastDelta = delta;
-          param.value = newVal;
-        }
-      } else {
-        // Last direction was bad — reverse
-        const delta = param.lastDelta !== 0 ? -param.lastDelta : param.step;
-        const newVal = Math.max(param.min, Math.min(param.max, param.value + delta));
-        if (newVal !== param.value) {
-          this.recommendations.push({
-            target: param.target,
-            key: param.key,
-            newValue: newVal,
-            reason: `${param.name}: reversing (score ${metricDelta.toFixed(3)})`,
-          });
-          param.lastDelta = delta;
-          param.value = newVal;
-        }
-      }
-    } else {
-      // First step: try increasing
-      const delta = param.step;
-      const newVal = Math.min(param.max, param.value + delta);
-      if (newVal !== param.value) {
+    if (this._pendingTrial) {
+      const trial = this._pendingTrial;
+      const param = this.params[trial.index];
+      const difference = score - trial.baselineScore;
+      param.lastMetricDelta = difference;
+      // Require a small relative benefit to avoid accepting numerical noise.
+      const threshold = 1e-5 * Math.max(1,Math.abs(trial.baselineScore));
+      const accepted = difference > threshold;
+      this._pendingTrial = null;
+      this._nextParamIndex = (trial.index + 1) % this.params.length;
+      if (!accepted) {
+        this.rejectedTrials++;
+        param.value = trial.before;
+        param.lastDelta = -param.lastDelta || -param.step;
         this.recommendations.push({
-          target: param.target,
-          key: param.key,
-          newValue: newVal,
-          reason: `${param.name}: initial exploration (+${delta})`,
+          target:param.target,key:param.key,newValue:trial.before,
+          reason:`Rollback ${param.name}: modeled score Δ${difference.toFixed(4)} (not an improvement)`,
         });
-        param.lastDelta = delta;
-        param.value = newVal;
+        this._revision++;
+        // Allow a full recomputation interval at the restored baseline.
+        return;
       }
+      this.acceptedTrials++;
     }
-
-    // Also check for severe bottleneck situations
-    if (this._latestMetrics.bottleneckCount > this._loops.length * 0.3) {
-      // Too many bottlenecks — suggest increasing neighborK to get more connections
-      const v3K = this.params.find(p => p.target === 'v3' && p.key === 'neighborK');
-      if (v3K && v3K.value < v3K.max) {
-        this.recommendations.push({
-          target: 'v3',
-          key: 'neighborK',
-          newValue: Math.min(v3K.max, v3K.value + 1),
-          reason: `High bottleneck ratio (${this._latestMetrics.bottleneckCount}/${this._loops.length}): increasing V3 connectivity`,
-        });
+    // One independent candidate per observation interval. No second hidden
+    // bottleneck mutation contaminates attribution to the first parameter.
+    for (let n=0;n<this.params.length;n++) {
+      const index=(this._nextParamIndex+n)%this.params.length;
+      const param=this.params[index];
+      const direction=param.lastDelta===0?param.step:param.lastDelta;
+      let proposed=Math.max(param.min,Math.min(param.max,param.value+direction));
+      if (proposed===param.value) {
+        proposed=Math.max(param.min,Math.min(param.max,param.value-direction));
+        if (proposed===param.value) continue;
       }
+      const before=param.value;
+      this._pendingTrial={index,before,proposed,baselineScore:score};
+      param.value=proposed;
+      param.lastDelta=proposed-before;
+      this.recommendations.push({
+        target:param.target,key:param.key,newValue:proposed,
+        reason:`Test ${param.name} ${before} → ${proposed}; compare next V6 observation`,
+      });
+      this._revision++;
+      return;
     }
-
-    if (this._latestMetrics.efficiency < 0.1 && this._latestMetrics.pathCount < 3) {
-      // Very low flow — loosen stability threshold to get more diverse stabilizations
-      const v1Thresh = this.params.find(p => p.target === 'v1' && p.key === '_stabilityThreshold');
-      if (v1Thresh && v1Thresh.value < v1Thresh.max) {
-        this.recommendations.push({
-          target: 'v1',
-          key: '_stabilityThreshold',
-          newValue: Math.min(v1Thresh.max, v1Thresh.value + v1Thresh.step),
-          reason: 'Very low flow: loosening V1 stability to capture more diverse positions',
-        });
-      }
-    }
+    this._revision++;
   }
 
   /**
-   * Apply tuning recommendations to upstream engines.
-   * The caller (App.tsx) passes engine refs; V7 sets properties directly.
+   * Apply each new recommendation once to actual upstream simulation engines.
+   * The animation loop calls this every frame, but repeating the same change
+   * must never double-apply it. Rollbacks are transmitted the same way.
    */
   applyRecommendations(engines: Record<string, any>) {
+    if (this._appliedRevision === this._revision) return;
     for (const rec of this.recommendations) {
       const engine = engines[rec.target];
-      if (engine && rec.key in engine) {
-        (engine as any)[rec.key] = rec.newValue;
+      if (engine && rec.key in engine && Number.isFinite(rec.newValue)) {
+        engine[rec.key] = rec.newValue;
       }
     }
+    this._appliedRevision = this._revision;
   }
 
   isStable() {
@@ -514,6 +497,8 @@ export class V7Engine {
       bestScore: this.bestScore,
       params: this.params.map(p => ({ name: p.name, value: p.value })),
       snapshotCount: this.snapshots.length,
+      acceptedTrials: this.acceptedTrials,
+      rejectedTrials: this.rejectedTrials,
     };
   }
 
@@ -524,9 +509,18 @@ export class V7Engine {
     if (Array.isArray(state.params)) {
       for (const saved of state.params) {
         const param = this.params.find(p => p.name === saved?.name);
-        if (param && Number.isFinite(saved?.value)) param.value = saved.value;
+        if (param && Number.isFinite(saved?.value))
+          param.value = Math.max(param.min,Math.min(param.max,saved.value));
       }
     }
+    if (Number.isSafeInteger(state.acceptedTrials) && state.acceptedTrials >= 0)
+      this.acceptedTrials = state.acceptedTrials;
+    if (Number.isSafeInteger(state.rejectedTrials) && state.rejectedTrials >= 0)
+      this.rejectedTrials = state.rejectedTrials;
+    this._pendingTrial = null;
+    this.recommendations = [];
+    this._revision++;
+    this._appliedRevision = this._revision;
   }
 
   dispose() {
