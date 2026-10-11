@@ -4175,6 +4175,14 @@ const HouseView = ({
                     <div className="text-[8px] text-gray-500 uppercase tracking-widest">Automatic site anchor</div>
                     <div className="text-[11px] font-bold text-white mt-1">{siteOptimizationInputs.name}</div>
                     <div className="text-[8px] font-mono text-cyan-300">{siteOptimizationInputs.latitudeDeg.toFixed(3)}°, {siteOptimizationInputs.longitudeDeg.toFixed(3)}° · design seed {siteOptimization?.searchSeed ?? siteDesignSeed}</div>
+                    {siteOptimization?.learning?.mode === 'browser_model_portfolio' && (
+                      <div className="text-[8px] font-mono text-emerald-300 mt-1"
+                        title="Numerical screening only. Every retained geometry is re-evaluated under identical climate, hazard, area and energy assumptions. Saved only in this browser.">
+                        V12 learned from {siteOptimization.learning.archiveCandidatesUsed} previous compatible designs
+                        {' · '}{siteOptimization.learning.retainedCandidates} viable designs remembered
+                        {' · '}{siteOptimization.learning.priorSiteExperiments} local experiments
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <select value={sitePresetKey} onChange={event => selectSitePreset(event.target.value)} className="bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[9px] text-gray-300">
