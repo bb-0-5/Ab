@@ -41,6 +41,36 @@ pretend a missing server response is a valid calculation or success.
 The user specifically wants the actual simulation engines developed,
 not a redesign, replacement UI or collection of manual parameter forms.
 
+## Latest incremental work on the original Sims
+
+- **V7 now really tests upstream configuration changes.** Its coordinate
+  search changes one V1/V2/V3/V4 parameter at a time, waits for recomputed
+  V6 flow observations, retains a modeled improvement and rolls back a
+  degraded response before trying the next parameter. Accepted/rejected
+  counts and bounded parameters are preserved in V7 saved state. This is
+  simulation feedback, not controlled hardware validation.
+- **V9/V13 material estimates no longer get overwritten with fabricated
+  properties derived from V7 score.** Material constitutive values must
+  originate from the materials pipeline rather than a generic optimizer
+  novelty number.
+- **Original Save/Load Simulation State and Workspace history work without
+  Express.** The original `memoryFetch` route uses actual device-local
+  storage for `/api/sim-state/:version`, `/api/workspace` and workspace
+  event checkpointing. Storage failures are returned as errors rather than
+  claimed successes. Saved states remain isolated to this browser workspace.
+- **Duplicate-state checking is local**, bounded and explicitly only
+  identifies previously seen signatures; it does not establish a new physical
+  invention or material. An unavailable check no longer increments a random
+  complexity counter.
+
+Existing graphical tabs, 3D engines, simulation chain and human-accessible
+controls are unchanged. Some legacy server-only house endpoints remain
+unavailable on static Pages; port them individually if needed rather than
+replacing the original user interface.
+
+Regression coverage: `npm run test:v7-feedback` and
+`npm run test:sim-checkpoint`, included in `npm run test:all`.
+
 ## Archived local workbench history (not homepage)
 
 # AboveBound — self-directed discovery on your own computer
