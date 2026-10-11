@@ -1,10 +1,10 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
-import TechApp from './local/TechApp';
+import LocalApp from './local/LocalApp';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <TechApp />
+    <LocalApp />
   </StrictMode>,
 );
