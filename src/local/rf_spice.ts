@@ -55,3 +55,30 @@ export function saveSpiceNetlist(report:MatchReport):void{
  anchor.click();
  setTimeout(()=>URL.revokeObjectURL(url),5000);
 }
+
+/** A sourcing worksheet, deliberately without invented SKUs or package ratings. */
+export function rfBomCsv(report:MatchReport):string{
+ const rows=[
+  ['Reference','Role','Component','Nominal value','Minimum -5%','Maximum +5%','Validation needed'],
+  ['Z1','Series',report.best.series.type,report.best.series.label,
+   (report.best.series.value*.95).toExponential(5),
+   (report.best.series.value*1.05).toExponential(5),
+   'Vendor datasheet: package ESR SRF current voltage and temperature'],
+  ['Z2','Shunt',report.best.shunt.type,report.best.shunt.label,
+   (report.best.shunt.value*.95).toExponential(5),
+   (report.best.shunt.value*1.05).toExponential(5),
+   'Vendor datasheet: package ESR SRF current voltage and temperature'],
+  ['RS','Source termination','R',report.requested.sourceOhms+' ohm','','',
+   'Check source impedance; resistor represents source model'],
+  ['RL','Load termination','R',report.requested.loadOhms+' ohm','','',
+   'Check real antenna/cable/termination impedance'],
+ ];
+ const quote=(x:string)=>'"'+x.replaceAll('"','""')+'"';
+ return rows.map(r=>r.map(x=>quote(String(x))).join(',')).join('\r\n')+'\r\n';
+}
+export function saveRfBom(report:MatchReport):void{
+ const blob=new Blob([rfBomCsv(report)],{type:'text/csv;charset=utf-8'});
+ const url=URL.createObjectURL(blob);const a=document.createElement('a');
+ a.href=url;a.download=`abovebound-${report.requested.frequencyMHz}MHz-bom.csv`;
+ a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);
+}
