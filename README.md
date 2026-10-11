@@ -31,15 +31,13 @@ The full original implementation is still under `src/simulations/` and
 viewport, with the engine running rather than showing a new dashboard.
 The original CSS baseline was restored.
 
-**Known deployment limitation:** Cloudflare Pages is static. The original
-Three.js visual engines are client-side, but some original app panels
-still call historical Express `/api/...` routes (for site calculations,
-server workspace persistence or synthetic autonomous status). Those
-API-backed features may be unavailable until individually ported to
-browser-local workers or a supported persistence backend. Do not
-pretend a missing server response is a valid calculation or success.
-The user specifically wants the actual simulation engines developed,
-not a redesign, replacement UI or collection of manual parameter forms.
+**Runtime:** Cloudflare Pages is static. The original Three.js
+V0–V13 visuals compute in-browser. The V12 physical solvers have been
+reconnected through a dedicated local Web Worker, preserving the original
+`/api/house/*` frontend calls; engine states and history save in this
+browser. Server-only synthetic autonomous status and any unported routes
+may still be unavailable. No code claims a missing server result is a
+successful calculation, experimental measurement or certified design.
 
 ## Latest incremental work on the original Sims
 
@@ -70,6 +68,55 @@ replacing the original user interface.
 
 Regression coverage: `npm run test:v7-feedback` and
 `npm run test:sim-checkpoint`, included in `npm run test:all`.
+
+## Current production: physics in the original simulator
+
+The full original `src/App.tsx` and visual V0–V13 simulation chain remain the
+**only homepage**. These are additional working connections, not another UI.
+
+### Real V12 browser-local calculations
+
+`src/lib/house_compute.ts` dispatches the same deterministic first-party
+numeric solvers imported by the former Express server. Their original
+`/api/house/` calls now execute in `src/lib/house_compute.worker.ts`,
+via the bounded worker transport `src/lib/browser_house_compute.ts`:
+
+- Site + solar geometry optimisation (including geometric feasibility gates).
+- Geometry-preserving site → coupled mechanical/airflow screens. All proposed
+  geometry is re-evaluated against the same site conditions; submitted scores
+  or fake compliance flags cannot qualify a design.
+- Whole-house systems and equivalent-service archetype comparisons.
+- Room lifecycle, HVAC cycling, wall/membrane and existing-home retrofit.
+- Building-physics validation and site context. Bundled OpenStreetMap-derived
+  footprints are used for **exactly matching** snapshots available in
+  `site-context-cache/`. Missing places are reported as lower-confidence
+  engine-only geometry, not fake observed neighbouring buildings.
+
+**Site evidence limitation:** the static browser does not have the operator's
+independently validated hourly EPW weather files. Client-injected claims of
+station provenance and weather arrays are therefore discarded; site and
+whole-house results use explicitly labelled preset degree-day climates.
+A model output is not a building permit, field measurement or code approval.
+
+### Real V6 → V13 requirements
+
+V6 transmits its actual computed thermal-field operating range to V13 as
+a **typed machine-generated thermal-survival requirement**. V13 displays
+the range and screens a built composite's **estimated** melting point.
+A screening pass is explicitly provisional; measured phase/transport,
+chemical compatibility and temperature-dependent constitutive data are
+still required.
+
+V7's performance score, a suggested topology, or the passage of animation
+frames **cannot mutate material density, conductivity or melting point**.
+Uncalibrated input produces a recorded, bounded observation, not new matter
+or an experimentally verified material.
+
+Regressions:
+`npm run test:browser-house` exercises the original full numerical
+calculations and rejects forged climate/shadow evidence;
+`npm run test:v13-needs` tests the V6-to-V13 handoff and blocks
+unverified material mutation. Both are part of `npm run test:all`.
 
 ## Archived local workbench history (not homepage)
 
