@@ -169,7 +169,12 @@ export default function AutonomousDiscovery({
     if(!r.running||id!==r.token)return;
     finish(job,errorObservation(job,'Time budget exceeded; candidate skipped, no evidence added.',new Date().toISOString()));
    },MAX_WORKER_MS);
-   worker.postMessage({...job.request,id,discoveries:prior});
+   // The exact same building benchmark may inherit the winning FULL design
+   // genome, not merely a score or a seed. The worker validates the geometry.
+   // A new seed still introduces exploration, then mutates the old incumbent.
+   const checkpoint=job.mode==='building'?campaign.best?.best?.design:null;
+   worker.postMessage({...job.request,id,discoveries:prior,
+    ...(checkpoint?{learnedDesigns:[checkpoint]}:{})});
   }catch(e){finish(job,errorObservation(job,e instanceof Error?e.message:'Worker creation failed.',new Date().toISOString()));}
  };
  const begin=useCallback((count:number)=>{
