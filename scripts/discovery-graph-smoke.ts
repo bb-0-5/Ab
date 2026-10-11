@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {emptyAutoLedger,planNextExperiment,evaluateAutoExperiment,recordAutoOutcome,
+import {emptyAutoLedger,planNextExperiment,inferNextExperiment,evaluateAutoExperiment,recordAutoOutcome,
  bestComparableObservation,type AutoObservation} from '../src/local/autonomy';
 import {materialBenchmark,extractMachineNeeds,needsSummary} from '../src/local/discovery_graph';
 import {defaultCondition,membraneNeed,screenMembrane,checkCondition} from '../src/local/cross_domain';
@@ -54,8 +54,10 @@ const duplicate=recordAutoOutcome(
 assert.equal(duplicate.needs?.filter(n=>n.title.includes('Building heat-flow')).length,1,
  'Repeat building runs must not invent duplicate material needs');
 
-const rf0=planNextExperiment(ledger,[],123);
-assert.equal(rf0.mode,'circuits','After an unresolved dependency, search a fresh RF condition');
+const novel=planNextExperiment(ledger,[],123);
+assert.equal(novel.mode,'suit','After screening a dependency, try a still-unseen manufacturable context');
+const rf0={...inferNextExperiment(1,[],123),index:ledger.nextIndex};
+assert.equal(rf0.mode,'circuits');
 const r=optimizeImpedanceMatch(rf0.request as {
  frequencyMHz:number;sourceOhms:number;loadOhms:number});
 const rfOutcome=evaluateAutoExperiment(rf0,r,now);
