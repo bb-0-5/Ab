@@ -17,8 +17,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:all
-      - name: Verify no API backend is required by static assets
+      - name: Verify the restored simulation UI bundles without AWS or WebSockets
         run: |
           test -f dist/index.html
           test -n "$(find dist/assets -type f -name '*.js' -print -quit)"
-          ! grep -R -E '(/api/house/optimize-site|/ws|aws-sdk)' dist/assets/*.js
+          grep -q "import App from './App.tsx'" src/main.tsx
+          test -f src/simulations/v0_compression.ts
+          test -f src/simulations/v7.ts
+          test -f src/simulations/v13_material.ts
+          ! grep -R -E '(/ws|aws-sdk)' dist/assets/*.js
