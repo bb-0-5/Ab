@@ -55,6 +55,16 @@ const TITLES:Record<TechMode,{eyebrow:string;title:string;description:string;war
  },
 };
 const fmt=(n:number|null|undefined,places=1)=>n==null||!Number.isFinite(n)?'—':n.toLocaleString('en-AU',{maximumFractionDigits:places});
+type Inputs={frequency:number;source:number;load:number;location:string;area:number;indoorTemp:number;
+ medium:Medium;temperatureK:number;pressurePa:number;flow:number;task:Task;minFeed:number;
+ partWidth:number;partLength:number;budget:number};
+function parameterKey(mode:TechMode,p:Inputs):string{
+ if(mode==='circuits')return JSON.stringify([mode,p.frequency,p.source,p.load]);
+ if(mode==='building')return JSON.stringify([mode,p.location,p.area,p.indoorTemp]);
+ if(mode==='chemistry')return JSON.stringify([mode,p.medium,p.temperatureK,p.pressurePa,p.flow,p.minFeed]);
+ if(mode==='membrane')return JSON.stringify([mode,p.medium,p.temperatureK,p.pressurePa,p.flow,p.task]);
+ return JSON.stringify([mode,p.medium,p.temperatureK,p.pressurePa,p.flow,p.partWidth,p.partLength,p.budget]);
+}
 const asNum=(n:string)=>Number(n);
 function Stat({tag,value,unit,detail}:{tag:string;value:string;unit?:string;detail?:string}){
  return <div className="tech-stat"><span className="tech-micro">{tag}</span>
@@ -196,7 +206,7 @@ export default function TechApp(){
  const [budget,setBudget]=useState(12);
  const [status,setStatus]=useState('Starting local solver.');
  const [busy,setBusy]=useState(false);
- const [current,setCurrent]=useState<{mode:TechMode;data:Result}|null>(null);
+ const [current,setCurrent]=useState<{mode:TechMode;data:Result;parameters:string}|null>(null);
  const [history,setHistory]=useState<MemoryEntry[]>(()=>loadDeviceResults());
  const [showMesh,setShowMesh]=useState(false);
  const [showAdvanced,setShowAdvanced]=useState(false);
@@ -206,7 +216,10 @@ export default function TechApp(){
  modeRef.current=mode;
  const key=buildingKey(location,area,indoorTemp,'preset');
  const [seed,setSeed]=useState(()=>loadCampaign(buildingKey('melbourne',130,22,'preset'),481516).nextSeed);
- const selected=current?.mode===mode?current.data:null;
+ const parameters=parameterKey(mode,{frequency,source,load,location,area,indoorTemp,medium,temperatureK,
+  pressurePa,flow,task,minFeed,partWidth,partLength,budget});
+ const parameterRef=useRef(parameters);parameterRef.current=parameters;
+ const selected=current?.mode===mode&&current.parameters===parameters?current.data:null;
  const rf=mode==='circuits'?selected as MatchReport|null:null;
  const building=mode==='building'?selected as BuildingRun|null:null;
  const chemical=mode==='chemistry'?selected as RouteSelectivityResult|null:null;
@@ -217,6 +230,7 @@ export default function TechApp(){
  const discoveries=useMemo(()=>extractDiscoveriesFromHistory(history,24),[history]);
  const start=useCallback((target:TechMode,seedOverride?:number)=>{
   worker.current?.terminate();const id=++seq.current;
+  const parametersAtStart=parameterRef.current;
   setBusy(true);setStatus('Device worker → evaluating physical constraints…');
   setShowMesh(false);
   let condition:OperatingCondition={medium,temperatureK,pressurePa,flowSpeedMs:flow};
@@ -245,8 +259,10 @@ export default function TechApp(){
      saveCampaign(c);setSeed(c.nextSeed);
     }
     if(modeRef.current!==target)return;
-    setCurrent({mode:target,data});
-    setStatus('Completed locally · assumptions and uncertainties retained.');
+    if(parameterRef.current===parametersAtStart){
+     setCurrent({mode:target,data,parameters:parametersAtStart});
+     setStatus('Completed locally · assumptions and uncertainties retained.');
+    }else setStatus('Previous parameters completed. Run again to evaluate your edited inputs.');
     const name=target==='circuits'?`${frequency} MHz · ${source}→${load} Ω`
      :target==='building'?`${location}, ${area} m², seed ${nextSeed}`
      :target==='membrane'?`${task}, ${medium} ${temperatureK} K`
@@ -271,6 +287,45 @@ export default function TechApp(){
  };
  const chooseMedium=(next:Medium)=>{const p=defaultCondition(next);setMedium(next);
   setTemperatureK(p.temperatureK);setPressurePa(p.pressurePa);setFlow(p.flowSpeedMs);};
+ const restoreSaved=(item:MemoryEntry)=>{
+  worker.current?.terminate();seq.current++;setBusy(false);setShowMesh(false);
+  const x=item.input as Record<string,any>;
+  const condition=(x.condition||(item.result as any)?.condition||{}) as Partial<OperatingCondition>;
+  const values:Inputs={frequency,source,load,location,area,indoorTemp,medium,temperatureK,pressurePa,
+   flow,task,minFeed,partWidth,partLength,budget};
+  if(item.mode==='circuits'){
+   values.frequency=Number(x.frequencyMHz??frequency);
+   values.source=Number(x.sourceOhms??source);
+   values.load=Number(x.loadOhms??load);
+   setFrequency(values.frequency);setSource(values.source);setLoad(values.load);
+  }else if(item.mode==='building'){
+   values.location=String(x.preset??location);
+   values.area=Number(x.areaM2??area);
+   values.indoorTemp=Number(x.targetTempC??indoorTemp);
+   setLocation(values.location);setArea(values.area);setIndoorTemp(values.indoorTemp);
+  }else{
+   values.medium=condition.medium||String(x.medium||medium) as Medium;
+   values.temperatureK=Number(condition.temperatureK??x.temperatureK??temperatureK);
+   values.pressurePa=Number(condition.pressurePa??x.pressurePa??pressurePa);
+   values.flow=Number(condition.flowSpeedMs??flow);
+   setMedium(values.medium);setTemperatureK(values.temperatureK);
+   setPressurePa(values.pressurePa);setFlow(values.flow);
+   if(item.mode==='chemistry'){
+    values.minFeed=Number(x.minimumAcceptedFraction??minFeed);
+    setMinFeed(values.minFeed);
+   }else if(item.mode==='membrane'){
+    values.task=String(x.task||task) as Task;setTask(values.task);
+   }else{
+    values.partWidth=Number(x.partWidthMm??partWidth);
+    values.partLength=Number(x.partLengthMm??partLength);
+    values.budget=Number(x.budgetAUD??budget);
+    setPartWidth(values.partWidth);setPartLength(values.partLength);setBudget(values.budget);
+   }
+  }
+  setMode(item.mode);
+  setCurrent({mode:item.mode,data:item.result as Result,parameters:parameterKey(item.mode,values)});
+  setStatus('Loaded the recorded result and its original controls. No new simulation has run.');
+ };
  const saveResultJSON=()=>{
   if(!selected)return;
   const blob=new Blob([JSON.stringify({mode,result:selected,exportedAt:new Date().toISOString()},null,2)],
@@ -421,9 +476,7 @@ export default function TechApp(){
       </details>
       <div className="tech-recent"><span className="tech-micro">RECENT LOCAL EXPERIMENTS</span>
        {history.length?history.slice(0,4).map(item=><button key={item.id}
-        onClick={()=>{worker.current?.terminate();seq.current++;setBusy(false);
-          setMode(item.mode);setCurrent({mode:item.mode,data:item.result as Result});
-          setStatus('Restored a previous calculation; no new simulation has run.');}}>
+        onClick={()=>restoreSaved(item)}>
         <span className="tech-history-dot"/><span>{item.label}</span><small>↗</small></button>)
         :<p className="tech-footnote">Previous calculations will appear here.</p>}
       </div>
