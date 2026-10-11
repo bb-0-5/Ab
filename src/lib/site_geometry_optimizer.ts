@@ -190,6 +190,12 @@ export interface SiteGeometryOptimizationResult {
     priorDesignsUsed: number;
     sharedDesignsAvailable: number;
     exactLocationShared: false;
+  } | {
+    mode: 'browser_model_portfolio';
+    archiveCandidatesUsed: number;
+    retainedCandidates: number;
+    priorSiteExperiments: number;
+    evidence: 'modeled_only_not_measured';
   };
 }
 
