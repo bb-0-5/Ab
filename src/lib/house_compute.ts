@@ -53,7 +53,9 @@ const obj=(value:unknown):Record<string,unknown>=>{
  return value as Record<string,unknown>;
 };
 export function runHouseComputation(path:HouseEndpoint,payload:unknown={},
- cachedGeoJson?:GeoJsonFeatureCollection|null):unknown {
+ cachedGeoJson?:GeoJsonFeatureCollection|null,
+ /** Trusted device-local search hints, never measured physics or a score. */
+ archivedDesigns?:SiteHouseDesign[]):unknown {
  if(path==='/api/house/validation-report')return runBuildingPhysicsValidation();
  const raw=obj(payload);
  switch(path){
@@ -71,7 +73,18 @@ export function runHouseComputation(path:HouseEndpoint,payload:unknown={},
    });
   }
   case '/api/house/optimize-site':{
-   return optimizeSiteGeometry(siteInput(raw));
+   const input=siteInput(raw);
+   // User-posted learnedDesigns are always discarded by siteInput.
+   // Hints passed in a separate worker channel are checked structurally and
+   // then fully re-evaluated under TODAY's physics and feasibility gates.
+   const safeHints:SiteHouseDesign[]=[];
+   for(const design of (Array.isArray(archivedDesigns)?archivedDesigns:[]).slice(0,12)){
+    try{
+     assertSiteDesignWellFormed(design);
+     safeHints.push(design);
+    }catch{/* Quarantine stale or malformed stored designs. */}
+   }
+   return optimizeSiteGeometry({...input,learnedDesigns:safeHints});
   }
   case '/api/house/optimize-site-airflow':{
    const rawInput=siteInput(raw.siteInput);
