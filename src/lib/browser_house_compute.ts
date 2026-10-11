@@ -4,6 +4,10 @@
  * created browser worker, not on the render thread or a remote server.
  */
 import type {HouseEndpoint} from './house_compute';
+import {
+  rememberedSiteDesigns,retainSiteExperiment,siteLearningSummary,
+} from './site_learning_archive';
+import type {SiteGeometryOptimizationInput,SiteGeometryOptimizationResult} from './site_geometry_optimizer';
 
 const BROWSER_HOUSE_ENDPOINTS:readonly HouseEndpoint[]=[
  '/api/house/optimize-site','/api/house/optimize-site-airflow',
@@ -13,7 +17,13 @@ const BROWSER_HOUSE_ENDPOINTS:readonly HouseEndpoint[]=[
  '/api/house/site-context',
 ];
 
-type Pending={resolve:(v:Response)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>};
+type Pending={
+ resolve:(v:Response)=>void;reject:(e:Error)=>void;
+ timer:ReturnType<typeof setTimeout>;
+ /** Exact request conditions must travel with results, never score alone. */
+ siteInputs?:SiteGeometryOptimizationInput;
+ learnedCount?:number;
+};
 type Message={id:number;ok:boolean;result?:unknown;error?:string};
 let worker:Worker|null=null;
 let serial=0;
@@ -39,7 +49,24 @@ const makeWorker=()=>{
   if(!p)return;
   clearTimeout(p.timer);
   pending.delete(id);
-  p.resolve(httpJson(ok?result:{error:error||'Numerical solver failed.'},ok?200:400));
+  if(ok&&p.siteInputs){
+   // Worker-generated numeric output, not a client-supplied score.
+   // Any storage failure is non-fatal and does not fabricate success.
+   const saved=retainSiteExperiment(p.siteInputs,result as SiteGeometryOptimizationResult);
+   const summary=siteLearningSummary(p.siteInputs);
+   const data={
+    ...(result as Record<string,unknown>),
+    learning:{
+     mode:'browser_model_portfolio',
+     archiveCandidatesUsed:p.learnedCount||0,
+     retainedCandidates:saved,
+     priorSiteExperiments:summary.attempts,
+     evidence:'modeled_only_not_measured',
+    },
+   };
+   // Separate the archive from the solver's own scientific measurements.
+   p.resolve(httpJson(data,200));
+  }else p.resolve(httpJson(ok?result:{error:error||'Numerical solver failed.'},ok?200:400));
  };
  w.onerror=e=>{
   abortAll('Local engineering worker stopped: '+(e.message||'unknown error'));
@@ -70,8 +97,13 @@ export function browserHouseRequest(url:URL,init:RequestInit={}):Promise<Respons
    const id=++serial;
    const w=makeWorker();
    const timer=setTimeout(()=>abortAll('Timed out while computing physical model on this device.'),WORKER_TIMEOUT_MS);
-   pending.set(id,{resolve,reject,timer});
-   w.postMessage({id,path:url.pathname,body});
+   const isSite=url.pathname==='/api/house/optimize-site';
+   const siteInputs=isSite?body as SiteGeometryOptimizationInput:undefined;
+   // Local model candidates only: the worker re-validates them, and cannot
+   // inherit untrusted numerical scores or fake weather provenance.
+   const learnedDesigns=siteInputs?rememberedSiteDesigns(siteInputs):[];
+   pending.set(id,{resolve,reject,timer,siteInputs,learnedCount:learnedDesigns.length});
+   w.postMessage({id,path:url.pathname,body,learnedDesigns});
   }catch(e){
    reject(e instanceof Error?e:new Error('Failed to start local engineering worker.'));
   }
