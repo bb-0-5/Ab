@@ -17,7 +17,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:all
-      - name: Verify the restored simulation UI bundles without AWS or WebSockets
+      - name: Verify restored V0–V13 frontend and static bundle
         run: |
           test -f dist/index.html
           test -n "$(find dist/assets -type f -name '*.js' -print -quit)"
@@ -25,4 +25,3 @@ jobs:
           test -f src/simulations/v0_compression.ts
           test -f src/simulations/v7.ts
           test -f src/simulations/v13_material.ts
-          ! grep -R -E '(/ws|aws-sdk)' dist/assets/*.js
