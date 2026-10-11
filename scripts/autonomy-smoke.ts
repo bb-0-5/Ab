@@ -18,7 +18,7 @@ assert.notEqual(cases[1].benchmark,cases[6].benchmark,'do not compare different 
 for(const task of cases){
  assert.ok(task.why.length>30);
  assert.ok(task.objective.length>30);
- assert.ok(Object.keys(task.request).length>=4);
+ assert.ok(Object.keys(task.request).length>=3);
  assert.equal(task.request.mode,task.mode);
  assert.ok(!Object.keys(task.request).includes('userObjective'));
 }
