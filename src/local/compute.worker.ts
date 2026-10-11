@@ -4,7 +4,7 @@
  * solver. All candidate loops execute inside the visitor's own browser Worker
  * so React remains responsive. Cloud sync transports summaries ONLY.
  */
-import { optimizeSiteGeometry, SITE_LOCATION_PRESETS, type SiteGeometryOptimizationInput } from '../lib/site_geometry_optimizer';
+import { optimizeSiteGeometry, assertSiteDesignWellFormed, SITE_LOCATION_PRESETS, type SiteHouseDesign, type SiteGeometryOptimizationInput } from '../lib/site_geometry_optimizer';
 import { screenCoupledSiteAirflow, searchCoupledSiteMechanicalPortfolio } from '../lib/site_whole_house_coupling';
 import { parseEpwTemperatureProfile, weatherStationDistanceKm } from '../lib/hourly_weather';
 import { optimizeImpedanceMatch } from './impedance';
@@ -21,6 +21,8 @@ type SharedRequest={discoveries?:Discovery[]};
 type BuildRequest=SharedRequest&{
   id:number;mode:'building';preset:string;areaM2:number;seed:number;targetTempC:number;
   epwText?:string;
+  /** Reuse previously feasible geometry ONLY with identical benchmark inputs. */
+  learnedDesigns?:SiteHouseDesign[];
 };
 type CircuitRequest=SharedRequest&{id:number;mode:'circuits';frequencyMHz:number;sourceOhms:number;loadOhms:number};
 type ChemistryRequest=SharedRequest&{id:number;mode:'chemistry';minimumAcceptedFraction:number;
@@ -170,11 +172,19 @@ context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
     weather={stationName:epw.stationName,source:epw.source,stationDistanceKm:km};
    } else weatherFallbackReason=`Uploaded EPW weather station is ${km.toFixed(0)} km away (>75 km). Using climate preset instead.`;
   }
+  const learnedDesigns:SiteHouseDesign[]=[];
+  if(Array.isArray(request.learnedDesigns)){
+   for(const candidate of request.learnedDesigns.slice(0,3)){
+    try{assertSiteDesignWellFormed(candidate);learnedDesigns.push(candidate);}
+    catch{ /* untrusted or incompatible local checkpoint: ignore */ }
+   }
+  }
   const siteInput:SiteGeometryOptimizationInput={
    location:preset,targetFloorAreaM2:area,
    minFloorAreaM2:Math.max(30,area*0.95),
    maxFloorAreaM2:Math.min(600,area*1.05),
    seed:Math.round(request.seed),
+   learnedDesigns,
    iterations:420,
    targetIndoorTempC:targetTempC,
    lifecycleYears:30,
@@ -197,6 +207,7 @@ context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
    temperatureC:targetTempC,
    weather:site.weatherContext,
    siteCandidates:site.candidatesEvaluated,
+   learnedDesignsUsed:learnedDesigns.length,
    jointCandidates:joint.geometryCandidatesEvaluated,
    mechanicalCandidates:joint.mechanicalCandidatesEvaluated,
    eligible:joint.feasibleEquivalentAreaCandidates,
@@ -210,6 +221,7 @@ context.onmessage=(e:MessageEvent<WorkerRequest>)=>{
     lifecycleKWh:joint.selected.energy.totalLifecycleKWh,
     manufacturedKWh:joint.selected.energy.combinedManufacturingKWh,
     geometry:joint.selected.site.footprintPolygons,
+    design:joint.selected.site.design,
     feasible:joint.selected.feasible,
    }:null,
    baselineLifecycleKWh:linked.baseline.energy.totalLifecycleKWh,
