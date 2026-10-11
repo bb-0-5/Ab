@@ -1,4 +1,5 @@
 import {runHouseComputation,type HouseEndpoint} from './house_compute';
+import type {SiteHouseDesign} from './site_geometry_optimizer';
 import {makeSiteContextCacheKey,type GeoJsonFeatureCollection} from './site_context';
 // ODbL-licensed source snapshots already checked into the ORIGINAL repo,
 // not fabricated by a live service or the simulation.
@@ -29,14 +30,15 @@ const siteCache=(body:unknown):GeoJsonFeatureCollection|null=>{
  return raw?JSON.parse(raw) as GeoJsonFeatureCollection:null;
 };
 
-type Request={id:number;path:HouseEndpoint;body:unknown};
+type Request={id:number;path:HouseEndpoint;body:unknown;learnedDesigns?:SiteHouseDesign[]};
 type Reply={id:number;ok:boolean;result?:unknown;error?:string};
 self.onmessage=(event:MessageEvent<Request>)=>{
- const {id,path,body}=event.data;
+ const {id,path,body,learnedDesigns}=event.data;
  let reply:Reply;
  try{
   reply={id,ok:true,result:runHouseComputation(path,body,
-   path==='/api/house/site-context'?siteCache(body):null)};
+   path==='/api/house/site-context'?siteCache(body):null,
+   path==='/api/house/optimize-site'?learnedDesigns:undefined)};
  }catch(e){
   reply={id,ok:false,error:e instanceof Error?e.message:'Engineering calculation failed'};
  }
