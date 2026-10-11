@@ -1,4 +1,5 @@
 import {engineCheckpoint} from './local_sim_checkpoint';
+import {browserHouseRequest} from './browser_house_compute';
 const CLIENT_ID_KEY = 'abovebound.anonymous-workspace.v1';
 
 export interface AnonymousComputationRecord {
@@ -53,6 +54,10 @@ export function memoryFetch(input: RequestInfo | URL, init: RequestInit = {}) {
     if(url.origin===window.location.origin){
       const local=engineCheckpoint(url,init,getAnonymousClientId());
       if(local)return Promise.resolve(local);
+      // Original V12 numerical engines run in a browser worker. The returned
+      // response is derived from actual solver output, not a mocked endpoint.
+      const computed=browserHouseRequest(url,init);
+      if(computed)return computed;
     }
   }
   const headers = new Headers(init.headers);
