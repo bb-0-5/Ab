@@ -1,7 +1,7 @@
 import {lazy,Suspense,useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import TechnologyCanvas,{type TechMode} from './TechnologyCanvas';
 import './tech.css';
-import {saveSpiceNetlist} from './rf_spice';
+import {saveSpiceNetlist,saveRfBom} from './rf_spice';
 import type {MatchReport} from './impedance';
 import type {MaterialReport,Medium,OperatingCondition,Task,Discovery} from './cross_domain';
 import {defaultCondition,extractDiscoveriesFromHistory} from './cross_domain';
@@ -109,7 +109,7 @@ function FrequencyPlot({report}:{report:MatchReport}){
   <p className="tech-footnote">Delivered power ÷ available source power. Nominal parts, illustrative constant Q. Vertical axis starts at zero.</p>
  </div>;
 }
-function SectionResult({mode,data,onExport}:{mode:TechMode;data:Result|null;onExport:()=>void}){
+function SectionResult({mode,data,onExport,onBom}:{mode:TechMode;data:Result|null;onExport:()=>void;onBom:()=>void}){
  if(!data)return <div className="tech-placeholder"><div className="tech-placeholder-mark">◈</div>
   <strong>No design has been calculated.</strong><p>Choose realistic constraints and run the local solver to populate the engineering record.</p></div>;
  if(mode==='circuits'){
@@ -125,6 +125,7 @@ function SectionResult({mode,data,onExport}:{mode:TechMode;data:Result|null;onEx
     </div>
     <p className="tech-note">{r.recommendationReason}</p>
     <div className="tech-toolbar"><button className="tech-button tech-button-primary" onClick={onExport}>↓ Export SPICE netlist</button>
+     <button className="tech-button" onClick={onBom}>↓ Component BOM (.csv)</button>
      <span className="tech-footnote">Modelled ESR at centre frequency; actual parasitics are unknown.</span></div>
    </div></>;
  }
@@ -412,7 +413,8 @@ export default function TechApp(){
        {busy&&<button className="tech-text-button" onClick={()=>{worker.current?.terminate();seq.current++;
         setBusy(false);setStatus('Run cancelled; previous results kept.');}}>Stop</button>}
       </div>
-      <SectionResult mode={mode} data={selected} onExport={()=>rf&&saveSpiceNetlist(rf)}/>
+      <SectionResult mode={mode} data={selected} onExport={()=>rf&&saveSpiceNetlist(rf)}
+       onBom={()=>rf&&saveRfBom(rf)}/>
       {mode==='suit'&&fabricated?.selected&&<div className="tech-panel tech-result">
        <div className="tech-section-heading"><div><span className="tech-micro">MANUFACTURABLE OUTPUT</span><h3>Inspect the actual mesh</h3></div>
         <span className="tech-badge">STL / MM</span></div>
