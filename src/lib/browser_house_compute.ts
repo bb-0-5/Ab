@@ -10,6 +10,7 @@ const BROWSER_HOUSE_ENDPOINTS:readonly HouseEndpoint[]=[
  '/api/house/optimize-whole-system','/api/house/optimize-room',
  '/api/house/optimize-hvac-cycle','/api/house/optimize-adaptive-wall',
  '/api/house/existing-home-autopilot','/api/house/validation-report',
+ '/api/house/site-context',
 ];
 
 type Pending={resolve:(v:Response)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>};
