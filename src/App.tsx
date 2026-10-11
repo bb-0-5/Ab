@@ -7805,7 +7805,7 @@ function App() {
   const [memorySize, setMemorySize] = useState(0);
   const [data, setData] = useState<{ time: number; val: number }[]>([]);
   const [telemetry, setTelemetry] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<AppTab>('house');
+  const [activeTab, setActiveTab] = useState<AppTab>('sim');
   const [houseInitialPanel, setHouseInitialPanel] = useState<HousePanel>('system');
   const pendingPresetVersionRef = useRef<SimVersion | null>(null);
 
