@@ -1,3 +1,4 @@
+import {engineCheckpoint} from './local_sim_checkpoint';
 const CLIENT_ID_KEY = 'abovebound.anonymous-workspace.v1';
 
 export interface AnonymousComputationRecord {
@@ -46,6 +47,14 @@ export function getAnonymousClientId(): string {
 }
 
 export function memoryFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const target=typeof input==='string'?input:input instanceof URL?input.href:input.url;
+  if(typeof window!=='undefined'){
+    const url=new URL(target,window.location.href);
+    if(url.origin===window.location.origin){
+      const local=engineCheckpoint(url,init,getAnonymousClientId());
+      if(local)return Promise.resolve(local);
+    }
+  }
   const headers = new Headers(init.headers);
   headers.set('X-AboveBound-Workspace', getAnonymousClientId());
   return fetch(input, { ...init, headers });
