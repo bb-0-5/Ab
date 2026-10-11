@@ -11,10 +11,42 @@ const response=(value:unknown,status=200)=>new Response(JSON.stringify(value),{
 export function engineCheckpoint(
  url:URL,init:RequestInit,workspaceId:string,
 ):Response|null{
+ const method=(init.method||'GET').toUpperCase();
+ if(url.pathname==='/api/workspace'||url.pathname==='/api/workspace/events'){
+  const key=PREFIX+workspaceId+':workspace';
+  try{
+   const raw=localStorage.getItem(key);
+   const saved=raw?JSON.parse(raw):{createdAt:Date.now(),updatedAt:Date.now(),records:[]};
+   const records:Array<{id:string;timestamp:number;type:string;category?:string;
+    version?:string;summary?:string;stats?:unknown;state?:unknown}>=
+    Array.isArray(saved.records)?saved.records:[];
+   if(url.pathname==='/api/workspace'&&method==='GET')
+    return response({mode:'anonymous_first_party',createdAt:saved.createdAt,
+     updatedAt:saved.updatedAt,recordCount:records.length,
+     records:[...records].reverse(),savedVersions:[],
+     sharedLearningRecords:0});
+   if(url.pathname==='/api/workspace/events'&&method==='POST'){
+    if(typeof init.body!=='string'||init.body.length>30_000)
+     return response({error:'Workspace event too large'},413);
+    const event=JSON.parse(init.body);
+    if(typeof event?.type!=='string'||event.type.length>60)
+     return response({error:'Invalid workspace event'},400);
+    const item={id:crypto.randomUUID(),timestamp:Date.now(),
+     type:event.type,category:event.category,version:event.version,
+     summary:event.summary,stats:event.stats,state:event.state};
+    const next={createdAt:saved.createdAt,updatedAt:Date.now(),
+     records:[...records,item].slice(-50)};
+    localStorage.setItem(key,JSON.stringify(next));
+    return response({status:'saved_locally',recordCount:next.records.length});
+   }
+   return response({error:'Unsupported workspace request'},405);
+  }catch(error){
+   return response({error:error instanceof Error?error.message:'Storage unavailable'},507);
+  }
+ }
  const match=/^\/api\/sim-state\/([a-z0-9_-]{1,24})$/i.exec(url.pathname);
  if(!match)return null;
  const key=PREFIX+workspaceId+':'+match[1];
- const method=(init.method||'GET').toUpperCase();
  try{
   if(method==='GET'){
    const json=localStorage.getItem(key);
