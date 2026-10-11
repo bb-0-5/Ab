@@ -228,7 +228,10 @@ export default function LocalApp(){
   instance.onerror=e=>{if(id!==requestId.current)return;busyRef.current=false;setWorking(false);
    queueRef.current=[];setBatch({total:0,completed:0});
    setStatus('Local worker error: '+(e.message||'Failed to load computation.'))};
+  const savedDesign=mode==='building'
+   ?loadCampaign(runKey,runSeed).best?.best?.design:null;
   instance.postMessage({...input,id,mode,discoveries:prior,
+    ...(mode==='building'&&savedDesign?{learnedDesigns:[savedDesign]}:{}),
     ...(mode==='building'&&epwText?{epwText}:{}),
     ...((mode==='chemistry'||mode==='membrane'||mode==='suit')?{condition}:{}),
     ...(mode==='chemistry'&&knownYieldsCSV?{knownYieldsCSV}:{}),
