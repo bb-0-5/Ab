@@ -3,7 +3,14 @@
  * /api/house request contract stay unchanged; computations run in a lazily
  * created browser worker, not on the render thread or a remote server.
  */
-import {BROWSER_HOUSE_ENDPOINTS,type HouseEndpoint} from './house_compute';
+import type {HouseEndpoint} from './house_compute';
+
+const BROWSER_HOUSE_ENDPOINTS:readonly HouseEndpoint[]=[
+ '/api/house/optimize-site','/api/house/optimize-site-airflow',
+ '/api/house/optimize-whole-system','/api/house/optimize-room',
+ '/api/house/optimize-hvac-cycle','/api/house/optimize-adaptive-wall',
+ '/api/house/existing-home-autopilot','/api/house/validation-report',
+];
 
 type Pending={resolve:(v:Response)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>};
 type Message={id:number;ok:boolean;result?:unknown;error?:string};
