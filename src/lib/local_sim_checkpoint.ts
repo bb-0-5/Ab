@@ -46,6 +46,28 @@ export function engineCheckpoint(
    return response({error:error instanceof Error?error.message:'Storage unavailable'},507);
   }
  }
+ if(url.pathname==='/api/novelty-check'){
+  // Signature uniqueness is NOT physical novelty or a discovered invention.
+  if(method!=='POST')return response({error:'Unsupported method'},405);
+  try{
+   if(typeof init.body!=='string'||init.body.length>3000)
+    return response({error:'Invalid state signature'},413);
+   const payload=JSON.parse(init.body);
+   if(typeof payload?.stateHash!=='string'||payload.stateHash.length<1
+    ||payload.stateHash.length>2000)return response({error:'Missing state signature'},400);
+   const key=PREFIX+workspaceId+':signatures';
+   const raw=localStorage.getItem(key);
+   const known:string[]=raw?JSON.parse(raw):[];
+   const unique=!known.includes(payload.stateHash);
+   if(unique)localStorage.setItem(key,JSON.stringify([...known,payload.stateHash].slice(-500)));
+   const size=unique?Math.min(500,known.length+1):known.length;
+   return response({unique,memorySize:size,
+    complexity:Math.round(Math.log1p(size)*15),
+    mode:'browser_local_hashes_not_physical_novelty'});
+  }catch(error){
+   return response({error:error instanceof Error?error.message:'Device storage unavailable'},507);
+  }
+ }
  const match=/^\/api\/sim-state\/([a-z0-9_-]{1,24})$/i.exec(url.pathname);
  if(!match)return null;
  const key=PREFIX+workspaceId+':'+match[1];
