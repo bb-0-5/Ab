@@ -27,6 +27,7 @@ assert.ok(initial.best.feasible);
 const expected=selectSiteMemories(initial).length;
 const retained=retainSiteExperiment(input,initial);
 assert.equal(retained,expected);
+assert.ok(retained>0,'The test benchmark must produce real feasible models that can actually be reused.');
 assert.equal(siteLearningSummary(input).attempts,1);
 const sameBenchmark={...input,seed:4567,iterations:320,location:{
  ...SITE_LOCATION_PRESETS.bendigo,name:'A renamed location with identical numerical climate',
