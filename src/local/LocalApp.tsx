@@ -539,9 +539,12 @@ export default function LocalApp(){
     </details>
    </section>
 
-   {goal==='building'&&<BuildingProgress campaign={campaign}
+   {goal==='building'&&<details className="rounded-2xl border border-white/10 bg-[#0b1720] p-4">
+    <summary className="cursor-pointer text-sm font-semibold text-cyan-200">Detailed building campaign (optional)</summary>
+    <div className="mt-4"><BuildingProgress campaign={campaign}
      current={selectedBuilding} running={working} batch={batch}
-     onContinue={continueBuilding} onStop={stop}/>}
+     onContinue={continueBuilding} onStop={stop}/></div>
+   </details>
    <section aria-label="Optimisation result" className="rounded-3xl border border-white/10 bg-[#0a151e] p-6 md:p-8">
     <div className="flex flex-wrap items-center justify-between gap-3">
      <h3 className="text-2xl font-black tracking-tight">{working?'Finding a candidate…':result?'Your result':'Your result will appear here'}</h3>
@@ -728,20 +731,10 @@ export default function LocalApp(){
        setStatus('Select constraints, then run the calculation.');}}/>
     </div>
    </details>
-   <ResearchBoard history={history} findings={findings}
-    working={working} active={goal} onRun={runResearch}/>
-   <details className="rounded-2xl border border-white/10 bg-[#0b1720] p-5">
-    <summary className="cursor-pointer text-sm font-bold text-cyan-100">Show the cross-domain system map · conceptual view</summary>
-    <p className="mt-2 text-xs text-slate-400">This optional view illustrates links between domains. It is not a measured CFD, electrical or chemical field.</p>
-   <UnifiedOverlay goal={goal} condition={operatingCondition} findings={findings}
-     metrics={visualMetrics}
-     budgetAUD={printBudgetAUD}
-     frontier={selectedSuit?.alternatives.map(x=>({
-      cost:x.estimatedTotalCostAUD,section:x.sectionIndexMm4,
-      acceptable:x.printable,material:x.material,
-     }))||[]}
-     onSelectGoal={next=>{stop();setGoal(next);setResult(null);setResultGoal(null);
-       setStatus('Choose the goal and run its local optimisation.');}}/>
+   <details className="rounded-2xl border border-white/10 bg-[#0b1720] p-4">
+    <summary className="cursor-pointer text-sm font-semibold text-cyan-200">Full research log and individual engine controls (optional)</summary>
+    <div className="mt-4"><ResearchBoard history={history} findings={findings}
+     working={working} active={goal} onRun={runResearch}/></div>
    </details>
    <section className="rounded-2xl border border-white/10 bg-[#0b1720] p-5">
     <details>
