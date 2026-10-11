@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import BuildingProgress from './BuildingProgress';
+import AutonomousDiscovery from './AutonomousDiscovery';
 import EvidenceVisualizer from './EvidenceVisualizer';
 import ResearchBoard from './ResearchBoard';
 import {advanceSeed,addBuildingRun,buildingKey,loadCampaign,saveCampaign,weatherFingerprint,
@@ -142,11 +143,13 @@ export default function LocalApp(){
  const [cloudStatus,setCloudStatus]=useState(isCloudConnected()?'Cloud session stored locally.':'Not connected; device memory only.');
  const [cloudOn,setCloudOn]=useState(isCloudConnected());
  const worker=useRef<Worker|null>(null);
+ const pauseAutonomyRef=useRef<()=>void>(()=>{});
  const requestId=useRef(0);
  const weatherId=useMemo(()=>weatherFingerprint(epwText),[epwText]);
  const searchKey=buildingKey(preset,area,temperature,weatherId);
  selectionRef.current={key:searchKey,goal};
  const start=useCallback((mode:Goal,overrides?:{seed?:number})=>{
+  pauseAutonomyRef.current();
   worker.current?.terminate();
   const instance=new Worker(new URL('./compute.worker.ts',import.meta.url),{type:'module'});
   worker.current=instance;
@@ -234,8 +237,8 @@ export default function LocalApp(){
    medium,operatingK,pressurePa,airflow,membraneTask,knownYieldsCSV,reactionId,durationS,
    partWidthMm,partLengthMm,printerBedXmm,printerBedYmm,filamentCostAUDkg,printBudgetAUD,minimumSectionIndexMm4]);
  startRef.current=start;
- // One initial design; extra trials are bounded so mobile visitors control CPU use.
- useEffect(()=>{startRef.current('building');return()=>{
+ // The autonomous discovery queue runs the first experiment; manual starts are optional.
+ useEffect(()=>{return()=>{
   queueRef.current=[];requestId.current++;worker.current?.terminate();
  };},[]);
  useEffect(()=>{
@@ -274,6 +277,7 @@ export default function LocalApp(){
  };
  const reseed=()=>{const next=campaign.nextSeed;setSeed(next);start('building',{seed:next});};
  const runResearch=(next:Goal)=>{
+  pauseAutonomyRef.current();
   stop();setGoal(next);setResult(null);setResultGoal(null);
   setStatus(`Checking ${next} constraints using this device…`);
   // React first changes the visible domain; the next task starts after paint
@@ -322,6 +326,14 @@ export default function LocalApp(){
   const href=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=href;a.download=`abovebound-${resultGoal||'result'}-${Date.now()}.json`;
   a.click();setTimeout(()=>URL.revokeObjectURL(href),30000);
+ };
+ const onAutoResult=(item:MemoryEntry)=>{
+  setHistory(loadDeviceResults());
+  setGoal(item.mode);setResult(item.result as Result);setResultGoal(item.mode);
+  setWorking(false);
+  setStatus('New autonomous experiment completed and saved on this device.');
+  if(item.mode==='building')setCampaign(loadCampaign(
+   buildingKey('melbourne',130,22,'preset'),481516));
  };
  const selectedBuilding=resultGoal==='building'?result as BuildingResult:null;
  const selectedCircuit=resultGoal==='circuits'?result as MatchReport:null;
@@ -378,16 +390,20 @@ export default function LocalApp(){
    </div>
   </header>
   <main className="mx-auto max-w-6xl space-y-6 px-4 py-8 md:px-8">
+   <AutonomousDiscovery onResult={onAutoResult}
+    onRegisterPause={pause=>{pauseAutonomyRef.current=pause;}}/>
    <section className="rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-[#102634] to-[#0c1721] p-6 md:p-10">
-    <span className="text-[11px] font-bold uppercase tracking-[.24em] text-cyan-300">Evidence-led local optimisation</span>
-    <h2 className="mt-3 max-w-4xl text-3xl font-black tracking-tight md:text-5xl">
-     Describe the goal. Let your computer explore the configurations.
+    <span className="text-[11px] font-bold uppercase tracking-[.24em] text-cyan-300">Optional manual experiment editor</span>
+    <h2 className="mt-2 max-w-4xl text-xl font-black tracking-tight md:text-2xl">
+     The original simulation controls are still here.
     </h2>
-    <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-300">
-     Choose a problem, compare feasible designs and keep improving the result.
-     Your device performs the calculations; every result shows what was tested,
-     what is uncertain, and what evidence would make it more realistic.
+    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+     Autonomous discovery runs without these fields. Only open this editor when
+     you need to test a specific real-world condition or import measurement data.
     </p>
+    <details className="mt-4 rounded-xl border border-white/10 bg-black/10 p-4"
+      onToggle={event=>{if(event.currentTarget.open)pauseAutonomyRef.current();}}>
+    <summary className="cursor-pointer text-sm font-bold text-cyan-200">Advanced: choose exact experimental inputs</summary>
     <div className="mt-6 flex flex-wrap items-end gap-3">
      <label className="block w-full max-w-sm text-xs text-slate-300">
       What are we optimising?
@@ -520,6 +536,7 @@ export default function LocalApp(){
      {working&&<button onClick={stop} className="rounded-xl border border-rose-400/30 px-4 py-3 text-xs font-bold text-rose-200">Stop</button>}
      <span role="status" aria-live="polite" className="max-w-md text-xs text-slate-300">{status}</span>
     </div>
+    </details>
    </section>
 
    {goal==='building'&&<BuildingProgress campaign={campaign}
