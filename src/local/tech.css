@@ -219,7 +219,15 @@
  .tech-intro h1{font-size:31px;letter-spacing:-.9px}
  .tech-intro p{font-size:12px;line-height:1.65}
  .tech-run-id{display:none}
- .tech-content-grid{gap:13px}
+ .tech-content-grid{display:flex;flex-direction:column;gap:13px}
+ .tech-center-column{display:contents}
+ .tech-viewport{order:1;width:100%;overflow-x:auto;scrollbar-color:#41616b #101c23}
+ .tech-canvas-svg{min-width:680px;max-width:none;height:auto}
+ .tech-stat-grid{order:2;width:100%}
+ .tech-inspector{order:3;width:100%}
+ .tech-progress-banner{order:4;width:100%}
+ .tech-graph,.tech-result{order:5;width:100%}
+ .tech-bottom-note{order:6;width:100%}
  .tech-stat{padding:13px 10px}
  .tech-stat-value{font-size:21px;letter-spacing:-.6px}
  .tech-stat-value small{font-size:10px;display:block;margin:2px 0 0}
