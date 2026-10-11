@@ -23,7 +23,8 @@ export function engineCheckpoint(
    if(url.pathname==='/api/workspace'&&method==='GET')
     return response({mode:'anonymous_first_party',createdAt:saved.createdAt,
      updatedAt:saved.updatedAt,recordCount:records.length,
-     records:[...records].reverse(),savedVersions:[],
+     records:[...records].reverse(),
+     savedVersions:Array.isArray(saved.savedVersions)?saved.savedVersions:[],
      sharedLearningRecords:0});
    if(url.pathname==='/api/workspace/events'&&method==='POST'){
     if(typeof init.body!=='string'||init.body.length>30_000)
@@ -35,6 +36,7 @@ export function engineCheckpoint(
      type:event.type,category:event.category,version:event.version,
      summary:event.summary,stats:event.stats,state:event.state};
     const next={createdAt:saved.createdAt,updatedAt:Date.now(),
+     savedVersions:saved.savedVersions||[],
      records:[...records,item].slice(-50)};
     localStorage.setItem(key,JSON.stringify(next));
     return response({status:'saved_locally',recordCount:next.records.length});
@@ -60,6 +62,21 @@ export function engineCheckpoint(
   const encoded=JSON.stringify(parsed.state);
   if(encoded.length>MAX_CHARS)return response({error:'Engine checkpoint exceeds local memory limit'},413);
   localStorage.setItem(key,encoded);
+  // The original workspace view lists only engine versions really saved.
+  const logKey=PREFIX+workspaceId+':workspace';
+  const prior=localStorage.getItem(logKey);
+  const workspace=prior?JSON.parse(prior):{
+   createdAt:Date.now(),updatedAt:Date.now(),records:[],savedVersions:[],
+  };
+  const versions=new Set<string>(workspace.savedVersions||[]);
+  versions.add(match[1]);
+  workspace.savedVersions=[...versions].slice(-16);
+  workspace.updatedAt=Date.now();
+  const rows=Array.isArray(workspace.records)?workspace.records:[];
+  workspace.records=[...rows,{id:crypto.randomUUID(),timestamp:Date.now(),
+   type:'simulation_checkpoint',category:'simulation',version:match[1],
+   summary:'Saved original engine state on this device'}].slice(-50);
+  localStorage.setItem(logKey,JSON.stringify(workspace));
   return response({status:'saved',version:match[1],mode:'browser_local'});
  }catch(error){
   return response({error:error instanceof Error?error.message:'Device storage unavailable'},507);
