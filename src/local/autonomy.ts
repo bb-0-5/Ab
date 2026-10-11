@@ -1,0 +1,201 @@
+/**
+ * AboveBound self-directed discovery planner. It invents *experiments* and
+ * selects domain-specific objectives from conservation, feasibility and
+ * resource requirements. It does not invent measured material properties,
+ * user needs, real-world boundary conditions or validated chemical yields.
+ *
+ * Fixed benchmark envelopes make comparisons interpretable. New experiments
+ * can explore different envelopes, but their scores are never ranked against
+ * each other as if the systems were equivalent.
+ */
+import type {Discovery,OperatingCondition,Task} from './cross_domain';
+import {defaultCondition} from './cross_domain';
+import type {BuildingRun} from './building_campaign';
+import type {MatchReport} from './impedance';
+import type {MaterialReport} from './cross_domain';
+import type {FabResult} from './fabrication';
+
+export type AutoMode='building'|'circuits'|'membrane'|'suit';
+export type AutoGrade='feasible'|'conditional'|'no_gain'|'unsupported'|'error';
+export interface AutoExperiment{
+ index:number;
+ mode:AutoMode;
+ benchmark:string;
+ title:string;
+ why:string;
+ objective:string;
+ request:Record<string,unknown>;
+}
+export interface AutoObservation{
+ index:number;mode:AutoMode;benchmark:string;
+ title:string;grade:AutoGrade;summary:string;
+ metricLabel:string;metric:number|null;unit:string;
+ comparison:string;uncertainty:string;
+ evidence:'model_only'|'reference_screen'|'assumption_only';
+ checks:number;
+ at:string;
+}
+export interface AutoLedger{
+ nextIndex:number;completed:number;records:AutoObservation[];
+ updatedAt:string;
+}
+const KEY='abovebound.discovery-autopilot.v1';
+const LIMIT=64;
+const cleanNumber=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)?v:null;
+const rnd=(n:number,precision=2)=>Number(n.toFixed(precision));
+const cond=(medium:'air'|'water'|'vacuum',temperatureK?:number):OperatingCondition=>{
+ const base=defaultCondition(medium);
+ return {...base,temperatureK:temperatureK??base.temperatureK};
+};
+const CONDITIONS:[Task,OperatingCondition][]=[
+ ['thermal_barrier',cond('air',295)],
+ ['heat_spreader',cond('air',295)],
+ ['heat_spreader',cond('vacuum',5000)],
+ ['thermal_barrier',cond('vacuum',1200)],
+ ['flow_membrane',cond('water',295)],
+ ['heat_spreader',cond('air',600)],
+];
+const RF:[number,number,number][]=[
+ [100,50,100],[433.92,50,200],[27.12,75,50],
+ [915,50,75],[13.56,50,150],[100,50,50],
+ [144,50,125],[433.92,75,150],
+];
+export function inferNextExperiment(index:number,prior:Discovery[],nextBuildingSeed:number):AutoExperiment{
+ if(!Number.isSafeInteger(index)||index<0)throw Error('Invalid discovery index');
+ const stage=index%7,iteration=Math.floor(index/7);
+ if(stage===0||stage===3){
+  return {index,mode:'building',benchmark:'building:melbourne:130m2:22C:preset',
+   title:'130 m² building / Melbourne',why:'Habitability requires a thermally controlled building. Search energy-minimising geometry and ventilation that still pass their constraints.',
+   objective:'Minimum modeled 30-year lifecycle energy among feasible designs under identical climate, area and comfort.',
+   request:{mode:'building',preset:'melbourne',areaM2:130,targetTempC:22,seed:nextBuildingSeed}};
+ }
+ if(stage===1||stage===6){
+  const n=stage===1?iteration*2:iteration*2+1;
+  const [frequencyMHz,sourceOhms,loadOhms]=RF[n%RF.length];
+  return {index,mode:'circuits',
+   benchmark:`rf:${frequencyMHz}MHz:${sourceOhms}to${loadOhms}ohm`,
+   title:`${frequencyMHz} MHz / ${sourceOhms} → ${loadOhms} Ω`,
+   why:'A transmission interface needs acceptable power delivery under frequency variation and component tolerance.',
+   objective:'Maximise delivered power over the requested band without violating passivity; reject a network that loses to a direct connection.',
+   request:{mode:'circuits',frequencyMHz,sourceOhms,loadOhms}};
+ }
+ if(stage===2||stage===5){
+  const n=stage===2?iteration*2:iteration*2+1;
+  const [defaultTask,defaultEnvironment]=CONDITIONS[n%CONDITIONS.length];
+  // A saved building finding makes an actual need the next material-screen task.
+  // Never treat a proposed material as a validated property.
+  const need=prior.find(d=>d?.kind==='membrane_need'&&d.task&&d.condition
+    &&d.condition.medium==='air'&&d.condition.temperatureK<5000);
+  const task:Task=stage===2&&need?need.task!:defaultTask;
+  const environment=stage===2&&need?need.condition:defaultEnvironment;
+  return {index,mode:'membrane',
+   benchmark:`membrane:${task}:${environment.medium}:${environment.temperatureK}K:${environment.pressurePa}Pa:${environment.flowSpeedMs}`,
+   title:`${task.replaceAll('_',' ')} / ${environment.temperatureK} K ${environment.medium}`,
+   why:need&&stage===2?'A prior subsystem generated a membrane need; screen its materials in that exact operating environment.':
+    'Search reference materials for a required heat-flow or fluid-transport function under an explicit thermodynamic regime.',
+   objective:task==='heat_spreader'?'Meet phase-limit constraints while maximising reference thermal conduction.':
+    task==='thermal_barrier'?'Meet phase-limit constraints while minimising reference thermal conduction.':
+    'Check whether the stated medium and reference catalogue support the required transport function.',
+   request:{mode:'membrane',task,condition:environment}};
+ }
+ const sizes:[[number,number],[number,number],[number,number]]=[[80,135],[95,150],[120,180]];
+ const [width,length]=sizes[iteration%sizes.length];
+ return {index,mode:'suit',benchmark:`fdm:${width}x${length}:bed220:ambient295K`,
+  title:`Printable panel / ${width} × ${length} mm`,
+  why:'A manufactured object must fit a machine, meet minimum geometric section and cost less than its available resource budget.',
+  objective:'Minimum modeled filament cost for feasible panel geometry within stated bed, frame section and temperature limits.',
+  request:{mode:'suit',printGoal:'decorative_panel',partWidthMm:width,partLengthMm:length,
+   printerBedXmm:220,printerBedYmm:220,budgetAUD:12,filamentPriceAUDkg:30,
+   minSectionIndexMm4:90,condition:cond('air',295)}};
+}
+export function evaluateAutoExperiment(experiment:AutoExperiment,result:unknown,at:string):AutoObservation{
+ const base={index:experiment.index,mode:experiment.mode,benchmark:experiment.benchmark,
+  title:experiment.title,at,checks:0};
+ const shared=result as {crossDomain?:unknown};
+ const checks=Array.isArray(shared?.crossDomain)?shared.crossDomain.length:0;
+ if(experiment.mode==='building'){
+  const r=result as BuildingRun;
+  const v=cleanNumber(r.best?.lifecycleKWh);
+  const feasible=Boolean(v!==null&&v>0&&r.best?.feasible&&r.eligible>0);
+  return {...base,checks,grade:feasible?'feasible':'unsupported',
+   metricLabel:'Modeled 30-year energy',metric:feasible?v:null,unit:'kWh',
+   summary:feasible?
+    `${r.best!.form.replaceAll('_',' ')} passed ${r.eligible} coupled screening cases. ${Math.round(v!)} kWh modeled lifecycle energy.`:
+    'No geometry/HVAC combination passed the required constraints.',
+   comparison:r.comparisonSupported&&r.savingsVsBaselineKWh!=null?
+    `Comparable reference difference: ${Math.round(r.savingsVsBaselineKWh)} kWh.`:
+    'No valid reference-energy improvement claim for this run.',
+   uncertainty:'Surrogate building and climate model; not certified energy simulation.',
+   evidence:'model_only'};
+ }
+ if(experiment.mode==='circuits'){
+  const r=result as MatchReport;
+  const matched=cleanNumber(r.best?.toleranceWorstPowerFraction);
+  const baseline=cleanNumber(r.baselineDeliveredPowerFraction);
+  const improved=matched!==null&&baseline!==null&&matched>baseline+.005&&r.recommended;
+  return {...base,checks,grade:improved?'feasible':'no_gain',
+   metricLabel:'Worst tolerance-band delivery',metric:matched,unit:'fraction',
+   summary:improved?
+    `${r.best.series.label} + ${r.best.shunt.label} passed worst-corner screening.`:
+    'A direct connection is at least as good as the tested passive network under the required tolerance gate.',
+   comparison:baseline===null?'Baseline unavailable':
+    `Direct baseline ${rnd(baseline*100,2)}%; tested worst case ${matched===null?'unknown':rnd(matched*100,2)+'%'}.`,
+   uncertainty:'RF lumped-element and assumed Q model; package and board parasitics unknown.',
+   evidence:'model_only'};
+ }
+ if(experiment.mode==='membrane'){
+  const r=result as MaterialReport;
+  const k=cleanNumber(r.selected?.thermalConductivityWmK);
+  return {...base,checks,grade:r.selected?'conditional':'unsupported',
+   metricLabel:'Reference conductivity',metric:k,unit:'W/(m·K)',
+   summary:r.selected?
+    `${r.selected.label} satisfies the limited reference-property screen.`:
+    `No reference material passed; ${r.unmetRequirements[0]||'transport or phase evidence absent'}`,
+   comparison:`${r.passingCandidates} of ${r.totalCandidates} catalogue candidates pass preliminary gates.`,
+   uncertainty:'Room-temperature bulk references and regime approximations; not verified at operating conditions.',
+   evidence:'reference_screen'};
+ }
+ const r=result as FabResult;
+ const cost=cleanNumber(r.selected?.estimatedTotalCostAUD);
+ return {...base,checks,grade:r.selected?.printable&&r.selected.withinBudget?'conditional':'unsupported',
+  metricLabel:'Estimated production cost',metric:cost,unit:'AUD',
+  summary:r.selected?`${r.selected.material} cosmetic frame, ${rnd(r.selected.massG)} g estimated; inspect STL in a slicer.`:
+   `No printable candidate passes cost, bed and geometric constraints. ${r.missingConstraints[0]||''}`,
+  comparison:`${r.candidatesEvaluated} geometric and cost cases checked.`,
+  uncertainty:'Decorative model only; no polymer strength, fatigue or verified flight hardware.',
+  evidence:'assumption_only'};
+}
+export function errorObservation(task:AutoExperiment,message:string,at:string):AutoObservation{
+ return {index:task.index,mode:task.mode,benchmark:task.benchmark,
+  title:task.title,grade:'error',summary:message,metricLabel:'Calculation failed',
+  metric:null,unit:'',comparison:'The engine must not learn from a failed run.',
+  uncertainty:'Failure is recorded; no result has been validated.',evidence:'assumption_only',checks:0,at};
+}
+export function emptyAutoLedger():AutoLedger{return {nextIndex:0,completed:0,records:[],updatedAt:''};}
+export function addAutoObservation(previous:AutoLedger,record:AutoObservation):AutoLedger{
+ if(record.index!==previous.nextIndex)throw Error('Out-of-order or duplicate autonomous observation');
+ return {nextIndex:previous.nextIndex+1,completed:previous.completed+1,
+  records:[record,...previous.records].slice(0,LIMIT),updatedAt:record.at};
+}
+export function bestComparableObservation(records:AutoObservation[],benchmark:string):AutoObservation|null{
+ const eligible=records.filter(r=>r.benchmark===benchmark&&r.grade==='feasible'&&r.metric!==null);
+ if(!eligible.length)return null;
+ const domain=eligible[0].mode;
+ if(domain==='building'||domain==='suit')return eligible.reduce((a,b)=>b.metric!<a.metric!?b:a);
+ if(domain==='circuits')return eligible.reduce((a,b)=>b.metric!>a.metric!?b:a);
+ return eligible[0]; // Material properties are not independent validation of performance.
+}
+export function loadAutoLedger():AutoLedger{
+ try{
+  const raw=JSON.parse(localStorage.getItem(KEY)||'null');
+  if(raw&&Number.isSafeInteger(raw.nextIndex)&&raw.nextIndex>=0
+    &&Array.isArray(raw.records)&&Number.isSafeInteger(raw.completed)){
+   return {...raw,records:raw.records.slice(0,LIMIT)} as AutoLedger;
+  }
+ }catch{ /* storage disabled */ }
+ return emptyAutoLedger();
+}
+export function saveAutoLedger(value:AutoLedger):boolean{
+ try{localStorage.setItem(KEY,JSON.stringify(value));return true;}
+ catch{return false;}
+}
