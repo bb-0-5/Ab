@@ -30,7 +30,8 @@ const saveEvent=engineCheckpoint(new URL('https://abovebound.org/api/workspace/e
  })},'test_user');
 assert.equal(saveEvent?.status,200);
 const workspace=await engineCheckpoint(historyUrl,{method:'GET'},'test_user')?.json();
-assert.equal(workspace.recordCount,1);
+assert.equal(workspace.recordCount,2);
+assert.deepEqual(workspace.savedVersions,['v6']);
 assert.equal(workspace.records[0].version,'v6');
 assert.equal(workspace.records[0].stats.efficiency,.5);
 assert.equal((await engineCheckpoint(historyUrl,{method:'GET'},'other_user')?.json()).recordCount,0);
