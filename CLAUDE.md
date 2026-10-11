@@ -1,3 +1,22 @@
+# IMPORTANT: Preserve the user's original AboveBound sims
+
+The live homepage is `src/App.tsx` (mounted in `src/main.tsx`), which
+contains the user's original Three.js V0–V13 simulation view and chain.
+**Do not replace this UI with `src/local/LocalApp.tsx`,
+`src/local/TechApp.tsx`, a wizard, a parameter-heavy dashboard, or a new
+engineering site.** Multiple unrequested homepage rewrites alienated the
+project owner. The original code under `src/simulations/` is the product
+to develop incrementally and visibly.
+
+For future improvements, preserve the simulation viewport, animate its
+actual computed physics, let engines propose requirements to one another,
+and progressively improve physical fidelity. Any automation belongs
+inside or alongside the original simulation pipeline rather than
+replacing it. This is an explicit user constraint, not an invitation to
+re-interpret the request as a new frontend. Original Express APIs may be
+unavailable on static Cloudflare Pages; qualify that limitation and port
+specific functions carefully rather than fabricate outputs.
+
 ## Fabrication + unified visual layer
 
 The public `src/local/UnifiedOverlay.tsx` is ONE shared interactive
