@@ -800,6 +800,29 @@ const SimulationView = ({
       const shouldStepMaterials = activeModuleRef.current === 'elements'
         || simulationFrame % 30 === 0;
       if (v13Ref.current && shouldStepMaterials) {
+        // Real cross-simulator handoff: V6 describes the operating thermal
+        // envelope; V13 checks its existing material candidates against it.
+        // This creates a requirement, NOT an invented substance or a new
+        // conductivity value. The interval is slow to spare mobile devices.
+        if (opt === 'thermal' && v6Ref.current?.isStable()
+            && simulationFrame % 120 === 0) {
+          const field=v6Ref.current.getThermalField();
+          let minK=Infinity,maxK=-Infinity;
+          for(const value of field){
+            if(!Number.isFinite(value))continue;
+            minK=Math.min(minK,value);
+            maxK=Math.max(maxK,value);
+          }
+          if(Number.isFinite(minK)&&Number.isFinite(maxK)
+             &&minK>=0&&maxK<=20_000) {
+            v13Ref.current.receiveRequirement({
+              id:'v6:thermal-field',source:'v6',medium:'air',
+              minTemperatureK:minK,maxTemperatureK:maxK,
+              purpose:'thermal_survival',
+              basis:'V6 numerical air-temperature envelope (model, not measurements)',
+            });
+          }
+        }
         v13Ref.current.update(0.016);
 
         // Feed V13 topology into V1 as material field
@@ -7613,6 +7636,39 @@ const ElementsView = () => {
                 </div>
               </div>
             )}
+
+            {/* Actual V6 → V13 work-order screens, not generated "materials". */}
+            <div className="mb-4 rounded-xl border border-cyan-500/25 bg-cyan-950/15 p-3">
+              <strong className="text-xs text-cyan-200">Material requirements discovered by the simulations</strong>
+              {engine?.getRequirementScreenings().length ? (
+                <div className="mt-2 space-y-2">
+                  {engine.getRequirementScreenings().map(screen => (
+                    <div key={screen.requirement.id}
+                      className="rounded-lg border border-white/10 bg-black/30 p-3 text-xs">
+                      <div className="flex flex-wrap justify-between gap-2">
+                        <span className="font-bold text-white">{screen.requirement.source.toUpperCase()} → V13</span>
+                        <span className={screen.status==='estimated_melt_failure'?'text-amber-300':'text-cyan-300'}>
+                          {screen.status==='awaiting_composite'?'BUILD A MATERIAL TO SCREEN':
+                           screen.status==='estimated_melt_failure'?'MODEL FAILS MELT SCREEN':
+                           'PROVISIONAL MODEL SCREEN — UNVERIFIED'}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-slate-300">
+                        {screen.requirement.medium} · operating temperature
+                        {Math.round(screen.requirement.minTemperatureK)}–
+                        {Math.round(screen.requirement.maxTemperatureK)} K
+                        {screen.estimatedMeltingPointK!==null
+                         ?` · predicted bulk melting point ${Math.round(screen.estimatedMeltingPointK)} K`:''}
+                      </p>
+                      <p className="mt-1 text-slate-400">{screen.requirement.basis}</p>
+                      <p className="mt-1 text-amber-200/80">{screen.missingEvidence}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-slate-400">Awaiting an actual V6 thermal field. The requirements appear automatically while the original simulations run.</p>
+              )}
+            </div>
 
             {(metrics?.interSimWorkCount || 0) > 0 ? (
               <div className="space-y-2">
