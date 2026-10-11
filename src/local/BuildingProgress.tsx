@@ -82,7 +82,7 @@ export default function BuildingProgress({campaign,running,batch,current,onConti
   <div className="flex flex-wrap items-start justify-between gap-4">
    <div><p className="text-[11px] font-bold uppercase tracking-[.18em] text-cyan-300">Live optimisation record</p>
     <h3 className="mt-1 text-2xl font-black">Keep the best. Test more.</h3>
-    <p className="mt-2 max-w-2xl text-sm text-slate-300">Each run generates a fresh reproducible geometry portfolio, checks ventilation, rejects infeasible choices, and retains the lowest modeled lifecycle energy for these exact inputs.</p>
+    <p className="mt-2 max-w-2xl text-sm text-slate-300">Each run samples new geometry and ventilation options, and re-evaluates the full winning design from the previous comparable run as a starting point. Infeasible or higher-energy candidates cannot replace the incumbent.</p>
    </div>
    <span className="rounded-full border border-slate-500/50 px-3 py-1.5 text-xs text-slate-200">{running?'● Computing locally':'Ready for next batch'}</span>
   </div>
@@ -101,6 +101,9 @@ export default function BuildingProgress({campaign,running,batch,current,onConti
     {savings!==null?` Best run saves an estimated ${n(savings)} kWh against that run's reference over 30 years.`:
      ' There is no defensible savings claim against the reference yet.'}</p>
    <p className="mt-1 text-xs text-slate-400">Campaigns are split by location, area, temperature and weather-file contents; results with different assumptions cannot compete. Longer searches consume this device’s CPU while the page is open, pause between trials when the tab is hidden, and can be stopped at any time.</p>
+   {current&&<p className="mt-2 text-xs text-cyan-200">
+    Search inheritance: {current.learnedDesignsUsed||0} validated saved full-design candidate(s) included alongside fresh exploration.
+   </p>}
    {batch.total>0&&<div className="mt-3">
     <div className="mb-1 flex justify-between text-xs text-cyan-200"><span>Batch progress</span><span>{batch.completed} / {batch.total} completed</span></div>
     <progress className="h-2 w-full accent-cyan-400" value={batch.completed} max={batch.total}/>
