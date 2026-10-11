@@ -41,6 +41,8 @@ export interface AutoObservation{
 export interface AutoLedger{
  nextIndex:number;completed:number;records:AutoObservation[];
  needs?:ResearchNeed[];
+ /** Non-evolving benchmark signatures, retained even when old detailed records expire. */
+ testedBenchmarks?:string[];
  updatedAt:string;
 }
 const KEY='abovebound.discovery-autopilot.v1';
@@ -175,11 +177,15 @@ export function errorObservation(task:AutoExperiment,message:string,at:string):A
   metric:null,unit:'',comparison:'The engine must not learn from a failed run.',
   uncertainty:'Failure is recorded; no result has been validated.',evidence:'assumption_only',checks:0,at};
 }
-export function emptyAutoLedger():AutoLedger{return {nextIndex:0,completed:0,records:[],needs:[],updatedAt:''};}
+export function emptyAutoLedger():AutoLedger{return {nextIndex:0,completed:0,records:[],needs:[],testedBenchmarks:[],updatedAt:''};}
 export function addAutoObservation(previous:AutoLedger,record:AutoObservation):AutoLedger{
  if(record.index!==previous.nextIndex)throw Error('Out-of-order or duplicate autonomous observation');
+ const ledger=new Set(previous.testedBenchmarks||
+  previous.records.filter(r=>r.mode!=='building').map(r=>r.benchmark));
+ if(record.mode!=='building'&&record.grade!=='error')ledger.add(record.benchmark);
  return {nextIndex:previous.nextIndex+1,completed:previous.completed+1,
-  records:[record,...previous.records].slice(0,LIMIT),needs:previous.needs||[],updatedAt:record.at};
+  records:[record,...previous.records].slice(0,LIMIT),
+  testedBenchmarks:[...ledger].slice(-64),needs:previous.needs||[],updatedAt:record.at};
 }
 export function bestComparableObservation(records:AutoObservation[],benchmark:string):AutoObservation|null{
  const eligible=records.filter(r=>r.benchmark===benchmark&&r.grade==='feasible'&&r.metric!==null);
@@ -227,10 +233,11 @@ export function planNextExperiment(
    objective:'Check exact previously requested material envelope; if unknown, record the gap instead of inventing a substance.',
    originNeedId:need.id,request:{mode:'membrane',task,condition}};
  }
- const seen=new Set(ledger.records.map(r=>r.benchmark));
- // The v1 log preserves only 64 observations. Prior discovery records still
- // prevent current-cycle repeats, but after pruning extremely old contexts
- // may be sampled again; the ledger remains bounded for mobile storage.
+ const seen=new Set([...ledger.records.map(r=>r.benchmark),
+  ...(ledger.testedBenchmarks||[])]);
+ // The last 64 detailed observations can expire without forgetting that
+ // a static RF/material/fabrication benchmark has already been solved.
+ // The benchmark catalogue is finite, so 64 deduplicated signatures suffice.
  const sequence=Array.from({length:140},(_,i)=>inferNextExperiment(index+i,prior,nextBuildingSeed));
  const novel=sequence.find(job=>job.mode!=='building'&&!seen.has(job.benchmark));
  const building=inferNextExperiment(0,prior,nextBuildingSeed);
