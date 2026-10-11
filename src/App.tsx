@@ -726,20 +726,22 @@ const SimulationView = ({
         }
         v7Ref.current.update(compLevel);
 
-        // ── CO-EVOLUTION: V7 score feeds back to refine the material ──
-        // Every 200 frames, let V7's performance reshape the material field
-        // so the PSO swarm re-explores with updated physics
+        // ── OBSERVABLE LEARNING: retain real solver performance ──
+        // The old code fabricated a new material whenever V7 scored highly,
+        // overwriting V9/V13 physical inputs without any material evidence.
+        // V7 already tunes actual upstream graph parameters; material changes
+        // must instead originate from V9/V13 or an independently defined case.
         materialFrameRef.current++;
-        if (materialFrameRef.current % 200 === 0 && v1Ref.current) {
-          const score = v7Ref.current.getBestScore?.() ?? 0;
-          const recs = v7Ref.current.getRecommendations?.() ?? [];
-          const refinedMat = blueprintGenRef.current.generateMaterial(
-            activeOptimizerRef.current, score, recs
-          );
-          v1Ref.current.setMaterial(refinedMat);
-          // Expose current material state for blueprint view to read
-          (window as any).currentSimMaterial = refinedMat;
-          (window as any).currentSimScore = score;
+        if (materialFrameRef.current % 200 === 0) {
+          (window as any).currentSimMaterial = v1Ref.current?.getMaterial() || null;
+          (window as any).currentSimScore = v7Ref.current.getBestScore();
+          (window as any).v7LearningEvidence = {
+            score: v7Ref.current.getScore(),
+            bestScore: v7Ref.current.getBestScore(),
+            acceptedModelTrials: v7Ref.current.acceptedTrials,
+            rejectedModelTrials: v7Ref.current.rejectedTrials,
+            experimentalNotMeasured: true,
+          };
         }
       }
 
