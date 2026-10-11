@@ -35,4 +35,15 @@ assert.deepEqual(workspace.savedVersions,['v6']);
 assert.equal(workspace.records[0].version,'v6');
 assert.equal(workspace.records[0].stats.efficiency,.5);
 assert.equal((await engineCheckpoint(historyUrl,{method:'GET'},'other_user')?.json()).recordCount,0);
+const signatureUrl=new URL('https://abovebound.org/api/novelty-check');
+const observation=(who:string)=>
+ engineCheckpoint(signatureUrl,{method:'POST',body:JSON.stringify({stateHash:'v6:flow:0.635'})},who);
+const newSignature=await observation('test_user')?.json();
+assert.equal(newSignature.unique,true);
+assert.equal(newSignature.memorySize,1);
+assert.equal(newSignature.mode,'browser_local_hashes_not_physical_novelty');
+const duplicate=await observation('test_user')?.json();
+assert.equal(duplicate.unique,false);
+assert.equal(duplicate.memorySize,1);
+assert.equal((await observation('other_user')?.json()).unique,true);
 console.log('Original V0–V13 checkpoint save/load: real browser storage, isolation, size guard and error handling passed.');
