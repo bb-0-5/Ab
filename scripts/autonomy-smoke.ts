@@ -65,7 +65,7 @@ assert.notEqual(fb.grade,'feasible','decorative panel is conditional pending pri
 const base=emptyAutoLedger();
 const first=addAutoObservation(base,{...observation,index:0});
 assert.equal(first.completed,1);
-assert.throws(()=>addAutoObservation(first,observation),/out-of-order/);
+assert.throws(()=>addAutoObservation(first,{...observation,index:0}),/out-of-order/);
 const second=addAutoObservation(first,{...material,index:1});
 assert.equal(second.completed,2);
 assert.equal(second.records[0].mode,'membrane');
