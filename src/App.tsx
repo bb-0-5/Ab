@@ -4757,9 +4757,15 @@ const HouseView = ({
                           </div>
                           <div className="text-right whitespace-nowrap">
                             <span className="block text-[8px] text-gray-500 font-mono">{result.candidatesEvaluated.toLocaleString()} forms</span>
-                            {result.learning && (
+                            {result.learning?.mode === 'anonymous_aggregate' && (
                               <span className="block text-[7px] text-purple-400 font-mono mt-1">
                                 {result.learning.priorDesignsUsed} learned seeds / {result.learning.sharedDesignsAvailable} saved
+                              </span>
+                            )}
+                            {result.learning?.mode === 'browser_model_portfolio' && (
+                              <span className="block text-[7px] text-emerald-300 font-mono mt-1">
+                                {result.learning.archiveCandidatesUsed} prior sites re-tested /
+                                {' '}{result.learning.retainedCandidates} designs retained locally
                               </span>
                             )}
                           </div>
