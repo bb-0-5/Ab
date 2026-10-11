@@ -1,3 +1,48 @@
+# AboveBound — original simulation laboratory
+
+**Live:** https://abovebound.org
+
+**The homepage is the original simulation application:** `src/App.tsx`
+(imported by `src/main.tsx`). The previous autonomous research dashboard
+(`src/local/LocalApp.tsx`) and the replacement engineering workbench
+(`src/local/TechApp.tsx`) are *not* the live homepage. Their files are
+preserved only for potential individual reuse. Do not reintroduce either
+homepage without a specific user request.
+
+## Original simulations restored
+
+The original application renders the real-time Three.js
+`SimulationView`, with the original category selectors, visuals,
+animation and simulation chain:
+
+- V0: compression field.
+- V1–V2: causal swarms and orthogonal phases.
+- V3–V4: minimum-spanning and nearest-neighbour networks.
+- V5: manifold membranes and boundaries.
+- V6–V7: simulated transport and chain meta-optimisation.
+- V8: Riemann/prime exploratory visualization.
+- V9–V10: lattice and mesh.
+- V11: hardware and board models.
+- V12: house, environment and ventilation.
+- V13: elements, isotopes, composites and topology export.
+
+The full original implementation is still under `src/simulations/` and
+`src/App.tsx`. By default the homepage now opens the **Simulation**
+viewport, with the engine running rather than showing a new dashboard.
+The original CSS baseline was restored.
+
+**Known deployment limitation:** Cloudflare Pages is static. The original
+Three.js visual engines are client-side, but some original app panels
+still call historical Express `/api/...` routes (for site calculations,
+server workspace persistence or synthetic autonomous status). Those
+API-backed features may be unavailable until individually ported to
+browser-local workers or a supported persistence backend. Do not
+pretend a missing server response is a valid calculation or success.
+The user specifically wants the actual simulation engines developed,
+not a redesign, replacement UI or collection of manual parameter forms.
+
+## Archived local workbench history (not homepage)
+
 # AboveBound — self-directed discovery on your own computer
 
 **Live:** [abovebound.org](https://abovebound.org)
