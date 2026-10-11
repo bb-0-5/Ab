@@ -1,8 +1,9 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {inferNextExperiment,evaluateAutoExperiment,errorObservation,
- addAutoObservation,bestComparableObservation,loadAutoLedger,saveAutoLedger,
+import {planNextExperiment,evaluateAutoExperiment,errorObservation,
+ recordAutoOutcome,bestComparableObservation,loadAutoLedger,saveAutoLedger,
  type AutoExperiment,type AutoLedger,type AutoObservation} from './autonomy';
 import {extractDiscoveriesFromHistory} from './cross_domain';
+import {needsSummary} from './discovery_graph';
 import {addBuildingRun,buildingKey,loadCampaign,saveCampaign,type BuildingRun} from './building_campaign';
 import {loadDeviceResults,saveDeviceResult,type MemoryEntry} from './memory';
 
@@ -113,13 +114,20 @@ export default function AutonomousDiscovery({
    saveDeviceResult(entry);
    callbackRef.current(entry);
   }
-  const updated=addAutoObservation(current,record);
+  const previousBest=bestComparableObservation(current.records,record.benchmark);
+  const updated=recordAutoOutcome(current,experiment,record,result);
+  const improvement=record.grade==='feasible'&&record.metric!==null&&previousBest?.metric!=null
+   ?record.mode==='building'?
+      previousBest.metric-record.metric:record.mode==='circuits'?
+      record.metric-previousBest.metric:0
+   :0;
   ledgerRef.current=updated;setLedger(updated);
   const persisted=saveAutoLedger(updated);
   r.left--;
-  setMessage(!persisted?'Experiment recorded in memory; browser storage is unavailable.':
-   record.grade==='error'?`Engine error recorded; continuing without learning from it.`:
-   `${modeLabels[experiment.mode]}: ${record.grade.replaceAll('_',' ')}. Selecting next physical question.`);
+  setMessage(!persisted?'Experiment recorded only in memory; browser storage is unavailable.':
+   record.grade==='error'?'Calculation failed: no discovery or physical improvement recorded.':
+   improvement>0?`Modelled improvement over prior comparable design: ${improvement.toFixed(record.mode==='building'?0:4)} ${record.unit}. Searching next requirement.`:
+   `${modeLabels[experiment.mode]}: ${record.grade.replaceAll('_',' ')}. ${(updated.needs||[]).filter(n=>n.status==='pending').length} machine-generated follow-ups awaiting screening.`);
   setActive(null);
   scheduleNext();
  };
@@ -131,7 +139,7 @@ export default function AutonomousDiscovery({
   const history=loadDeviceResults();
   const prior=extractDiscoveriesFromHistory(history,24);
   const campaign=loadCampaign(BENCHMARK,481516);
-  const job=inferNextExperiment(current.nextIndex,prior,campaign.nextSeed);
+  const job=planNextExperiment(current,prior,campaign.nextSeed);
   setActive(job);
   setMessage(job.why);
   const id=++r.token;
@@ -198,6 +206,8 @@ export default function AutonomousDiscovery({
  const latest=new Map<string,AutoObservation>();
  for(const entry of ledger.records)if(!latest.has(entry.mode))latest.set(entry.mode,entry);
  const checked=ledger.records.reduce((sum,record)=>sum+record.checks,0);
+ const needs=ledger.needs||[];
+ const needCounts=needsSummary(needs);
  const bestEnergy=bestComparableObservation(ledger.records,'building:melbourne:130m2:22C:preset');
  return <section aria-label="Autonomous discovery engine"
   className="rounded-3xl border border-cyan-400/30 bg-gradient-to-b from-[#102731] to-[#0a1720] p-5 md:p-8">
@@ -240,7 +250,7 @@ export default function AutonomousDiscovery({
     ['Physical screens',String(ledger.completed)],
     ['Cross-engine checks',String(checked)],
     ['Best comparable building',bestEnergy?`${fmt(bestEnergy.metric,0)} kWh`:'—'],
-    ['Validated inventions','0'],
+    ['Unresolved constraints',String(needCounts.blocked+needCounts.pending)],
    ].map(([label,value])=><div key={label} className="rounded-lg border border-slate-600/40 bg-black/20 p-3">
     <p className="text-[11px] text-slate-400">{label}</p>
     <p className="mt-1 text-lg font-bold text-slate-100">{value}</p>
@@ -249,6 +259,35 @@ export default function AutonomousDiscovery({
   <div className="mt-5 grid gap-3 md:grid-cols-2">
    {['building','circuits','membrane','suit'].map(domain=>latest.has(domain)&&
     <SummaryCard key={domain} record={latest.get(domain)!}/>)}
+  </div>
+  <div className="mt-5 rounded-xl border border-white/10 bg-[#0a1b23] p-4">
+   <div className="flex flex-wrap items-center justify-between gap-3">
+    <div><p className="text-[11px] font-bold uppercase tracking-[.18em] text-cyan-300">Dependency graph</p>
+     <h3 className="mt-1 text-lg font-bold text-white">Questions created by completed experiments</h3></div>
+    <div className="text-xs text-slate-300">{needCounts.pending} awaiting an engine · {needCounts.screened} screened · {needCounts.blocked} evidence gaps</div>
+   </div>
+   {needs.length===0?<p className="mt-3 text-xs text-slate-400">
+    The first experiment will create follow-up requirements only where its actual output supports them.
+   </p>:<div className="mt-3 grid gap-2">
+    {needs.slice(0,8).map(need=><article key={need.id}
+     className="rounded-lg border border-white/10 bg-black/20 p-3 text-xs">
+     <div className="flex flex-wrap items-center justify-between gap-2">
+      <strong className="text-slate-100">{need.title}</strong>
+      <span className={need.status==='blocked'?'text-amber-200':'text-emerald-200'}>
+       {need.status==='pending'?'NEXT ENGINE TEST':
+        need.status==='screened'?'SCREENED, NOT CERTIFIED':'WAITING FOR EVIDENCE'}</span>
+     </div>
+     <p className="mt-1 leading-5 text-slate-300">{need.reason}</p>
+     <p className="mt-2 leading-5 text-slate-400"><b>Needed:</b> {need.requiredEvidence}</p>
+     {need.followUp&&<p className="mt-2 text-cyan-200">Follow-up: {need.followUp}</p>}
+     <p className="mt-1 font-mono text-[10px] text-slate-500">
+      {need.originMode} experiment #{need.originIndex+1}
+      {need.followUpIndex!==undefined?` → ${need.target==='membrane'?'membrane':'validation'} experiment #${need.followUpIndex+1}`:''}</p>
+    </article>)}
+   </div>}
+   {needs.length>8&&<details className="mt-3 text-xs text-slate-400"><summary>Show more requirements</summary>
+    {needs.slice(8,24).map(n=><p key={n.id} className="mt-2 border-t border-white/10 py-2">
+     {n.title} — {n.status}. {n.requiredEvidence}</p>)}</details>}
   </div>
   <details className="mt-5 rounded-xl border border-white/10 p-4 text-sm text-slate-300">
    <summary className="cursor-pointer font-bold text-cyan-200">What can the system really discover?</summary>
