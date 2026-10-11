@@ -3,6 +3,8 @@
  * detached-building problem. Different climate/data inputs must NEVER compete
  * on one leaderboard. No off-device computation or invented performance data.
  */
+import type {SiteHouseDesign} from '../lib/site_geometry_optimizer';
+
 export interface BuildingRun {
   seed:number;
   location:string;
@@ -10,6 +12,7 @@ export interface BuildingRun {
   temperatureC:number;
   siteCandidates:number;
   mechanicalCandidates:number;
+  learnedDesignsUsed?:number;
   eligible:number;
   comparisonSupported:boolean;
   qualifiesAsImprovement:boolean;
@@ -18,7 +21,9 @@ export interface BuildingRun {
   best:null|{
     form:string;floorAreaM2:number;orientationDeg:number;ventilation:string;
     heatRecoveryPercent:number;annualElectricityKWh:number;lifecycleKWh:number;
-    manufacturedKWh:number;geometry:Array<Array<{x:number;y:number}>>;feasible:boolean;
+    manufacturedKWh:number;geometry:Array<Array<{x:number;y:number}>>;
+    /** Real previously selected engineering genome; optional for earlier saved runs. */
+    design?:SiteHouseDesign;feasible:boolean;
   };
   weather:{mode:string;stationName:string|null;weatherHours:number|null;note:string;stationDistanceKm:number|null};
   scenarios?:Array<{form:string;areaM2:number;annualElectricalKWh:number;totalLifecycleKWh:number;airflowControl:string;heatRecoveryEfficiency:number;eligible:boolean}>;
