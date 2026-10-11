@@ -1,9 +1,47 @@
-# AboveBound — your computer does the exploring
+# AboveBound — an engineering design workspace
 
-The current public entrypoint is a **static, local-first** single-page design
-lab: location/area → automatic building & HVAC search → one understandable
-result. Users can also select a **passive RF impedance match** or a
-**probability-path selectivity thought experiment**.
+**Live entrypoint:** [abovebound.org](https://abovebound.org) serves the new
+technology-focused workspace (`src/local/TechApp.tsx`). The prior
+all-domains laboratory is preserved as **Open archive**, rather than being
+deleted or presented as an independently validated simulator.
+
+## What you can actually design
+
+The default workspace opens an **RF passive matching instrument**, not a
+decorative research dashboard:
+
+1. Enter a source, termination and frequency. The local worker evaluates
+   an E12 two-component L-network portfolio.
+2. Inspect a **topology-accurate schematic** showing the selected inductor
+   and capacitor arrangement, the Thevenin source resistance, shunt ground
+   and load. The drawing is deliberately *not* labelled as a PCB layout.
+3. Examine calculated power transfer across 21 frequencies and robustness
+   across ±5% component-value corners. No physical power gain is implied.
+4. Export a runnable starting-point **SPICE netlist** with centre-frequency
+   equivalent series losses, or a **component sourcing BOM CSV**. Neither
+   invents part SKUs, rated packages or measured parasitics.
+
+Other selectable workspaces preserve the functional material/thermal,
+process-chemistry, coupled building-energy and decorative printable-component
+solvers. Their primary views are constrained technical schematics and
+geometry drawn from computed results, not fictional CFD or molecular fields.
+Actual printable STL geometry is available on request.
+
+Recent calculations stay in browser-local memory. When changing input values,
+the existing result becomes invalid until recomputed; restoring a history
+entry restores its original control values. The previous full lab remains
+available in the archive, including its optional Supabase connection and
+cross-domain research records. No cloud computation is required.
+
+### Limits
+
+This is a **real interactive analytical prototype**, not a certified
+instrument, PCB fabrication package, CFD solver, chemical synthesis planner
+or structural engineering product. Exported SPICE fixed ESR approximates the
+worker's constant-Q assumptions at the centre frequency only; responses
+differ away from that frequency. Real hardware design requires reference
+datasheets, CAD routing/stackups, parasitics, component tolerances and bench
+validation.
 
 ## Ongoing optimisation & evidence-led interface
 
