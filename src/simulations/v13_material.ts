@@ -120,6 +120,23 @@ interface InterSimWork {
   refinedTopology?: { vertices: number[][]; faces: number[][]; normals: number[][] };
   receivedAt: number;
 }
+/** Solver-generated environmental demand, not a claimed new material. */
+export interface V13MaterialRequirement {
+ id:string;
+ source:'v6'|'v12';
+ medium:'air'|'water'|'vacuum'|'unknown';
+ minTemperatureK:number;
+ maxTemperatureK:number;
+ purpose:'thermal_survival';
+ basis:string;
+}
+export type V13RequirementScreen={
+ requirement:V13MaterialRequirement;
+ status:'awaiting_composite'|'estimated_melt_failure'|'conditional_estimate';
+ estimatedMeltingPointK:number|null;
+ missingEvidence:string;
+};
+
 
 // =====================================================================
 // ELECTRON CONFIGURATION ENGINE
@@ -785,6 +802,37 @@ export class V13MaterialEngine {
   private activeState: ElementSimState | null = null;
   private composites: MaterialComposite[] = [];
   private interSimWork: InterSimWork[] = [];
+  private requirements:V13MaterialRequirement[]=[];
+  /** A requirement is never automatically accepted as a fabricated property. */
+  receiveRequirement(need:V13MaterialRequirement):void{
+   if(!need||!/^[-a-z0-9:_]{1,100}$/i.test(need.id)
+    ||!['v6','v12'].includes(need.source)
+    ||!['air','water','vacuum','unknown'].includes(need.medium)
+    ||need.purpose!=='thermal_survival'
+    ||!Number.isFinite(need.minTemperatureK)
+    ||!Number.isFinite(need.maxTemperatureK)
+    ||need.minTemperatureK<0||need.maxTemperatureK>20_000
+    ||need.maxTemperatureK<need.minTemperatureK
+    ||typeof need.basis!=='string'||need.basis.length>250)
+    throw new Error('Invalid machine-generated material requirement');
+   const index=this.requirements.findIndex(old=>old.id===need.id);
+   if(index>=0)this.requirements[index]={...need};
+   else this.requirements.push({...need});
+   this.requirements=this.requirements.slice(-24);
+  }
+  getRequirementScreenings():V13RequirementScreen[]{
+   const latest=this.getLatestComposite();
+   return this.requirements.map(requirement=>{
+    const estimated=latest?.properties.meltingPoint;
+    const point=typeof estimated==='number'&&Number.isFinite(estimated)?estimated:null;
+    return {requirement,estimatedMeltingPointK:point,
+     status:point===null?'awaiting_composite' as const:
+      point<requirement.maxTemperatureK?'estimated_melt_failure' as const:
+      'conditional_estimate' as const,
+     missingEvidence:'Bulk melting point is only a heuristic estimate. Requires measured phase and transport properties at operating temperature, chemical compatibility, geometry, and safety margins. No material is certified.',
+    };
+   });
+  }
   private simTime = 0;
   private tick = 0;
 
@@ -935,37 +983,20 @@ export class V13MaterialEngine {
   // -----------------------------------------------------------------
 
   /**
-   * Receive work from another simulation.
-   * Stores score and recommendations; applies refined topology if provided.
+   * Record cross-engine observations. A V7 score or geometry hint is not
+   * measured material evidence, so it cannot change the composite's
+   * melting point, conductivity or geometry.
    */
   receiveFromSim(
-    simId: string,
-    data: { score: number; recommendations: any; refinedTopology?: any }
-  ): void {
-    const work: InterSimWork = {
-      simId,
-      score: data.score,
-      recommendations: data.recommendations,
-      refinedTopology: data.refinedTopology,
-      receivedAt: this.simTime,
-    };
-    this.interSimWork.push(work);
-
-    // Apply refined topology to the latest composite
-    if (data.refinedTopology && this.composites.length > 0) {
-      const latest = this.composites[this.composites.length - 1];
-      const rt = data.refinedTopology;
-      if (rt.vertices && rt.faces) {
-        latest.topology3D.vertices = rt.vertices;
-        latest.topology3D.faces = rt.faces;
-        if (rt.normals) latest.topology3D.normals = rt.normals;
-      }
-    }
-
-    // Low score triggers automatic property refinement
-    if (data.score < 0.5 && this.composites.length > 0) {
-      this.refineLatestComposite(data.recommendations);
-    }
+    simId:string,data:{score:number;recommendations:any;refinedTopology?:any},
+  ):void{
+    if(!Number.isFinite(data.score)||typeof simId!=='string')return;
+    this.interSimWork.push({
+      simId:simId.slice(0,40),score:data.score,
+      recommendations:data.recommendations,
+      receivedAt:this.simTime,
+    });
+    this.interSimWork=this.interSimWork.slice(-64);
   }
 
   /**
@@ -1032,6 +1063,7 @@ export class V13MaterialEngine {
     topologyVertices: number;
     primeResonance: number;
     interSimWorkCount: number;
+    requirementCount:number;
   } {
     const state = this.activeState;
     const latestComposite = this.composites.length > 0
@@ -1047,6 +1079,7 @@ export class V13MaterialEngine {
       topologyVertices: latestComposite?.topology3D.vertices.length || 0,
       primeResonance: latestComposite?.primeResonance || 0,
       interSimWorkCount: this.interSimWork.length,
+      requirementCount:this.requirements.length,
     };
   }
 
@@ -1185,102 +1218,17 @@ export class V13MaterialEngine {
   // PRIVATE HELPERS
   // -----------------------------------------------------------------
 
-  /**
-   * Refine the latest composite based on recommendations from another sim.
-   * Adjusts material properties within physical bounds.
-   */
-  private refineLatestComposite(recommendations: any): void {
-    if (this.composites.length === 0) return;
-    const latest = this.composites[this.composites.length - 1];
-    if (!recommendations || typeof recommendations !== 'object') return;
-
-    const props = latest.properties;
-
-    if (typeof recommendations.densityAdjust === 'number') {
-      props.density = round(
-        clamp(props.density * (1 + recommendations.densityAdjust * 0.1), 0.01, 25), 3
-      );
-    }
-    if (typeof recommendations.hardnessAdjust === 'number') {
-      props.hardness = round(
-        clamp(props.hardness + recommendations.hardnessAdjust, 0, 10), 2
-      );
-    }
-    if (typeof recommendations.conductivityAdjust === 'number') {
-      props.conductivity = round(
-        clamp(props.conductivity * (1 + recommendations.conductivityAdjust), 1e-12, 1e8), 2
-      );
-    }
-    if (typeof recommendations.meltingPointAdjust === 'number') {
-      props.meltingPoint = round(
-        clamp(props.meltingPoint + recommendations.meltingPointAdjust * 100, 14, 6000), 1
-      );
-    }
-    if (typeof recommendations.flexibilityAdjust === 'number') {
-      props.flexibility = round(
-        clamp(props.flexibility + recommendations.flexibilityAdjust * 0.1, 0, 1), 3
-      );
-    }
-
-    // Regenerate topology if suggested
-    if (recommendations.regenerateTopology) {
-      const crystalStructure = determineCrystalStructure(latest.elements);
-      const dominant = latest.elements.reduce(
-        (best, c) => c.fraction > best.fraction ? c : best,
-        latest.elements[0]
-      );
-      const latticeParam = estimateLatticeParam(dominant.element);
-      latest.topology3D = generateTopology(crystalStructure, latticeParam);
-    }
+  /** Work sharing is advisory, not a licence to alter material physics. */
+  private processInterSimQueue():void{
+    // Work items are already bounded when received. Requirement screenings
+    // are recomputed from current composites on demand, never from V7 score.
   }
-
-  /**
-   * Process queued inter-sim work items.
-   * Averages scores from the most recent batch and applies aggregated
-   * recommendations if the average quality score is below threshold.
-   */
-  private processInterSimQueue(): void {
-    if (this.interSimWork.length === 0) return;
-
-    const batch = this.interSimWork.slice(-10);
-    const avgScore = batch.reduce((s, w) => s + w.score, 0) / batch.length;
-
-    // Good score means no refinement needed
-    if (avgScore >= 0.7) return;
-
-    // Aggregate numeric recommendations across the batch
-    const aggregated: Record<string, number> = {};
-    for (const work of batch) {
-      if (work.recommendations && typeof work.recommendations === 'object') {
-        for (const [key, val] of Object.entries(work.recommendations)) {
-          if (typeof val === 'number') {
-            aggregated[key] = (aggregated[key] || 0) + val / batch.length;
-          }
-        }
-      }
-    }
-
-    this.refineLatestComposite(aggregated);
-  }
-
-  /**
-   * Periodic stability check on the latest composite.
-   * Degrades properties if too many bonds are weak and recomputes
-   * the prime resonance from the current compression field state.
-   */
-  private stabilityCheck(): void {
-    const latest = this.composites[this.composites.length - 1];
-    if (!latest) return;
-
-    // Check for weak bonds indicating structural instability
-    const weakBonds = latest.bonds.filter(b => b.strength < 0.1);
-    if (weakBonds.length > latest.bonds.length * 0.5) {
-      latest.properties.hardness = round(latest.properties.hardness * 0.9, 2);
-      latest.properties.meltingPoint = round(latest.properties.meltingPoint * 0.95, 1);
-    }
-
-    // Recompute prime resonance
-    latest.primeResonance = primeResonance(latest.compressionField);
+  /** An unchanged composite has unchanged estimated constitutive properties. */
+  private stabilityCheck():void{
+    // Earlier code repeatedly decreased melting point every 120 animation
+    // frames for a fixed weak-bond heuristic, creating fake time-dependent
+    // degradation without a kinetic model. Keep the estimated properties
+    // unchanged until an actual candidate is built or real data is supplied.
   }
 }
 
