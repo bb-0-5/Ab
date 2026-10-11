@@ -7964,7 +7964,8 @@ function App() {
             }
           }
         } catch (e) {
-          setComplexity(prev => Math.min(100, prev + Math.random() * 2));
+          // A failed uniqueness check is missing evidence, not a discovery.
+          console.warn('[Simulation] Local state-signature check unavailable', e);
         }
 
         setData(prev => {
