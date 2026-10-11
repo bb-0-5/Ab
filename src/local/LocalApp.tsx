@@ -544,7 +544,7 @@ export default function LocalApp(){
     <div className="mt-4"><BuildingProgress campaign={campaign}
      current={selectedBuilding} running={working} batch={batch}
      onContinue={continueBuilding} onStop={stop}/></div>
-   </details>
+   </details>}
    <section aria-label="Optimisation result" className="rounded-3xl border border-white/10 bg-[#0a151e] p-6 md:p-8">
     <div className="flex flex-wrap items-center justify-between gap-3">
      <h3 className="text-2xl font-black tracking-tight">{working?'Finding a candidate…':result?'Your result':'Your result will appear here'}</h3>
