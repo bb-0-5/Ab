@@ -56,6 +56,44 @@ This is **browser-local calculation, not a background service**: closing the
 page stops all computing. Supabase remains optional for private backup after
 owner-scoped project setup; no cloud workers or AWS machines are required.
 
+## Closed-loop learning added after the first prototype
+
+The autonomous planner now consumes an evidence ledger and a **causal dependency
+graph**, rather than cycling the same static test order:
+
+- Building results generate typed material-property requests through the
+  worker output. The next calculation inherits the precise physical
+  environment and screens the catalogue under it.
+- A material-screen failure becomes a persistent, deduplicated **blocked
+  research dependency**, not another identical catalogue search. It names the
+  missing constitutive measurements and does not invent them.
+- RF, materials and printable-part benchmark contexts are not silently
+  rerun with identical inputs. The planner instead selects a novel context;
+  when the bounded catalogue is exhausted, it concentrates on the building
+  geometry search where a new random seed really produces different geometry.
+- Every follow-up references the originating experiment index, and completed
+  dependencies retain the outcome. The dependency display explicitly
+  differentiates **awaiting engine check**, **conditionally screened**, and
+  **blocked for physical evidence**.
+- The building campaign now persists the **full winning
+  `SiteHouseDesign` genome**. On the next same-key run the worker validates,
+  re-evaluates and potentially mutates it alongside new random designs.
+  This uses the already present `learnedDesigns` API in the original site
+  optimiser and preserves the lowest-energy feasible incumbent. A
+  different location, indoor temperature, building area or EPW file may
+  not inherit that design.
+- Comparative improvement is only emitted when an eligible run improves
+  the prior best **under the same benchmark**; hypothetical materials and
+  unvalidated predictions never enter that engineering leaderboard.
+
+These are actual solver changes, not UI simulations. They still operate
+inside the limited physics and benchmark envelopes implemented in source.
+The graph does not yet propose a genuinely novel material synthesis route,
+a finished mechanical component, or experimentally validated utility.
+
+Coverage includes `scripts/discovery-graph-smoke.ts` and
+`scripts/engineering-warmstart-smoke.ts`, both required by CI.
+
 ## Previous engineering utilities
 
 The E12 RF model, nominal SPICE export and sourcing worksheet from the
