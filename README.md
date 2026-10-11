@@ -98,6 +98,38 @@ station provenance and weather arrays are therefore discarded; site and
 whole-house results use explicitly labelled preset degree-day climates.
 A model output is not a building permit, field measurement or code approval.
 
+### V12 experiment memory (no interface redesign)
+
+The original House & Blueprint site optimiser now retains a **bounded portfolio
+of genuine numeric simulation candidates** in the current browser:
+
+- Every site run stores up to 12 feasible, better-than-reference geometry
+  configurations, with modeled lifecycle-energy evidence and source seed.
+  A maximum of 3 different candidates are kept per house form, and at most
+  8 benchmark contexts are retained on the device.
+- Its next run automatically warm-starts from the matching previous geometries
+  before performing the usual seeded exploration and refinement.
+- The benchmark fingerprint includes exact location/climate, required energy
+  inputs, envelope, floor area, hazard constraints, site dimensions, indoor
+  setpoint, lifecycle duration and baseline, but not irrelevant random seeds,
+  experiment budget or the human-readable location label.
+- Old winners from a different benchmark **cannot compete**. Even matching
+  geometries are structurally validated and fully re-evaluated under the
+  current hard feasibility gates; historical scores are *not* injected into
+  the solver.
+- The existing V12 → coupled airflow screen sees the resulting shortlisted
+  forms, making them available to the next original simulation automatically.
+- The existing House interface displays how many prior genomes were
+  re-evaluated and how many remain saved. No new dashboard or manual knobs.
+
+Run `npm run test:v12-memory` for benchmark isolation, forged-provenance
+rejection, actual re-screening and bounded persistence, or `npm run test:all`
+for the full legacy and physics suite.
+
+This is **local evidence of candidate performance in a mathematical model**,
+not proof that a constructed building will achieve that performance. Closing
+the tab stops calculations. Clearing this browser's site data deletes memory.
+
 ### Real V6 → V13 requirements
 
 V6 transmits its actual computed thermal-field operating range to V13 as
