@@ -1,47 +1,66 @@
-# AboveBound — an engineering design workspace
+# AboveBound — self-directed discovery on your own computer
 
-**Live entrypoint:** [abovebound.org](https://abovebound.org) serves the new
-technology-focused workspace (`src/local/TechApp.tsx`). The prior
-all-domains laboratory is preserved as **Open archive**, rather than being
-deleted or presented as an independently validated simulator.
+**Live:** [abovebound.org](https://abovebound.org)
+**Entrypoint:** `src/local/LocalApp.tsx`, the existing connected simulator.
+The temporary generic dashboard (`TechApp.tsx`) is no longer the homepage.
+No existing simulation source has been deleted.
 
-## What you can actually design
+## How it behaves now
 
-The default workspace opens an **RF passive matching instrument**, not a
-decorative research dashboard:
+The website starts a bounded **zero-configuration discovery cycle** by itself.
+The human does not select a subject, name the optimisation objective or enter
+hundreds of parameters. `src/local/AutonomousDiscovery.tsx` runs the existing
+`compute.worker.ts` sequentially using plans from `src/local/autonomy.ts`.
+Each run is recorded locally, and a result is shown in its existing domain view.
 
-1. Enter a source, termination and frequency. The local worker evaluates
-   an E12 two-component L-network portfolio.
-2. Inspect a **topology-accurate schematic** showing the selected inductor
-   and capacitor arrangement, the Thevenin source resistance, shunt ground
-   and load. The drawing is deliberately *not* labelled as a PCB layout.
-3. Examine calculated power transfer across 21 frequencies and robustness
-   across ±5% component-value corners. No physical power gain is implied.
-4. Export a runnable starting-point **SPICE netlist** with centre-frequency
-   equivalent series losses, or a **component sourcing BOM CSV**. Neither
-   invents part SKUs, rated packages or measured parasitics.
+The planner automatically:
 
-Other selectable workspaces preserve the functional material/thermal,
-process-chemistry, coupled building-energy and decorative printable-component
-solvers. Their primary views are constrained technical schematics and
-geometry drawn from computed results, not fictional CFD or molecular fields.
-Actual printable STL geometry is available on request.
+- Defines **reference engineering tasks** from functionality: a thermally
+  habitable 130 m² building, mismatch-prone passive RF links, thermal material
+  needs under explicit physical environments, and FDM part fabrication.
+- Selects the optimization rule implied by each domain's physics and physical
+  constraints: minimum lifecycle energy; delivered power and passivity; known
+  phase/heat conduction constraints; feasible mass and modeled cost.
+- Samples new building layout seeds, preserving the best feasible result
+  **only within the same benchmark**. Candidate source/load and temperature
+  scenarios remain separate benchmarks, never compared as though equivalent.
+- Passes previous saved typed discoveries and unmet material needs into the
+  next domain worker. In particular, a building's `membrane_need` can trigger
+  a membrane/materials context check. The cross-domain check can return
+  `unsupported` and does not pretend to be a new element or validated alloy.
+- Runs seven bounded experiments on each visit (two building, two RF, two
+  material and one printable part). Runs pause when the browser tab is hidden,
+  stop on Pause, and resume from the saved index. Each worker has a timeout.
+  Clicking Continue performs another bounded cycle without additional input.
+- Stores the lightweight experiment evidence ledger on-device, separately
+  from existing result memory and building campaign data.
 
-Recent calculations stay in browser-local memory. When changing input values,
-the existing result becomes invalid until recomputed; restoring a history
-entry restores its original control values. The previous full lab remains
-available in the archive, including its optional Supabase connection and
-cross-domain research records. No cloud computation is required.
+An optional **Advanced** disclosure retains all original direct experiment
+controls, including EPW weather uploads and observed chemistry-yield CSVs.
+It is not necessary for automatic screening.
 
-### Limits
+### What autonomous discovery cannot conjure
 
-This is a **real interactive analytical prototype**, not a certified
-instrument, PCB fabrication package, CFD solver, chemical synthesis planner
-or structural engineering product. Exported SPICE fixed ESR approximates the
-worker's constant-Q assumptions at the centre frequency only; responses
-differ away from that frequency. Real hardware design requires reference
-datasheets, CAD routing/stackups, parasitics, component tolerances and bench
-validation.
+Physics identifies impossible or wasteful configurations, but does not supply
+unknown environmental requirements or experimental material properties.
+The first reference problems are **examples**, not inferences about a real
+customer's home, machine or reaction. A chemical yield cannot be learned
+from hypothetical pathway weights: the autonomous chemistry task is
+deliberately blocked pending independent observed yields. Other results are
+limited to the actual model assumptions. No claim is made of discovering a
+new element, engineered isotope, functional catalyst, finished motherboard,
+or human flight hardware. A valid unmeasured candidate is not a certified
+invention.
+
+This is **browser-local calculation, not a background service**: closing the
+page stops all computing. Supabase remains optional for private backup after
+owner-scoped project setup; no cloud workers or AWS machines are required.
+
+## Previous engineering utilities
+
+The E12 RF model, nominal SPICE export and sourcing worksheet from the
+temporary layout remain in `src/local/impedance.ts` and `rf_spice.ts`.
+The prior technical layout remains in source for reference only.
 
 ## Ongoing optimisation & evidence-led interface
 
