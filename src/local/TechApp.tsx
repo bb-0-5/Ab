@@ -1,5 +1,6 @@
 import {lazy,Suspense,useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import TechnologyCanvas,{type TechMode} from './TechnologyCanvas';
+import './tech.css';
 import {saveSpiceNetlist} from './rf_spice';
 import type {MatchReport} from './impedance';
 import type {MaterialReport,Medium,OperatingCondition,Task,Discovery} from './cross_domain';
