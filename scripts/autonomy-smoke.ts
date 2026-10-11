@@ -63,7 +63,7 @@ const fb=evaluateAutoExperiment(fabricationCase,fab,'2026-10-11T00:00:01Z');
 assert.equal(fb.evidence,'assumption_only');
 assert.notEqual(fb.grade,'feasible','decorative panel is conditional pending print');
 const base=emptyAutoLedger();
-const first=addAutoObservation(base,observation);
+const first=addAutoObservation(base,{...observation,index:0});
 assert.equal(first.completed,1);
 assert.throws(()=>addAutoObservation(first,observation),/out-of-order/);
 const second=addAutoObservation(first,{...material,index:1});
