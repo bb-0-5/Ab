@@ -55,7 +55,22 @@ const room=runHouseComputation('/api/house/optimize-room',{
  targetTempC:22, minFloorAreaM2:18,
 });
 assert.ok(room && typeof room==='object');
+const siteContext=runHouseComputation('/api/house/site-context',{
+ location:SITE_LOCATION_PRESETS.bendigo,rooms:[],
+}) as {source:string;uncertainty:{band:string};neighbours:unknown[]};
+assert.equal(siteContext.source,'engine_geometry',
+ 'Missing geographic observations must remain an explicit model fallback');
+const measuredFootprints=runHouseComputation('/api/house/site-context',{
+ location:SITE_LOCATION_PRESETS.bendigo,rooms:[],
+},{
+ type:'FeatureCollection',
+ features:[{type:'Feature',geometry:{type:'Polygon',coordinates:[[
+  [144.2799,-36.7601],[144.2801,-36.7601],
+  [144.2801,-36.7599],[144.2799,-36.7599],[144.2799,-36.7601]
+ ]]},properties:{height:3.5}}],
+}) as {source:string;uncertainty:{band:string}};
+assert.equal(measuredFootprints.source,'cached_open_buildings');
 const validation=runHouseComputation('/api/house/validation-report');
 assert.ok(validation && typeof validation==='object');
-assert.equal(BROWSER_HOUSE_ENDPOINTS.length,8);
-console.log('Browser V12: real site → coupled airflow, whole house, room, HVAC, wall, retrofit and validation calculations; forged site evidence rejected.');
+assert.equal(BROWSER_HOUSE_ENDPOINTS.length,9);
+console.log('Browser V12: real site → coupled airflow, whole house, room, HVAC, wall, retrofit, evidence and validation calculations; forged site evidence rejected.');
