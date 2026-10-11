@@ -64,7 +64,7 @@ const measuredFootprints=runHouseComputation('/api/house/site-context',{
  location:SITE_LOCATION_PRESETS.bendigo,rooms:[],
 },{
  type:'FeatureCollection',
- features:[{type:'Feature',geometry:{type:'Polygon',coordinates:[[
+ features:[{geometry:{type:'Polygon',coordinates:[[
   [144.2799,-36.7601],[144.2801,-36.7601],
   [144.2801,-36.7599],[144.2799,-36.7599],[144.2799,-36.7601]
  ]]},properties:{height:3.5}}],
