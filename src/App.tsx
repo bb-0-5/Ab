@@ -42,6 +42,7 @@ import {
 } from 'recharts';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { SIMULATION_STAGES,mayAdvanceStage,indexOfStage } from './lib/sim_sequence';
 
 import { V1Engine } from './simulations/v1';
 import { V2Engine } from './simulations/v2';
@@ -107,7 +108,7 @@ import {
 // --- Types ---
 type OptimizerType = 'thermal' | 'electrical' | 'blockchain' | 'math';
 type ThermalMode = 'heating' | 'cooling';
-type SimVersion = 'v0' | 'v1' | 'v2' | 'v3' | 'v4' | 'v5' | 'v6' | 'v7' | 'v8' | 'elements';
+type SimVersion = typeof SIMULATION_STAGES[number] | 'elements';
 type AppTab = 'sim' | 'house' | 'codex' | 'trajectory' | 'selfbuild' | 'elements';
 type HousePanel = 'system' | 'floorplan' | 'autopilot' | 'siteoptimizer' | 'optimizer' | 'cycling' | 'adaptivewall' | 'thermal' | 'airflow' | 'natural' | 'projection' | 'topology' | 'seasonal' | 'electrical' | 'cooler' | 'solar' | 'deeplearn' | 'ventreadings' | 'annualcycle';
 
@@ -180,6 +181,15 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
+// V8–V13 were initialized but absent from the original automatic chain.
+const POST_V7_TASKS:SimTask[]=[
+  {id:'stage-v8',version:'v8',description:'Explore V8 prime and spectral hypotheses (mathematical model)',targetStability:0.8,params:{}},
+  {id:'stage-v9',version:'v9',description:'Construct the V9 lattice and material field',targetStability:0.8,params:{}},
+  {id:'stage-v10',version:'v10',description:'Resolve the V10 porous mesh and transport channels',targetStability:0.8,params:{}},
+  {id:'stage-v11',version:'v11',description:'Assemble the V11 hardware shell, ports and constraints',targetStability:0.8,params:{}},
+  {id:'stage-v12',version:'v12',description:'Run the V12 house and environmental flow solver',targetStability:0.8,params:{}},
+  {id:'stage-v13',version:'v13',description:'Evaluate V13 chemistry candidates against received requirements',targetStability:0.8,params:{}},
+];
 const OPTIMIZATION_GOALS: Record<OptimizerType, OptimizationGoal> = {
   thermal: {
     type: 'thermal',
@@ -193,6 +203,7 @@ const OPTIMIZATION_GOALS: Record<OptimizerType, OptimizationGoal> = {
       { id: 't6', version: 'v5', description: 'Detect Manifold Membranes (Closed Loops)', targetStability: 0.7, params: {} },
       { id: 't7', version: 'v6', description: 'Analyze Thermal Flow Through Membranes', targetStability: 0.8, params: {} },
       { id: 't8', version: 'v7', description: 'Meta-Optimize Upstream for Heat Dissipation', targetStability: 0.9, params: {} },
+      ...POST_V7_TASKS,
     ]
   },
   electrical: {
@@ -207,6 +218,7 @@ const OPTIMIZATION_GOALS: Record<OptimizerType, OptimizationGoal> = {
       { id: 'e6', version: 'v5', description: 'Detect PCB Layer Manifolds (Closed Loops)', targetStability: 0.7, params: {} },
       { id: 'e7', version: 'v6', description: 'Analyze Signal Flow & Impedance', targetStability: 0.8, params: {} },
       { id: 'e8', version: 'v7', description: 'Meta-Optimize for Signal Integrity', targetStability: 0.9, params: {} },
+      ...POST_V7_TASKS,
     ]
   },
   blockchain: {
@@ -221,6 +233,7 @@ const OPTIMIZATION_GOALS: Record<OptimizerType, OptimizationGoal> = {
       { id: 'b6', version: 'v5', description: 'Detect Network Manifold Layers (Closed Loops)', targetStability: 0.7, params: {} },
       { id: 'b7', version: 'v6', description: 'Analyze Data Flow Through Manifold', targetStability: 0.8, params: {} },
       { id: 'b8', version: 'v7', description: 'Meta-Optimize Consensus Propagation', targetStability: 0.9, params: {} },
+      ...POST_V7_TASKS,
     ]
   },
   math: {
@@ -228,8 +241,11 @@ const OPTIMIZATION_GOALS: Record<OptimizerType, OptimizationGoal> = {
     desiredResult: 'Riemann Zeta Prime Distribution',
     tasks: [
       { id: 'm1', version: 'v0', description: 'Establish Fundamental Compression Field', targetStability: 0.9, params: { compression: 10 } },
-      { id: 'm2', version: 'v8', description: 'Initialize Riemann Zero Harmonics', targetStability: 0.8, params: {} },
-      { id: 'm3', version: 'v7', description: 'Final Prime Distribution Analysis', targetStability: 0.9, params: {} },
+      ...(['v1','v2','v3','v4','v5','v6','v7'] as SimVersion[]).map((version,i)=>({
+        id:'math-'+version,version,description:'Prepare network and flow context for prime analysis',
+        targetStability:0.8,params:{}, 
+      })),
+      ...POST_V7_TASKS,
     ]
   }
 };
@@ -244,6 +260,11 @@ const VERSION_DESCRIPTIONS: Record<SimVersion, string> = {
   v6: 'Simulate Flow Through the Generated Membranes',
   v7: 'Meta-Optimize the Complete Simulation Chain',
   v8: 'Analyze Riemann Zeta Harmonics and Prime Structure',
+  v9: 'Generate and inspect material lattice',
+  v10: 'Build a porous transport mesh',
+  v11: 'Screen manufactured hardware constraints',
+  v12: 'Explore house, air flow and environmental conditions',
+  v13: 'Screen material candidates against simulated requirements',
   elements: 'Build Elements, Isotopes, and Composite Materials',
 };
 
