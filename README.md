@@ -69,6 +69,56 @@ replacing the original user interface.
 Regression coverage: `npm run test:v7-feedback` and
 `npm run test:sim-checkpoint`, included in `npm run test:all`.
 
+## V8–V13 stage continuity and cross-simulator retained learning
+
+The original homepage's automatic **Simulation** tour was not listing the
+engines that existed between V7 and V13. The original four goal chains
+stopped at V7 (except a special math path), and the version buttons exposed
+V0–V8 plus a separate Elements shortcut. V9/V10/V11 geometry was formerly
+drawn as overlays while viewing V1–V7, and the live V12 floorplan/heatmap
+was explicitly hidden from the shared canvas.
+
+That is repaired **without replacing the original simulator**:
+
+- The sequencer now visits **V0 → V1 → … → V7 → V8 → V9 → V10 →
+  V11 → V12 → V13 → V0** for all four optimization goals.
+- The existing V8 spectral model, V9 lattice, V10 mesh, V11 hardware,
+  and actual V12 thermal house engine each have a named, selectable,
+  separately visible stage in the existing Three.js viewport.
+- V12 automatically frames its larger floorplan in the original camera and
+  receives full 30 Hz simulation updates while selected (the original
+  V12 stability flag required more than 100 update calls).
+- V13 shows a **schematic** electron-shell ring diagram derived from its
+  actual active element. Carbon is a reproducible initial element; these
+  rings are a pedagogical visualization, not measured electron trajectories.
+  The full existing Elements view remains available using its shortcut.
+- Auto-transition requires both actual engine readiness and **at least
+  150 numerical frames** per stage (around five seconds at 30 Hz), so
+  already-initialized 3D engines no longer flash past invisibly.
+- Saved eight-stage navigator positions are migrated using their explicit
+  engine version rather than the obsolete index.
+
+**V6/V7/V13 experience memory** is also live: when V7 actually accepts a
+modeled parameter trial, its numeric V6 flow conditions, best tuning
+parameters, V13 typed temperature requirement and any material screens are
+stored together in a bounded, device-only ledger (`sim_feedback_archive.ts`).
+The archive keeps at most 32 evidence records, isolated by optimizer,
+thermal mode, compression level, upstream material fingerprint and membrane
+loop count. On a matching later run, V7 compares actual new flow conditions
+and tests **one** remembered upstream setting, then accepts or rolls it
+back using fresh V6 readings. Historical V13 requirements are clearly
+labelled as *historical*, and live V6 always supplies the new condition.
+No remembered score is treated as a measured result or a validated isotope.
+
+This remains a **model-only research simulation**, not experimental proof.
+The archive is local to the same browser; closing the page stops computation.
+
+Regression gates:
+`npm run test:full-sim-sequence` checks 14-stage order, dwell logic,
+actual named engine stage routing, same-context memory, cross-context
+rejection, and rejection of a formerly winning setting when new V6 metrics
+are worse. This runs with `npm run test:all`.
+
 ## Current production: physics in the original simulator
 
 The full original `src/App.tsx` and visual V0–V13 simulation chain remain the
