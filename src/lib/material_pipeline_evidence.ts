@@ -62,7 +62,7 @@ export function screenMaterialPipeline(input:{
  // CRITICAL: V13 density is g/cm³; V9/V1 density is kg/m³.
  // V13 electrical conductivity (S/m) is NOT thermal conductivity (W/m/K).
  const v13=candidate?{
-   candidateElements:v13Composite!.elements.map(c=>c.element.symbol),
+   candidateElements:v13Composite!.elements.map(c=>c.element.sym),
    estimatedThermalConductivityWmK:candidate.thermalConductivity,
    estimatedDensityKgM3:candidate.density*1000,
    estimatedElectricalConductivitySm:candidate.conductivity,
