@@ -43,6 +43,10 @@ import {
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SIMULATION_STAGES,mayAdvanceStage,indexOfStage } from './lib/sim_sequence';
+import {
+ feedbackScenarioKey,findCompatibleFeedback,rememberFeedback,validTuningHints,
+ getFeedbackArchive,type FeedbackScenario,
+} from './lib/sim_feedback_archive';
 
 import { V1Engine } from './simulations/v1';
 import { V2Engine } from './simulations/v2';
@@ -340,6 +344,28 @@ const SimulationView = ({
   const lastV13ShellsRef = useRef('');
   const lastStageRef = useRef<SimVersion>(activeVersion);
   const stageFrameRef = useRef(0);
+  const attemptedWarmStartsRef = useRef(new Set<string>());
+  const learnedFromArchiveRef=useRef(0);
+  const memoryRecordsRef=useRef(0);
+  const feedbackContext = (
+    opt:OptimizerType,mode:ThermalMode,level:number,
+  ):FeedbackScenario=>{
+    const material=v9Ref.current?.getMaterialForV1();
+    // Only use immutable scenario inputs. V7 flow scores / outputs are NOT
+    // part of a physics fingerprint, so old results can be re-tested.
+    const numeric=material?{
+      conductivity:Number(material.conductivity?.toPrecision(7)),
+      density:Number(material.density?.toPrecision(7)),
+      dielectricConstant:Number(material.dielectricConstant?.toPrecision(7)),
+      geometry:material.geometry,
+      resolution:material.resolution,
+    }:null;
+    return {
+      optimizer:opt,thermalMode:mode,compressionLevel:level,
+      materialSignature:JSON.stringify(numeric),
+      loopCount:v5Ref.current?.getLoops().length||0,
+    };
+  };
   const globalMemoryRef = useRef<any>({
     v7_cooling_efficiency: 1.0,
     v6_thermal_gradient: 0,
@@ -755,6 +781,30 @@ const SimulationView = ({
             v6Ref.current.getThermalField(),
             v6Ref.current.getGridSize()
           );
+          // Re-test ONE formerly successful V7 tuning value rather than
+          // importing its historical score as though it were live evidence.
+          const scenario=feedbackContext(opt,tMode,compLevel);
+          const key=feedbackScenarioKey(scenario);
+          if(!attemptedWarmStartsRef.current.has(key)) {
+            const past=findCompatibleFeedback(scenario,v6Ref.current.getMetrics());
+            if(past){
+              attemptedWarmStartsRef.current.add(key);
+              const hints=validTuningHints(past.v7.bestParams,v7Ref.current.getParams());
+              if(v7Ref.current.probeRememberedTuning(hints)){
+                learnedFromArchiveRef.current++;
+                // Show historical requirements separately. Live V6 will
+                // refresh the active requirement when the field stabilizes.
+                if(past.requirement&&v13Ref.current) {
+                  try {
+                    v13Ref.current.receiveRequirement({
+                      ...past.requirement,id:'v6:archived-context',
+                      basis:'Archived earlier V6 modeled temperature range; awaiting new live V6 screening',
+                    });
+                  }catch{/* Ignore stale history with invalid physical units. */}
+                }
+              }
+            }
+          }
           // Apply V7's tuning recommendations to upstream engines
           v7Ref.current.applyRecommendations({
             v1: v1Ref.current,
@@ -772,6 +822,35 @@ const SimulationView = ({
         // must instead originate from V9/V13 or an independently defined case.
         materialFrameRef.current++;
         if (materialFrameRef.current % 200 === 0) {
+          if(v6Ref.current?.isStable()&&v5Ref.current) {
+            const v7=v7Ref.current;
+            const requirements=v13Ref.current?.getRequirementScreenings()||[];
+            const activeScreen=requirements.find(row=>row.requirement.id==='v6:thermal-field');
+            const screenForArchive=requirements.slice(0,8).map(row=>({
+              id:row.requirement.id,status:row.status,
+              maxTemperatureK:row.requirement.maxTemperatureK,
+              estimatedMeltingPointK:row.estimatedMeltingPointK,
+            }));
+            const flow=v6Ref.current.getMetrics();
+            const newest=rememberFeedback({
+              scenario:feedbackContext(opt,tMode,compLevel),
+              timestamp:Date.now(),solverVersion:'v6-v7-model-1',
+              flow:{
+                totalFlow:flow.totalFlow,avgResistance:flow.avgResistance,
+                efficiency:flow.efficiency,pathCount:flow.pathCount,
+                bottleneckCount:flow.bottleneckCount,
+              },
+              v7:{
+                bestScore:v7.getBestScore(),acceptedTrials:v7.acceptedTrials,
+                rejectedTrials:v7.rejectedTrials,
+                bestParams:v7.bestParams.map(x=>({...x})),
+              },
+              requirement:activeScreen?.requirement||null,
+              materialScreens:screenForArchive,
+              evidence:'model_only_not_measured',
+            });
+            memoryRecordsRef.current=newest;
+          }
           (window as any).currentSimMaterial = v1Ref.current?.getMaterial() || null;
           (window as any).currentSimScore = v7Ref.current.getBestScore();
           (window as any).v7LearningEvidence = {
@@ -780,6 +859,8 @@ const SimulationView = ({
             acceptedModelTrials: v7Ref.current.acceptedTrials,
             rejectedModelTrials: v7Ref.current.rejectedTrials,
             experimentalNotMeasured: true,
+            rememberedCandidates:memoryRecordsRef.current,
+            archivalSettingsRetested:learnedFromArchiveRef.current,
           };
         }
       }
@@ -968,6 +1049,11 @@ const SimulationView = ({
             v6Paths: v6Ref.current?.getFlowPaths().length || 0,
           },
           flow: flowMetrics,
+          experimentMemory:{
+            records:memoryRecordsRef.current,
+            reTestedConfigurations:learnedFromArchiveRef.current,
+            evidence:'numeric_model_not_measured',
+          },
           avgTemperatureC: avgTempK - 273.15,
           temperature: Math.abs(avgTempK - 298) / 10,
           tension: flowMetrics?.avgResistance || 0,
@@ -8513,7 +8599,7 @@ function App() {
                     onClick={() => {
                       setAutoTransition(false);
                       setActiveVersion('v13');
-                      setActiveTab('codex');
+                      setActiveTab('elements');
                     }}
                     className={`px-3 py-1 rounded text-[10px] font-bold uppercase tracking-widest transition-all whitespace-nowrap ${
                       activeVersion === 'elements'
