@@ -158,16 +158,36 @@ export class V1Engine {
     density?: number;
     geometry?: string; // 'gyroid' | 'diamond' | 'schwarz_p' | 'custom'
     resolution?: number;
+    /** Dimensionless V10 mesh surface-fitness voxels, not material conductivity. */
+    customField?: Float32Array;
   }) {
     const res = props.resolution || this.material.resolution;
+    if(!Number.isInteger(res)||res<2||res>64)
+      throw new Error('V1 material resolution out of bounds');
+    if(props.customField){
+      if(props.customField.length!==res**3)
+        throw new Error('V10 field grid does not match V1 material resolution');
+      for(const value of props.customField)
+        if(!Number.isFinite(value)||value<0||value>1e6)
+          throw new Error('V10 mesh field contains invalid fitness');
+    }
     const bounds = this.material.bounds;
     const data = new Float32Array(res * res * res);
     const step = (bounds * 2) / (res - 1);
 
-    const k = props.conductivity || this.material.conductivity;
-    const er = props.dielectricConstant || this.material.dielectricConstant;
+    const k = props.conductivity ?? this.material.conductivity;
+    const er = props.dielectricConstant ?? this.material.dielectricConstant;
+    if(!Number.isFinite(k)||k<=0||!Number.isFinite(er)||er<=0
+      ||props.density!==undefined&&(!Number.isFinite(props.density)||props.density<=0))
+      throw new Error('Invalid physical material properties');
 
-    for (let x = 0; x < res; x++) {
+    if(props.customField) {
+      // Exact voxel transfer: V9 lattice-derived surface fitness modulated
+      // by V10's actual TPMS geometry becomes the V1 PSO search landscape.
+      // This avoids silently discarding the V10 result and rebuilding a
+      // generic gyroid independent of the supposedly selected mesh.
+      data.set(props.customField);
+    }else for (let x = 0; x < res; x++) {
       for (let y = 0; y < res; y++) {
         for (let z = 0; z < res; z++) {
           const px = x * step - bounds;
@@ -206,7 +226,7 @@ export class V1Engine {
       resolution: res, bounds, data,
       conductivity: k,
       dielectricConstant: er,
-      density: props.density || this.material.density,
+      density: props.density ?? this.material.density,
     };
 
     // Reset PSO when material changes
@@ -221,9 +241,9 @@ export class V1Engine {
     const { resolution: res, bounds, data } = this.material;
     const step = (bounds * 2) / (res - 1);
 
-    const fx = (pos.x + bounds) / step;
-    const fy = (pos.y + bounds) / step;
-    const fz = (pos.z + bounds) / step;
+    const fx = Math.max(0,Math.min(res-1,(pos.x + bounds) / step));
+    const fy = Math.max(0,Math.min(res-1,(pos.y + bounds) / step));
+    const fz = Math.max(0,Math.min(res-1,(pos.z + bounds) / step));
 
     const x0 = Math.max(0, Math.min(res - 2, Math.floor(fx)));
     const y0 = Math.max(0, Math.min(res - 2, Math.floor(fy)));
