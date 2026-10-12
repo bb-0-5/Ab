@@ -307,6 +307,8 @@ const SimulationView = ({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const orbitRef = useRef<OrbitControls | null>(null);
+  const previousVisibleVersionRef = useRef<SimVersion>(activeVersion);
   const [webGlError, setWebGlError] = useState<string | null>(null);
   
   const v0Ref = useRef<V0CompressionEngine | null>(null);
@@ -466,6 +468,7 @@ const SimulationView = ({
       container.appendChild(renderer.domElement);
       rendererRef.current = renderer;
       controls = new OrbitControls(camera, renderer.domElement);
+      orbitRef.current=controls;
       controls.enableDamping = true;
     }
 
@@ -1235,6 +1238,7 @@ const SimulationView = ({
       resizeObserver.disconnect();
       cancelAnimationFrame(frameId);
       controls?.dispose();
+      orbitRef.current=null;
       if (renderer?.domElement.parentNode === container) renderer.domElement.remove();
       v0Ref.current?.dispose();
       fundamental1Ref.current?.dispose();
@@ -1280,6 +1284,20 @@ const SimulationView = ({
 
   // Update visibility when version changes
   useEffect(() => {
+    // V12's authentic floorplan occupies a much wider coordinate system
+    // than the original V0–V11 field centred on the origin. Frame it rather
+    // than appearing to render an empty scene or only its far corner.
+    const prior=previousVisibleVersionRef.current;
+    if(activeVersion==='v12'){
+      cameraRef.current?.position.set(6,13,20);
+      orbitRef.current?.target.set(6,0,5);
+      orbitRef.current?.update();
+    }else if(prior==='v12'){
+      cameraRef.current?.position.set(0,0,5);
+      orbitRef.current?.target.set(0,0,0);
+      orbitRef.current?.update();
+    }
+    previousVisibleVersionRef.current=activeVersion;
     const isFundamental = activeVersion === 'v1' || activeVersion === 'v2';
 
     if (v0Ref.current) {
@@ -7945,11 +7963,18 @@ function App() {
       const validOptimizers: OptimizerType[] = ['thermal', 'electrical', 'blockchain', 'math'];
       const validModes: ThermalMode[] = ['heating', 'cooling'];
       const validVersions: SimVersion[] = [...SIMULATION_STAGES, 'elements'];
+      const opt=validOptimizers.includes(saved.opt)?saved.opt as OptimizerType:fallback.opt;
+      const version=validVersions.includes(saved.version)
+        ? saved.version==='elements'?'v13' as SimVersion:saved.version as SimVersion
+        :fallback.version;
+      // The old UI saved 8-step indexes. Ignore their obsolete ordinal:
+      // the explicit engine version is authoritative in the 14-step tour.
+      const resolvedIndex=OPTIMIZATION_GOALS[opt].tasks.findIndex(t=>t.version===version);
       return {
-        opt: validOptimizers.includes(saved.opt) ? saved.opt as OptimizerType : fallback.opt,
+        opt,
         mode: validModes.includes(saved.mode) ? saved.mode as ThermalMode : fallback.mode,
-        version: validVersions.includes(saved.version) ? saved.version as SimVersion : fallback.version,
-        chainIdx: Number.isInteger(saved.chainIdx) && saved.chainIdx >= 0 ? saved.chainIdx : fallback.chainIdx,
+        version,
+        chainIdx: resolvedIndex>=0?resolvedIndex:0,
       };
     } catch {
       return fallback;
