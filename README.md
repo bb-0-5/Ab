@@ -69,6 +69,48 @@ replacing the original user interface.
 Regression coverage: `npm run test:v7-feedback` and
 `npm run test:sim-checkpoint`, included in `npm run test:all`.
 
+## True V9 → V10 → V1 field and V13 hypothesis replay
+
+The original material chain previously generated a V9 alloy/element
+voxel field and V10 porous geometry, but V1's `setMaterial()` silently
+ignored the supplied field and regenerated an unrelated generic gyroid.
+V10 also guessed the channel count from `frequency² × porosity × 8`
+rather than measuring connectivity. Both are repaired:
+
+- **V9** generates seed-reproducible alloy and vacancy/defect realizations
+  (default seed is stable; `setSeed(uint32)` permits an explicit new trial).
+  Equivalent conditions now produce the same numerical material field.
+- **V10** performs a bounded automated eight-configuration TPMS parameter
+  sweep on V9's real lattice fitness and chooses a better geometric candidate
+  using six-neighbour voxel connectedness, face-to-face transport access,
+  actual shortest through-void paths and a declared target porosity. The
+  search is **geometry screening**, not a CFD pressure-drop or yield model.
+  Its connected-component count and surface interfaces are now calculated
+  from the completed grid, not formulas or partially written cells.
+- **V1/V2** receive the selected V10 field *verbatim* as a dimensionless
+  numerical exploration landscape, alongside V9's units of thermal
+  conductivity W/(m·K), density kg/m³ and relative permittivity. This
+  changes upstream topology discoveries which feed the original V3–V7
+  path and flow simulations. V11 port/boundary topology remains included.
+- **V13 composites** remain chemical **hypotheses**. An old automatic
+  data handoff had incorrectly assigned V13 electrical conductivity in
+  S/m to V1's thermal conductivity in W/(m·K), used density in g/cm³
+  where V1 requires kg/m³, and substituted a bandgap in eV for relative
+  permittivity. These incompatible automatic assignments are **removed**.
+  Instead the original Material Codex → Inter-Sim panel now reports the
+  actual V9/V10/V11 results and V13's modeled melt/thermal screening,
+  including explicit unit conversion for comparison, without claiming a
+  validated material or injecting it into V1.
+- User-created V13 **element/fraction recipes** are retained locally (at
+  most 12 recipes), and the latest one is *recomputed* on page load.
+  Neither measured material properties nor experimental yields are
+  invented or replayed. In-memory chemistry structures are also bounded.
+
+Tests: `npm run test:v10-connected`,
+`npm run test:material-pipeline`, `npm run test:material-recipes`.
+All run within `npm run test:all`, in addition to the earlier
+V0–V13 continuity and V7 feedback tests.
+
 ## V8–V13 stage continuity and cross-simulator retained learning
 
 The original homepage's automatic **Simulation** tour was not listing the
