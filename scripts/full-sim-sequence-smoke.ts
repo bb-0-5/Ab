@@ -43,7 +43,8 @@ assert.match(app,/v12Ref\.current\.thermalHeatmap\.visible\s*=\s*activeVersion\s
 assert.match(app,/v13StageGroupRef\.current\.visible=activeVersion==='v13'/);
 assert.match(app,/probeRememberedTuning/);
 assert.match(app,/rememberFeedback/);
-assert.doesNotMatch(app,/setActiveTab\('codex'\);\s*\}\}\s*className=\{.*Elements/s);
+assert.match(app,/setActiveVersion\('v13'\);\s*setActiveTab\('elements'\)/,
+ 'The original Elements button must open the real V13 Codex, not a generic glossary');
 
 const cache=new Map<string,string>();
 Object.assign(globalThis,{localStorage:{
