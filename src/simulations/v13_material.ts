@@ -921,10 +921,18 @@ export class V13MaterialEngine {
    * Fractions are normalized to sum to 1 if they do not already.
    */
   buildComposite(elements: { z: number; fraction: number }[]): MaterialComposite {
-    if (elements.length === 0) throw new Error('Need at least one element');
+    if(!Array.isArray(elements)||elements.length<1||elements.length>16)
+      throw new Error('Composite must contain 1–16 selected elements');
+    if(elements.some(e=>!e||!Number.isInteger(e.z)||e.z<1||e.z>118
+      ||!Number.isFinite(e.fraction)||e.fraction<=0))
+      throw new Error('Composite fractions must be finite positive values with known Z');
+    if(new Set(elements.map(e=>e.z)).size!==elements.length)
+      throw new Error('Duplicate chemical element in material composite');
 
-    // Normalize fractions
-    const totalFrac = elements.reduce((s, e) => s + e.fraction, 0);
+    // Normalize fractions without allowing NaNs, negative yields or zero mass.
+    const totalFrac = elements.reduce((sum,e)=>sum+e.fraction,0);
+    if(!Number.isFinite(totalFrac)||totalFrac<=0)
+      throw new Error('Invalid composite fraction total');
     const components = elements.map(e => {
       const el = BY_Z[e.z];
       if (!el) throw new Error(`Unknown element Z=${e.z}`);
@@ -975,6 +983,10 @@ export class V13MaterialEngine {
     };
 
     this.composites.push(composite);
+    // Repeated builder experiments must not grow an unbounded topology
+    // archive in browser memory. All retained physical evidence remains
+    // explicitly heuristic; only the last 40 hypotheses stay resident.
+    if(this.composites.length>40)this.composites.splice(0,this.composites.length-40);
     return composite;
   }
 
