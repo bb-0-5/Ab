@@ -312,6 +312,36 @@ export class V7Engine {
    * The animation loop calls this every frame, but repeating the same change
    * must never double-apply it. Rollbacks are transmitted the same way.
    */
+  /**
+   * Trial ONE previously successful, same-context setting against LIVE V6
+   * readings. This is a fresh controlled-in-model probe, not loading the
+   * historical score as evidence. The normal optimizer rolls it back if it
+   * fails its next V6 flow observation.
+   */
+  probeRememberedTuning(hints:readonly {name:string;value:number}[]):boolean {
+    if(!this._latestMetrics||this._pendingTrial||!this._captured)return false;
+    const baselineScore=this._computeScore(this._latestMetrics);
+    if(!Number.isFinite(baselineScore))return false;
+    for(const hint of hints) {
+      const index=this.params.findIndex(param=>param.name===hint.name);
+      if(index<0||!Number.isFinite(hint.value))continue;
+      const param=this.params[index];
+      if(hint.value<param.min||hint.value>param.max
+       ||Math.abs(hint.value-param.value)<1e-10)continue;
+      const before=param.value;
+      param.value=hint.value;
+      param.lastDelta=hint.value-before;
+      this._pendingTrial={index,before,proposed:hint.value,baselineScore};
+      this.recommendations=[{
+       target:param.target,key:param.key,newValue:hint.value,
+       reason:`Re-test remembered ${param.name} ${before} → ${hint.value} against current V6 flow`,
+      }];
+      this._revision++;
+      return true;
+    }
+    return false;
+  }
+
   applyRecommendations(engines: Record<string, any>) {
     if (this._appliedRevision === this._revision) return;
     for (const rec of this.recommendations) {
