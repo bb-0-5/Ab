@@ -878,9 +878,11 @@ const SimulationView = ({
       }
 
       // V12: House Blueprint Simulation
-      const shouldStepHouse = activeModuleRef.current === 'house'
-        ? simulationFrame % 2 === 0
-        : simulationFrame % 15 === 0;
+      const shouldStepHouse = currentVersion === 'v12'
+        ? true // V12's stability needs >100 *actual* numerical updates
+        : activeModuleRef.current === 'house'
+          ? simulationFrame % 2 === 0
+          : simulationFrame % 15 === 0;
       if (v12Ref.current && shouldStepHouse) {
         v12Ref.current.update(opt, mem, tMode);
 
