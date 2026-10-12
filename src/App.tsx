@@ -7216,6 +7216,7 @@ const ElementsView = () => {
   };
 
   const metrics = engine?.getMetrics() || null;
+  const archivedCrossSim=getFeedbackArchive().slice(0,4);
   const activeEl = engine?.getActiveElement() || null;
   const latestComposite = engine?.getLatestComposite() || null;
   const isotopeClasses = engine?.getIsotopesByClass() || null;
@@ -7823,6 +7824,35 @@ const ElementsView = () => {
       {/* INTER-SIM STATUS PANEL */}
       {activePanel === 'intersim' && (
         <div className="space-y-4">
+          <div className="rounded-xl border border-emerald-500/25 bg-emerald-950/10 p-4">
+            <h4 className="text-xs font-bold uppercase tracking-widest text-emerald-300">
+              Retained V6 → V7 → V13 experiment evidence
+            </h4>
+            <p className="mt-1 text-[10px] text-gray-400">
+              {archivedCrossSim.length
+               ? `${archivedCrossSim.length} recent modeled experiments in browser memory. Previous V7 tunings are re-tested against fresh V6 observations before acceptance.`
+               : 'V7 will retain successful same-condition parameter trials here. No measurement or validated material discovery is implied.'}
+            </p>
+            {archivedCrossSim.map((record,index)=>(
+              <div key={record.timestamp+'-'+index}
+                className="mt-2 rounded-lg border border-white/10 bg-black/25 p-2 font-mono text-[9px] text-gray-300">
+                <div className="flex flex-wrap justify-between gap-2">
+                  <span className="text-cyan-300">{record.scenario.optimizer} ·
+                    {' '}{record.scenario.thermalMode} · compression {record.scenario.compressionLevel}</span>
+                  <span className="text-emerald-300">{record.v7.acceptedTrials} modeled trials accepted</span>
+                </div>
+                <div className="mt-1">
+                  V6 flow {record.flow.totalFlow.toFixed(3)} · V7 score {record.v7.bestScore.toFixed(3)}
+                  {' · '}V13 {record.materialScreens.length
+                   ?record.materialScreens.map(screen=>screen.status.replaceAll('_',' ')).join(', ')
+                   :'no candidate screened'}
+                </div>
+                <p className="mt-1 text-amber-200/75">
+                  Historical model output only; actual suitability and reaction yield require calibration and validation.
+                </p>
+              </div>
+            ))}
+          </div>
           <div className="bg-white/5 rounded-xl border border-white/10 p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold uppercase tracking-widest text-emerald-400 flex items-center gap-2">
