@@ -341,7 +341,6 @@ const SimulationView = ({
   const ventingStrategyRef = useRef(ventingStrategy);
   const isSimulatingRef = useRef(isSimulating);
   const activeModuleRef = useRef(activeModule);
-  const lastV13TopologyRef = useRef('');
   const v13StageGroupRef = useRef<THREE.Group | null>(null);
   const lastV13ShellsRef = useRef('');
   const lastStageRef = useRef<SimVersion>(activeVersion);
@@ -398,14 +397,21 @@ const SimulationView = ({
       v10Ref.current.configure(activeOptimizer);
       v11Ref.current.configure(activeOptimizer);
       v9Ref.current.buildLattice();
-      v10Ref.current.buildMesh(v9Ref.current.compositeField || undefined);
+      v10Ref.current.optimizeConnectedChannels(
+        v9Ref.current.compositeField || undefined,
+        activeOptimizer === 'electrical' ? 'x' : 'y',
+      );
       v11Ref.current.build();
     }
     if (v1Ref.current) {
-      // Feed real lattice material into V1
+      // V9 physical properties + V10's actual connected mesh search field
+      // feed V1. No generic synthetic gyroid is substituted for that mesh.
       const v9Mat = v9Ref.current?.getMaterialForV1();
       if (v9Mat) {
-        v1Ref.current.setMaterial(v9Mat);
+        v1Ref.current.setMaterial({
+          ...v9Mat,geometry:'custom',
+          customField:v10Ref.current?.getFitnessField()||v9Mat.customField,
+        });
       } else {
         v1Ref.current.setMaterial(blueprintGenRef.current.generateMaterial(activeOptimizer));
       }
@@ -519,7 +525,10 @@ const SimulationView = ({
 
     // Build the material pipeline: Lattice → Mesh → V1 material field
     v9Ref.current.buildLattice();
-    v10Ref.current.buildMesh(v9Ref.current.compositeField || undefined);
+    v10Ref.current.optimizeConnectedChannels(
+      v9Ref.current.compositeField || undefined,
+      opt0 === 'electrical' ? 'x' : 'y',
+    );
     v11Ref.current.build();
 
     // V13 remains a genuine chemistry calculation. Its atom-shell display
@@ -531,9 +540,13 @@ const SimulationView = ({
     v13StageGroupRef.current = atomGroup;
     scene.add(atomGroup);
 
-    // Feed the constructed material into V1 (real isotope/element properties + mesh topology)
+    // Physically dimensioned V9 lattice properties, V10 geometric
+    // surface fitness and V11 boundary nodes feed the original V1–V6 chain.
     const v9Mat = v9Ref.current.getMaterialForV1();
-    if (v9Mat) v1Ref.current.setMaterial(v9Mat);
+    if (v9Mat) v1Ref.current.setMaterial({
+      ...v9Mat,geometry:'custom',
+      customField:v10Ref.current.getFitnessField()||v9Mat.customField,
+    });
     // V2 shares V1's material field via reference
     v2Ref.current.setMaterialRef(v1Ref.current);
 
@@ -980,25 +993,13 @@ const SimulationView = ({
           }
         }
 
-        // Feed V13 topology into V1 as material field
-        const topo = v13Ref.current.exportTopology();
-        if (v1Ref.current && topo) {
-          const topologySignature = [
-            topo.vertices.length,
-            topo.faces.length,
-            topo.properties.conductivity,
-            topo.properties.density,
-            topo.properties.opticalBandgap,
-          ].join(':');
-          if (topologySignature !== lastV13TopologyRef.current) {
-            lastV13TopologyRef.current = topologySignature;
-            v1Ref.current.setMaterial({
-              conductivity: topo.properties.conductivity,
-              dielectricConstant: 1 / (topo.properties.opticalBandgap || 1),
-              density: topo.properties.density,
-            });
-          }
-        }
+        // V13 composite is a chemical hypothesis, not a validated
+        // constitutive field. The previous wiring incorrectly treated
+        // electrical S/m as thermal W/(m·K), g/cm³ as kg/m³, and estimated
+        // band gap as measured permittivity, overwriting the genuine V9/V10
+        // field in V1. Screen the candidate against V6 requirements,
+        // but do NOT inject those dimensionally incompatible values.
+        (window as any).v13CandidateTopology=v13Ref.current.exportTopology();
 
         // V7 sends optimization feedback to V13
         if (v7Ref.current && simulationFrame % 120 === 0) {
@@ -1007,6 +1008,12 @@ const SimulationView = ({
           v13Ref.current.receiveFromSim('v7', { score, recommendations: recs });
         }
 
+        // Export an evidence-bearing geometric screen for all simulations.
+        // V10's six-connected flood fill is NOT CFD or tested permeability.
+        (window as any).v10ChannelEvidence=v10Ref.current?.getConnectivity()||null;
+        (window as any).v10GeometrySearch=v10Ref.current?.lastSearch||null;
+        (window as any).v9MaterialReference=v9Ref.current?.getMaterialForV1()||null;
+        (window as any).v11PortCount=v11Ref.current?.getPorts().length||0;
         // Expose V13 engine for ElementsView in App
         (window as any).v13MaterialEngine = v13Ref.current;
       }
