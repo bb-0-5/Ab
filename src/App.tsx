@@ -44,6 +44,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SIMULATION_STAGES,mayAdvanceStage,indexOfStage } from './lib/sim_sequence';
 import {screenMaterialPipeline,type MaterialPipelineEvidence} from './lib/material_pipeline_evidence';
+import {loadMaterialRecipes,rememberMaterialRecipe} from './lib/material_recipe_archive';
 import {
  feedbackScenarioKey,findCompatibleFeedback,rememberFeedback,validTuningHints,
  getFeedbackArchive,type FeedbackScenario,
@@ -536,6 +537,14 @@ const SimulationView = ({
     // is a schematic of the actual active element, not orbital measurement.
     v13Ref.current = new V13MaterialEngine();
     v13Ref.current.activateElement(6); // Carbon: reproducible initial study
+    // Reconstruct the most recent user-built material from its chemical
+    // recipe, NOT a stored "successful" physical-property score. Live V6
+    // will re-screen it with the current temperature envelope.
+    const priorRecipe=loadMaterialRecipes()[0];
+    if(priorRecipe){
+      try{v13Ref.current.buildComposite(priorRecipe.parts);}
+      catch(error){console.warn('[V13] Saved material needs review:',error);}
+    }
     const atomGroup = new THREE.Group();
     atomGroup.visible = activeVersionRef.current === 'v13';
     v13StageGroupRef.current = atomGroup;
@@ -7240,6 +7249,7 @@ const ElementsView = () => {
       fraction: 1 / selectedForBuilder.size,
     }));
     engine.buildComposite(elems);
+    rememberMaterialRecipe(elems);
     forceUpdate(c => c + 1);
   };
 
