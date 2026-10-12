@@ -46,7 +46,12 @@ function read():LearningEvidence[]{
  try{
   const raw=JSON.parse(localStorage.getItem(KEY)||'[]') as LearningEvidence[];
   return Array.isArray(raw)?raw.slice(0,LIMIT).filter(r=>r?.evidence==='model_only_not_measured'
-   &&r?.solverVersion==='v6-v7-model-1'&&r?.scenario&&r?.flow):[];
+   &&r?.solverVersion==='v6-v7-model-1'
+   &&r?.scenario&&r?.flow&&finite(r.flow.totalFlow)
+   &&r?.v7&&finite(r.v7.bestScore)
+   &&Number.isSafeInteger(r.v7.acceptedTrials)
+   &&Array.isArray(r.v7.bestParams)
+   &&Array.isArray(r.materialScreens)):[];
  }catch{return [];}
 }
 export function getFeedbackArchive():LearningEvidence[]{return read();}
