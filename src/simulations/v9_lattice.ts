@@ -153,6 +153,14 @@ export class V9LatticeEngine {
   latticeSize: number = 4;      // Unit cells per axis
   latticeSpacing: number = 0.3; // World units between sites
   defectRate: number = 0.05;    // Vacancy/defect probability
+  /** Reproducible lattice trial. Same input + seed => same voxel material. */
+  seed:number = 20261012;
+  setSeed(seed:number):void{
+    if(!Number.isSafeInteger(seed)||seed<0||seed>0xffffffff)
+      throw new RangeError('V9 seed must be a uint32 integer');
+    this.seed=seed;
+    this._built=false;
+  }
 
   // Field output resolution
   fieldResolution: number = 16;
@@ -229,17 +237,27 @@ export class V9LatticeEngine {
       default: positions = fccPositions(this.latticeSize, this.latticeSpacing);
     }
 
-    // Assign elements to sites
+    // Assign elements to sites using a specified reproducible numeric seed.
+    // The former Math.random lattice could not be replayed or compared
+    // fairly with later V6/V7 results under supposedly identical conditions.
+    let rngState=this.seed>>>0;
+    const sample=()=>{
+      rngState=(rngState+0x6d2b79f5)>>>0;
+      let t=rngState;
+      t=Math.imul(t^(t>>>15),t|1);
+      t^=t+Math.imul(t^(t>>>7),t|61);
+      return ((t^(t>>>14))>>>0)/4294967296;
+    };
     this.cells = positions.map(pos => {
-      const isDefect = Math.random() < this.defectRate;
-      const isPrimary = Math.random() < this.alloyRatio;
+      const isDefect = sample() < this.defectRate;
+      const isPrimary = sample() < this.alloyRatio;
       const element = isDefect ? ELEMENTS.Void : (isPrimary ? primary : secondary);
 
       return {
         position: pos,
         element,
         occupied: !isDefect,
-        bondStrength: isDefect ? 0 : (0.5 + Math.random() * 0.5),
+        bondStrength: isDefect ? 0 : (0.5 + sample() * 0.5),
       };
     });
 
