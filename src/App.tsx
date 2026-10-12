@@ -336,6 +336,10 @@ const SimulationView = ({
   const isSimulatingRef = useRef(isSimulating);
   const activeModuleRef = useRef(activeModule);
   const lastV13TopologyRef = useRef('');
+  const v13StageGroupRef = useRef<THREE.Group | null>(null);
+  const lastV13ShellsRef = useRef('');
+  const lastStageRef = useRef<SimVersion>(activeVersion);
+  const stageFrameRef = useRef(0);
   const globalMemoryRef = useRef<any>({
     v7_cooling_efficiency: 1.0,
     v6_thermal_gradient: 0,
@@ -489,8 +493,14 @@ const SimulationView = ({
     v10Ref.current.buildMesh(v9Ref.current.compositeField || undefined);
     v11Ref.current.build();
 
-    // V13: Material Builder Engine (pure data, no scene)
+    // V13 remains a genuine chemistry calculation. Its atom-shell display
+    // is a schematic of the actual active element, not orbital measurement.
     v13Ref.current = new V13MaterialEngine();
+    v13Ref.current.activateElement(6); // Carbon: reproducible initial study
+    const atomGroup = new THREE.Group();
+    atomGroup.visible = activeVersionRef.current === 'v13';
+    v13StageGroupRef.current = atomGroup;
+    scene.add(atomGroup);
 
     // Feed the constructed material into V1 (real isotope/element properties + mesh topology)
     const v9Mat = v9Ref.current.getMaterialForV1();
@@ -574,23 +584,26 @@ const SimulationView = ({
       v8Ref.current.criticalLine.visible = v8Vis;
       for (const wl of v8Ref.current.waveLines) wl.visible = v8Vis;
     }
-    // V12 supplies the separate House dashboard; keep its point cloud out of
-    // the shared V0-V8 scene so it does not obscure the selected simulation.
-    if (v12Ref.current) v12Ref.current.thermalHeatmap.visible = false;
-    // V9/V10/V11: Material pipeline — visible whenever V1-V7 are active (always overlaid)
-    const showMaterial = ['v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7'].includes(activeVersion);
+    // V9–V12 are actual, distinct selectable 3D stages; they were hidden
+    // under V1–V7 and hence looked like the tour jumped to V13.
+    const upstreamMaterial = ['v1','v2','v3','v4','v5','v6','v7'].includes(activeVersion);
     if (v9Ref.current) {
-      v9Ref.current.points.visible = showMaterial;
-      v9Ref.current.bondLines.visible = showMaterial;
+      v9Ref.current.points.visible = upstreamMaterial || activeVersion === 'v9';
+      v9Ref.current.bondLines.visible = upstreamMaterial || activeVersion === 'v9';
     }
     if (v10Ref.current) {
-      v10Ref.current.surfacePoints.visible = showMaterial;
-      v10Ref.current.channelLines.visible = showMaterial;
+      v10Ref.current.surfacePoints.visible = upstreamMaterial || activeVersion === 'v10';
+      v10Ref.current.channelLines.visible = upstreamMaterial || activeVersion === 'v10';
     }
     if (v11Ref.current) {
-      v11Ref.current.shellLines.visible = showMaterial;
-      v11Ref.current.portPoints.visible = showMaterial;
-      v11Ref.current.constraintLines.visible = showMaterial;
+      v11Ref.current.shellLines.visible = upstreamMaterial || activeVersion === 'v11';
+      v11Ref.current.portPoints.visible = upstreamMaterial || activeVersion === 'v11';
+      v11Ref.current.constraintLines.visible = upstreamMaterial || activeVersion === 'v11';
+    }
+    if (v12Ref.current) {
+      v12Ref.current.floorplanMesh.visible = activeVersion === 'v12';
+      v12Ref.current.thermalHeatmap.visible = activeVersion === 'v12';
+      v12Ref.current.ventArrows.visible = activeVersion === 'v12';
     }
 
     let frameId: number;
@@ -613,6 +626,11 @@ const SimulationView = ({
       simulationFrame++;
       
       const currentVersion = activeVersionRef.current;
+      if (lastStageRef.current !== currentVersion) {
+        lastStageRef.current = currentVersion;
+        stageFrameRef.current = 0;
+      }
+      stageFrameRef.current++;
       const opt = activeOptimizerRef.current;
       const tMode = thermalModeRef.current;
       const mem = globalMemoryRef.current;
@@ -845,6 +863,36 @@ const SimulationView = ({
           }
         }
         v13Ref.current.update(0.016);
+        // Schematic shell visualization is derived from genuine V13 shell data.
+        // This only constructs visible line geometry; it does not modify
+        // material predictions or claim exact electron orbits.
+        const shells=v13Ref.current.getShellVisualization();
+        const shellSignature=JSON.stringify(shells.map(x=>[x.n,x.radiusPm,x.electrons]));
+        if(shellSignature!==lastV13ShellsRef.current&&v13StageGroupRef.current){
+          lastV13ShellsRef.current=shellSignature;
+          const group=v13StageGroupRef.current;
+          for(const child of [...group.children]){
+            group.remove(child);
+            if(child instanceof THREE.Line) {
+              child.geometry.dispose();
+              (child.material as THREE.Material).dispose();
+            }
+          }
+          for(const [i,shell] of shells.entries()){
+            const radius=.65+i*.68;
+            const circle=new THREE.EllipseCurve(0,0,radius,radius,0,2*Math.PI);
+            const pts=circle.getPoints(96).map(p=>new THREE.Vector3(p.x,p.y,0));
+            const geom=new THREE.BufferGeometry().setFromPoints(pts);
+            const mat=new THREE.LineBasicMaterial({
+              color:new THREE.Color().setHSL((.47+i*.11)%1,.72,.5),
+              transparent:true,opacity:.87,
+            });
+            const line=new THREE.LineLoop(geom,mat);
+            line.rotation.x=(i%2)*Math.PI/3;
+            line.rotation.y=(i%3)*Math.PI/4;
+            group.add(line);
+          }
+        }
 
         // Feed V13 topology into V1 as material field
         const topo = v13Ref.current.exportTopology();
@@ -896,6 +944,10 @@ const SimulationView = ({
             z: camera.position.z,
           },
           stable: {
+            v9: Boolean(v9Ref.current?.isStable()),
+            v10: Boolean(v10Ref.current?.isStable()),
+            v11: Boolean(v11Ref.current?.isStable()),
+            v13: Boolean(v13Ref.current?.getActiveElement()),
             v0: Boolean(v0Ref.current?.isStable()),
             v1: Boolean(v1Ref.current?.isStable()),
             v2: Boolean(v2Ref.current?.isStable()),
@@ -965,13 +1017,12 @@ const SimulationView = ({
         }
       }
 
-      // Auto-Transition Logic
-      const autoTransition = (window as any).autoTransitionEnabled;
-      if (autoTransition) {
+      // Auto-transition through EVERY real original stage, V0–V13.
+      // 150 numeric frames (~5s) prevent built/instant-stable engines from
+      // flashing past before the viewer can identify what is running.
+      if ((window as any).autoTransitionEnabled) {
         const goal = OPTIMIZATION_GOALS[opt];
-        const currentTask = goal.tasks[currentIndex % goal.tasks.length];
-        
-        const engine = 
+        const engine =
           currentVersion === 'v0' ? v0Ref.current :
           currentVersion === 'v1' ? fundamental1Ref.current :
           currentVersion === 'v2' ? fundamental2Ref.current :
@@ -980,10 +1031,19 @@ const SimulationView = ({
           currentVersion === 'v5' ? v5Ref.current :
           currentVersion === 'v6' ? v6Ref.current :
           currentVersion === 'v7' ? v7Ref.current :
-          v8Ref.current;
-
-        if (engine?.isStable()) {
-          const nextIndex = (currentIndex + 1) % goal.tasks.length;
+          currentVersion === 'v8' ? v8Ref.current :
+          currentVersion === 'v9' ? v9Ref.current :
+          currentVersion === 'v10' ? v10Ref.current :
+          currentVersion === 'v11' ? v11Ref.current :
+          currentVersion === 'v12' ? v12Ref.current : null;
+        const stable = currentVersion === 'v13'
+          ? Boolean(v13Ref.current?.getActiveElement())
+          : Boolean(engine?.isStable());
+        if (mayAdvanceStage(currentVersion,stageFrameRef.current,stable,150)) {
+          const nextIndex=(currentIndex+1)%goal.tasks.length;
+          // Force synchronization even before the React effect for next
+          // stage installs, preventing multiple advances from one frame.
+          stageFrameRef.current=0;
           setCurrentChainIndex(nextIndex);
         }
       }
@@ -1105,6 +1165,18 @@ const SimulationView = ({
       v10Ref.current?.dispose();
       v11Ref.current?.dispose();
       if (v12Ref.current) v12Ref.current.dispose();
+      if (v13StageGroupRef.current) {
+        const group=v13StageGroupRef.current;
+        for(const child of group.children){
+          if(child instanceof THREE.Line) {
+            child.geometry.dispose();
+            (child.material as THREE.Material).dispose();
+          }
+        }
+        scene.remove(group);
+        group.clear();
+        v13StageGroupRef.current=null;
+      }
       if (membraneLinesRef.current) {
         membraneLinesRef.current.geometry.dispose();
         const material = membraneLinesRef.current.material;
@@ -1191,20 +1263,28 @@ const SimulationView = ({
       v8Ref.current.criticalLine.visible = v8Vis;
       for (const wl of v8Ref.current.waveLines) wl.visible = v8Vis;
     }
-    // V9/V10/V11 material pipeline — always overlaid when V1-V7 are active
-    const showMaterial = ['v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7'].includes(activeVersion);
+    // Stage-specific geometry: do not hide V9–V12 behind the old overlay.
+    const showMaterial = ['v1','v2','v3','v4','v5','v6','v7'].includes(activeVersion);
     if (v9Ref.current) {
-      v9Ref.current.points.visible = showMaterial;
-      v9Ref.current.bondLines.visible = showMaterial;
+      v9Ref.current.points.visible = showMaterial || activeVersion === 'v9';
+      v9Ref.current.bondLines.visible = showMaterial || activeVersion === 'v9';
     }
     if (v10Ref.current) {
-      v10Ref.current.surfacePoints.visible = showMaterial;
-      v10Ref.current.channelLines.visible = showMaterial;
+      v10Ref.current.surfacePoints.visible = showMaterial || activeVersion === 'v10';
+      v10Ref.current.channelLines.visible = showMaterial || activeVersion === 'v10';
     }
     if (v11Ref.current) {
-      v11Ref.current.shellLines.visible = showMaterial;
-      v11Ref.current.portPoints.visible = showMaterial;
-      v11Ref.current.constraintLines.visible = showMaterial;
+      v11Ref.current.shellLines.visible = showMaterial || activeVersion === 'v11';
+      v11Ref.current.portPoints.visible = showMaterial || activeVersion === 'v11';
+      v11Ref.current.constraintLines.visible = showMaterial || activeVersion === 'v11';
+    }
+    if (v12Ref.current) {
+      v12Ref.current.floorplanMesh.visible=activeVersion==='v12';
+      v12Ref.current.thermalHeatmap.visible=activeVersion==='v12';
+      v12Ref.current.ventArrows.visible=activeVersion==='v12';
+    }
+    if (v13StageGroupRef.current) {
+      v13StageGroupRef.current.visible=activeVersion==='v13'||activeVersion==='elements';
     }
   }, [activeVersion]);
 
@@ -7778,7 +7858,7 @@ function App() {
       const saved = JSON.parse(raw);
       const validOptimizers: OptimizerType[] = ['thermal', 'electrical', 'blockchain', 'math'];
       const validModes: ThermalMode[] = ['heating', 'cooling'];
-      const validVersions: SimVersion[] = ['v0', 'v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7', 'v8', 'elements'];
+      const validVersions: SimVersion[] = [...SIMULATION_STAGES, 'elements'];
       return {
         opt: validOptimizers.includes(saved.opt) ? saved.opt as OptimizerType : fallback.opt,
         mode: validModes.includes(saved.mode) ? saved.mode as ThermalMode : fallback.mode,
@@ -8409,7 +8489,7 @@ function App() {
               <div className="absolute top-4 left-4 right-4 md:right-auto flex flex-col gap-2 z-20">
                 {/* Version Selector */}
                 <div className="bg-black/80 backdrop-blur-md p-1 rounded-lg border border-white/10 flex gap-1 mb-2 overflow-x-auto no-scrollbar shadow-2xl">
-                  {(['v0', 'v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7', 'v8'] as const).map((v) => (
+                  {SIMULATION_STAGES.map((v) => (
                     <button
                       key={v}
                       onClick={() => {
@@ -8432,8 +8512,8 @@ function App() {
                   <button
                     onClick={() => {
                       setAutoTransition(false);
-                      setActiveVersion('elements');
-                      setActiveTab('elements');
+                      setActiveVersion('v13');
+                      setActiveTab('codex');
                     }}
                     className={`px-3 py-1 rounded text-[10px] font-bold uppercase tracking-widest transition-all whitespace-nowrap ${
                       activeVersion === 'elements'
