@@ -33,9 +33,12 @@ export type LearningEvidence={
 };
 const finite=(x:unknown):x is number=>typeof x==='number'&&Number.isFinite(x);
 export function feedbackScenarioKey(s:FeedbackScenario):string{
- if(!finite(s.compressionLevel)||s.compressionLevel<0
+ if(!s||!['thermal','electrical','blockchain','math'].includes(s.optimizer)
+   ||!['heating','cooling'].includes(s.thermalMode)
+   ||!finite(s.compressionLevel)||s.compressionLevel<0
    ||!Number.isInteger(s.loopCount)||s.loopCount<0
-   ||s.materialSignature.length>300)throw Error('Invalid simulation scenario');
+   ||typeof s.materialSignature!=='string'||s.materialSignature.length>300)
+   throw Error('Invalid simulation scenario');
  return JSON.stringify([SCHEMA,s.optimizer,s.thermalMode,
   s.compressionLevel,s.materialSignature,s.loopCount]);
 }
@@ -54,7 +57,10 @@ export function findCompatibleFeedback(
  if(!finite(reference.totalFlow)||!finite(reference.avgResistance)
   ||!finite(reference.efficiency)||!finite(reference.pathCount))return null;
  const matches=read().filter(record=>{
-  if(feedbackScenarioKey(record.scenario)!==key)return false;
+  // Browser storage is user-controlled and can contain stale/corrupt JSON.
+  // One bad record must never halt the live RAF simulation chain.
+  try{if(feedbackScenarioKey(record.scenario)!==key)return false;}
+  catch{return false;}
   // This is a heuristic consistency gate. State changes are still independently
   // tested by V7, and archive scores do not become current measurements.
   const expected=record.flow;
@@ -98,7 +104,10 @@ export function rememberFeedback(record:LearningEvidence):number{
   const fingerprint=JSON.stringify([feedbackScenarioKey(safe.scenario),safe.v7.bestParams]);
   const previous=existing.find(x=>JSON.stringify([feedbackScenarioKey(x.scenario),x.v7.bestParams])===fingerprint);
   if(previous&&previous.v7.bestScore>=safe.v7.bestScore)return existing.length;
-  const rest=existing.filter(x=>JSON.stringify([feedbackScenarioKey(x.scenario),x.v7.bestParams])!==fingerprint);
+  const rest=existing.filter(x=>{
+    try{return JSON.stringify([feedbackScenarioKey(x.scenario),x.v7.bestParams])!==fingerprint;}
+    catch{return false;}
+  });
   localStorage.setItem(KEY,JSON.stringify([safe,...rest].slice(0,LIMIT)));
   return Math.min(LIMIT,1+rest.length);
  }catch{return read().length;}
