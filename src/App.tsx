@@ -43,6 +43,7 @@ import {
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SIMULATION_STAGES,mayAdvanceStage,indexOfStage } from './lib/sim_sequence';
+import {screenMaterialPipeline,type MaterialPipelineEvidence} from './lib/material_pipeline_evidence';
 import {
  feedbackScenarioKey,findCompatibleFeedback,rememberFeedback,validTuningHints,
  getFeedbackArchive,type FeedbackScenario,
@@ -1014,6 +1015,24 @@ const SimulationView = ({
         (window as any).v10GeometrySearch=v10Ref.current?.lastSearch||null;
         (window as any).v9MaterialReference=v9Ref.current?.getMaterialForV1()||null;
         (window as any).v11PortCount=v11Ref.current?.getPorts().length||0;
+        const material=v9Ref.current?.getMaterialForV1();
+        const channel=v10Ref.current?.getConnectivity();
+        if(material&&channel){
+          try{
+            const currentScreen=v13Ref.current.getRequirementScreenings()
+              .find(row=>row.requirement.id==='v6:thermal-field')||null;
+            (window as any).materialPipelineEvidence=screenMaterialPipeline({
+              v9:material,v10:channel,
+              v11PortCount:v11Ref.current?.getPorts().length||0,
+              v13Composite:v13Ref.current.getLatestComposite(),
+              v13Screen:currentScreen,
+              preferredAxis:opt==='electrical'?'x':'y',
+            });
+          }catch(error){
+            (window as any).materialPipelineEvidence=null;
+            console.warn('[Inter-Sim] Could not screen actual geometry:',error);
+          }
+        }
         // Expose V13 engine for ElementsView in App
         (window as any).v13MaterialEngine = v13Ref.current;
       }
@@ -7226,6 +7245,7 @@ const ElementsView = () => {
 
   const metrics = engine?.getMetrics() || null;
   const archivedCrossSim=getFeedbackArchive().slice(0,4);
+  const materialPipeline=(window as any).materialPipelineEvidence as MaterialPipelineEvidence|null;
   const activeEl = engine?.getActiveElement() || null;
   const latestComposite = engine?.getLatestComposite() || null;
   const isotopeClasses = engine?.getIsotopesByClass() || null;
@@ -7833,6 +7853,41 @@ const ElementsView = () => {
       {/* INTER-SIM STATUS PANEL */}
       {activePanel === 'intersim' && (
         <div className="space-y-4">
+          <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/10 p-4">
+            <h4 className="text-xs font-bold uppercase tracking-widest text-cyan-200">
+              Actual V9 → V10 → V11 → V13 physical-screening handoff
+            </h4>
+            {materialPipeline ? (
+              <div className="mt-2 space-y-1 font-mono text-[10px] text-slate-300">
+                <p>V9 thermal k: {materialPipeline.originalV9.thermalConductivityWmK.toFixed(2)} W/(m·K)
+                   {' · '}density: {materialPipeline.originalV9.densityKgM3.toFixed(0)} kg/m³</p>
+                <p>V10 mesh: {(materialPipeline.v10.porosity*100).toFixed(1)}% void
+                   {' · '}{materialPipeline.v10.componentCount} distinct void components
+                   {' · '}through-channel on {materialPipeline.v10.crossFlowAxis.toUpperCase()} axis:
+                   {' '}{materialPipeline.v10.crossFlowGeometricallyOpen?'OPEN':'BLOCKED'}
+                   {' · '}shortest voxel tortuosity:
+                   {' '}{materialPipeline.v10.minGeometricTortuosity===null
+                    ?'not connected':materialPipeline.v10.minGeometricTortuosity.toFixed(2)}</p>
+                <p>V11: {materialPipeline.v11.portCount} geometric ports (not connectivity-tested)</p>
+                {materialPipeline.v13 ? (
+                  <p>V13 hypothetical {materialPipeline.v13.candidateElements.join(' + ')}:
+                    {' '}{materialPipeline.v13.estimatedThermalConductivityWmK.toFixed(2)} W/(m·K);
+                    {' '}{materialPipeline.v13.estimatedDensityKgM3.toFixed(0)} kg/m³;
+                    {' '}{materialPipeline.v13.estimatedMeltingK.toFixed(0)} K melting estimate;
+                    {' '}{materialPipeline.v13.thermalScreen.replaceAll('_',' ')}.
+                    {' '}Not applied to V1 without a validated constitutive field.</p>
+                ) : (
+                  <p>V13: Build a candidate composite in Material Builder to compare theoretical properties and thermal demand.</p>
+                )}
+                <p className={materialPipeline.conclusion==='no_connected_channel'?'text-amber-300':'text-emerald-300'}>
+                  Model screen: {materialPipeline.conclusion.replaceAll('_',' ')}
+                </p>
+                <p className="text-amber-200/80">{materialPipeline.caveat}</p>
+              </div>
+            ):<p className="mt-2 text-xs text-gray-400">
+              The original V9 lattice and V10 voxel connectivity study will appear when the engines generate geometry.
+            </p>}
+          </div>
           <div className="rounded-xl border border-emerald-500/25 bg-emerald-950/10 p-4">
             <h4 className="text-xs font-bold uppercase tracking-widest text-emerald-300">
               Retained V6 → V7 → V13 experiment evidence
