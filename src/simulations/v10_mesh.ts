@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { CompositeField } from './v9_lattice';
+import {screenVoxelChannels,type VoxelChannelEvidence} from '../lib/voxel_connectivity';
 
 /**
  * V10 — Mesh / Surface Texture Optimizer
@@ -102,6 +103,9 @@ export class V10MeshEngine {
     roughness: 0.05,
   };
 
+  connectivity:VoxelChannelEvidence|null=null;
+  lastSearch:{evaluated:number;axis:'x'|'y'|'z';baselineScore:number;bestScore:number;selected:MeshConfig;modeledOnly:true}|null=null;
+
   metrics: MeshMetrics = {
     surfaceArea: 0, porosity: 0, tortuosity: 1.0,
     channelCount: 0, avgChannelWidth: 0,
@@ -200,30 +204,86 @@ export class V10MeshEngine {
 
           this.meshFitnessField[idx] = baseFitness;
 
-          // Approximate surface area by counting boundary voxels
-          if (xi > 0 && yi > 0 && zi > 0 && xi < res - 1 && yi < res - 1 && zi < res - 1) {
-            const neighbors = [
-              this.solidMask[(xi + 1) * res * res + yi * res + zi] ?? 0,
-              this.solidMask[(xi - 1) * res * res + yi * res + zi] ?? 0,
-            ];
-            // If solid but has a void neighbor → surface
-            if (isSolid && neighbors.some(n => n === 0)) {
-              surfaceArea += step * step;
-            }
-          }
+          // Surface area is computed after the entire mask is written.
+          // Previously the mask was inspected mid-build, treating cells
+          // not yet evaluated as void and fabricating spurious interfaces.
         }
       }
     }
 
-    // Compute metrics
+    // Count all solid/void interfaces on the FULLY BUILT voxel volume,
+    // once per shared face, on the X, Y and Z axes (scene-units²).
+    for(let x=0;x<res;x++)for(let y=0;y<res;y++)for(let z=0;z<res;z++){
+      const i=x*res*res+y*res+z;
+      if(x+1<res&&this.solidMask[i]!==this.solidMask[i+res*res])surfaceArea+=step*step;
+      if(y+1<res&&this.solidMask[i]!==this.solidMask[i+res])surfaceArea+=step*step;
+      if(z+1<res&&this.solidMask[i]!==this.solidMask[i+1])surfaceArea+=step*step;
+    }
+    const connection=screenVoxelChannels(this.solidMask,res);
+    this.connectivity=connection;
+    // Exact geometric connectivity replaces the former unrelated
+    // freq²×porosity "channel count" and assumed tortuosity.
+    const shortest=Object.values(connection.shortestPathTortuosity)
+      .filter((x):x is number=>x!==null);
     this.metrics.porosity = 1.0 - (solidCount / n);
     this.metrics.surfaceArea = surfaceArea;
-    this.metrics.tortuosity = 1.0 + (1.0 - this.metrics.porosity) * 2.0; // Approximate
+    this.metrics.tortuosity = shortest.length?Math.min(...shortest):0; // 0 means NO through-channel
+    // Width still a porosity-based heuristic; geometry is not CFD.
     this.metrics.avgChannelWidth = this.metrics.porosity > 0 ? (bounds * 2 * this.metrics.porosity / this.config.frequency) : 0;
-    this.metrics.channelCount = Math.max(1, Math.round(this.config.frequency * this.config.frequency * this.metrics.porosity * 8));
+    this.metrics.channelCount = connection.componentCount;
 
     this._built = true;
   }
+
+  /**
+   * Autonomously sweep nine real TPMS configurations using actual
+   * 6-connected voxel paths, not guessed channel counts or pressure drop.
+   * Only accepted geometric topology is built; physical permeability remains
+   * unmeasured. The previous same-comfort baseline competes as a candidate.
+   */
+  optimizeConnectedChannels(
+    composite:CompositeField|undefined,axis:'x'|'y'|'z'='y',
+  ) {
+    const baseline={...this.config};
+    const candidates:MeshConfig[]=[
+      baseline,
+      {...baseline,threshold:baseline.threshold-.18},
+      {...baseline,threshold:baseline.threshold+.18},
+      {...baseline,frequency:Math.max(.5,baseline.frequency-.5)},
+      {...baseline,frequency:Math.min(5,baseline.frequency+.5)},
+      ...(['gyroid','diamond','schwarz_p','lidinoid'] as const)
+        .filter(tpms=>tpms!==baseline.tpms)
+        .map(tpms=>({...baseline,tpms})),
+    ];
+    const score=()=>{
+      const info=this.connectivity;
+      if(!info)return -Infinity;
+      const span=info.spanning[axis];
+      const path=info.shortestPathTortuosity[axis];
+      // Expresses a declared *geometry* objective only: traversability,
+      // accessible pore fraction and requested target void fraction.
+      return (span?3:0)+info.spanningVoidFraction
+        -2*Math.abs(this.metrics.porosity-baseline.porosity)
+        -(path===null?1:Math.max(0,path-1)*.2);
+    };
+    let winner=baseline,best=-Infinity,baselineScore=-Infinity;
+    for(let i=0;i<candidates.length;i++){
+      this.config=candidates[i];
+      this.buildMesh(composite);
+      const current=score();
+      if(i===0)baselineScore=current;
+      if(current>best+1e-9){best=current;winner={...this.config};}
+    }
+    this.config=winner;
+    this.buildMesh(composite);
+    this.lastSearch={
+      evaluated:candidates.length,axis,baselineScore,bestScore:best,
+      selected:{...winner},modeledOnly:true,
+    };
+    return this.lastSearch;
+  }
+
+  getConnectivity():VoxelChannelEvidence|null{return this.connectivity;}
 
   /** Get mesh fitness field for V1.setMaterial() customField injection */
   getFitnessField(): Float32Array | null {
