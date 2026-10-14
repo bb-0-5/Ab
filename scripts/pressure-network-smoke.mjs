@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import {solvePoreNetwork,assessMembrane,HYDRAULICS} from '../public/v10-pressure-network.mjs';
+import {buildV10Mask,V10_CANDIDATES} from '../public/v10-membrane-masks.mjs';
+const n=11,layers=7,empty=new Uint8Array(n*n*layers),q=(i,j,k)=>(k*n+j)*n+i;
+const open=solvePoreNetwork(empty,n,layers);
+assert.ok(open.converged,'Open cavity pressure solve must converge');
+const expected=n*layers/(n-1)*open.throatConductance*HYDRAULICS.pressureDifferencePa;
+assert.ok(Math.abs(open.flowM3S-expected)/expected<5e-5,'Known parallel-tubes conductance must be recovered');
+assert.ok(open.imbalanceM3S/open.flowM3S<1e-8);
+assert.ok(open.permeabilityM2>0);
+const blocked=new Uint8Array(empty);for(let k=0;k<layers;k++)for(let i=0;i<n;i++)blocked[q(i,Math.floor(n/2),k)]=1;
+const noFlow=solvePoreNetwork(blocked,n,layers);
+assert.equal(noFlow.throughCells,0);assert.equal(noFlow.flowM3S,0);
+assert.equal(assessMembrane(noFlow,open).valid,false);
+const single=new Uint8Array(empty).fill(1);for(let j=0;j<n;j++)single[q(5,j,3)]=0;
+const narrow=solvePoreNetwork(single,n,layers);
+assert.ok(narrow.converged,'Single tube converges');
+assert.ok(Math.abs(narrow.flowM3S-open.throatConductance/(n-1)*HYDRAULICS.pressureDifferencePa)<1e-14);
+assert.ok(narrow.flowM3S<open.flowM3S,'Removing fluid bonds cannot increase conductance');
+const split=new Uint8Array(empty);for(let k=0;k<layers;k++)for(let i=0;i<n;i++)if(i%3===0)for(let j=1;j<n-1;j++)split[q(i,j,k)]=1;
+const screened=solvePoreNetwork(split,n,layers);
+assert.ok(screened.converged);assert.ok(screened.flowM3S<open.flowM3S);
+assert.ok(screened.imbalanceM3S<Math.max(1e-14,screened.flowM3S*.001));
+for(const candidate of V10_CANDIDATES){
+ const mask=buildV10Mask({n,layers,...candidate}).mask;
+ const result=solvePoreNetwork(mask,n,layers);
+ assert.ok(Number.isFinite(result.flowM3S));assert.ok(Number.isFinite(result.permeabilityM2));
+ assert.ok(result.flowM3S<=open.flowM3S*(1+1e-7),'Passive pores cannot exceed unconstrained open conductance');
+ assert.ok(result.converged||result.throughCells===0,'candidate must converge or be impermeable');
+ const quality=assessMembrane(result,open);assert.equal(typeof quality.reason,'string');
+}
+console.log('PASS: known open-channel solution, blocked/single-channel geometry, continuity, mass conservation, 6 V10 candidates');
+console.log({openFlowM3S:open.flowM3S,openPermeabilityM2:open.permeabilityM2,blockedFlow:noFlow.flowM3S});
