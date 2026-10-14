@@ -712,6 +712,10 @@ const SimulationView = ({
                 lattice.compositeField||undefined,
                 activeOptimizerRef.current==='electrical'?'x':'y',
               );
+              // Fresh geometry context means old failure attempts no longer
+              // count toward the new discovery-derived construction trial.
+              mesh.recoveryHistory=[];
+              mesh.lastRecoveryContext=null;
               const material=lattice.getMaterialForV1();
               if(material){
                 v1.setMaterial({
@@ -744,7 +748,19 @@ const SimulationView = ({
             let bestRecipe=recipes[0],bestMargin=-Infinity;
             for(const recipe of recipes){
               const trial=v13Ref.current.buildComposite(recipe);
-              const margin=trial.properties.meltingPoint-requiredK;
+              const needsWithK=needs.filter(row=>
+                row.requirement.maxThermalConductivityWmK!==undefined);
+              const meltDeficit=Math.max(0,requiredK-
+                trial.properties.meltingPoint);
+              const transportDeficit=needsWithK.reduce((sum,row)=>
+                sum+Math.max(0,
+                  trial.properties.thermalConductivity/
+                  row.requirement.maxThermalConductivityWmK!-1),0);
+              // Lowest normalized unmet demand wins. No physical property
+              // is inferred from this optimizer score, and no V12 assembly
+              // receives a new material without a separately validated model.
+              const margin=-(meltDeficit/Math.max(1,requiredK)
+                +transportDeficit);
               if(Number.isFinite(margin)&&margin>bestMargin){
                 bestMargin=margin;bestRecipe=recipe;
               }
@@ -1008,6 +1024,21 @@ const SimulationView = ({
           (window as any).v5PlaneCount = bPlanes.length;
         }
 
+        // V12 makes an actual typed property request from its evaluated
+        // wall assembly and modeled environmental temperatures. Chemistry
+        // can screen bulk constituents; it cannot silently alter the house.
+        if(v12Ref.current.isStable()&&v13Ref.current
+          &&simulationFrame%120===0){
+          const need=v12Ref.current.getMaterialRequirement();
+          if(need){
+            try{
+              v13Ref.current.receiveRequirement(need);
+              (window as any).v12MaterialNeed=need;
+            }catch(error){
+              console.warn('[V12] Cannot hand off material requirement',error);
+            }
+          }
+        }
         // Expose V12 metrics for HouseView
         (window as any).v12HouseMetrics = v12Ref.current.getMetrics();
         (window as any).v12Projections = v12Ref.current.getProjections();
@@ -1342,14 +1373,53 @@ const SimulationView = ({
               break;
             }
             case 'v10': {
-              const e=v10Ref.current,conn=e?.getConnectivity();
+              const e=v10Ref.current;
               const axis=opt==='electrical'?'x':'y';
-              if(e&&conn&&e.lastSearch)output={quantity:conn.voidCount,
-                signal:conn.spanning[axis]?1:0,support:e.lastSearch.evaluated,
-                signature:JSON.stringify([
-                  e.config,e.lastSearch.bestScore,conn.componentCount,
-                  conn.shortestPathTortuosity[axis],
-                ])};
+              let conn=e?.getConnectivity();
+              const volume=conn?conn.voidCount+conn.solidCount:0;
+              const viable=Boolean(conn?.spanning[axis]&&volume>0
+                &&conn!.solidCount/volume>=.05
+                &&conn!.voidCount/volume>=.05);
+              // Failure should trigger another actual experiment, not a
+              // permanent static screen. At most 3 rounds, every 90 frames.
+              if(e&&!viable&&stageFrameRef.current%90===60){
+                try{
+                  const result=e.recoverBlockedChannels(
+                    v9Ref.current?.compositeField||undefined,
+                    axis,JSON.stringify([context,stageReceiptsRef.current.get('v9')?.id]),
+                  );
+                  setHandoffStatus('V10 '+result.reason+
+                    ' · tested '+result.evaluated+' real voxel candidates');
+                  conn=e.getConnectivity();
+                  if(result.recovered){
+                    const mat=v9Ref.current?.getMaterialForV1();
+                    if(mat&&v1Ref.current&&v2Ref.current){
+                      v1Ref.current.setMaterial({
+                        ...mat,geometry:'custom',
+                        customField:e.getFitnessField()||mat.customField,
+                      });
+                      v2Ref.current.setMaterialRef(v1Ref.current);
+                    }
+                  }
+                }catch(error){
+                  console.warn('[V10] Geometry recovery failure',error);
+                }
+              }
+              const updatedVolume=conn?conn.voidCount+conn.solidCount:0;
+              if(e&&conn&&e.lastSearch&&updatedVolume>0){
+                const connected=conn.spanning[axis]
+                  &&conn.solidCount/updatedVolume>=.05
+                  &&conn.voidCount/updatedVolume>=.05;
+                output={quantity:conn.voidCount,
+                  signal:connected?1:0,support:e.lastSearch.evaluated,
+                  signature:JSON.stringify([
+                    e.config,e.lastSearch.bestScore,conn.componentCount,
+                    conn.shortestPathTortuosity[axis],
+                    e.recoveryHistory.map(trial=>[
+                      trial.round,trial.tested,trial.connected,trial.reason,
+                    ]),
+                  ])};
+              }
               break;
             }
             case 'v11': {
