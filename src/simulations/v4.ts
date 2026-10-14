@@ -21,6 +21,8 @@ export class V4Engine {
   edges: Edge[] = [];
   mstEdges: Edge[] = [];
   neighborK: number = 6;
+  /** Model candidate bridges between disconnected neighbour components. */
+  syntheticBridges:number=0;
 
   private _captured: boolean = false;
   private _framesSinceCapture: number = 0;
@@ -92,6 +94,7 @@ export class V4Engine {
 
     // Prim's MST
     this.mstEdges = [];
+    this.syntheticBridges=0;
     const inMST = new Set<number>();
     inMST.add(0);
 
@@ -106,7 +109,27 @@ export class V4Engine {
           bestEdge = edge;
         }
       }
-      if (!bestEdge) break;
+      if(!bestEdge){
+        // K-nearest-neighbour PSO basins may form disconnected components.
+        // Bridge them using the actual nearest inter-component node pair,
+        // explicitly as a MODELLED ROUTE PROPOSAL. It is NOT a measured
+        // physical transport channel; downstream V5/V6 still evaluate it.
+        let a=-1,b=-1,nearest=Infinity;
+        for(let i=0;i<N;i++){
+          if(!inMST.has(i))continue;
+          for(let j=0;j<N;j++){
+            if(inMST.has(j))continue;
+            const d=this.nodes[i].distanceTo(this.nodes[j]);
+            if(Number.isFinite(d)&&d<nearest){
+              nearest=d;a=i;b=j;
+            }
+          }
+        }
+        if(a<0||b<0)break;
+        bestEdge={a,b,length:nearest,isMST:false};
+        this.edges.push(bestEdge);
+        this.syntheticBridges++;
+      }
       bestEdge.isMST = true;
       this.mstEdges.push(bestEdge);
       inMST.add(bestEdge.a);
