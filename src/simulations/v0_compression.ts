@@ -79,8 +79,14 @@ export class V0CompressionEngine {
   }
   
   isStable() {
-    // Stability in V0 means we've reached a certain phase or the intensity has settled
-    return this.phase > Math.PI * 4;
+    // V0's initial 4π phase gate held the entire tour on the first stage
+    // for ~1,257 numerical frames (~42 seconds at 30 FPS), although the
+    // harmonic lattice had already produced usable intensity observations.
+    // An artifact-ready field, not elapsed animation turns, starts V1;
+    // the separate tour dwell gate still gives V0 at least 150 frames.
+    return this.phase >= 1.5 && this.nodes.length > 0
+      && this.nodes.some(n=>Number.isFinite(n.intensity)
+        && Math.abs(n.intensity)>1e-5);
   }
 
   saveState() {
