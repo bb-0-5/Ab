@@ -43,6 +43,8 @@ import {
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SIMULATION_STAGES,mayAdvanceStage,indexOfStage } from './lib/sim_sequence';
+import {captureRenderArtifact,type RenderArtifact} from './lib/render_artifact';
+import {HexfieldArtifactInspector} from './components/HexfieldArtifactInspector';
 import {
   qualifyStage,seedFromDiscovery,rememberStageReceipt,
   rememberFailedGeometryTrial,type StageReceipt,
@@ -289,6 +291,7 @@ const SimulationView = ({
   activeVersion, 
   setActiveVersion, 
   onStatsUpdate,
+  onVisualEvidence,
   currentChainIndex,
   setCurrentChainIndex,
   simulationChain,
@@ -304,6 +307,10 @@ const SimulationView = ({
   activeVersion: SimVersion; 
   setActiveVersion: (v: SimVersion) => void; 
   onStatsUpdate?: (stats: any) => void;
+  onVisualEvidence:(ev:{
+    stage:string;metric:string;detail:string;handoff:string;
+    completed:string[];artifact:RenderArtifact|null;
+  })=>void;
   currentChainIndex: number;
   setCurrentChainIndex: (i: number) => void;
   simulationChain: SimVersion[];
@@ -333,6 +340,7 @@ const SimulationView = ({
   const [campaignStatus,setCampaignStatus] = useState('Awaiting a V12-derived material need');
   const pendingMaterialTrialRef=useRef<TrialPending|null>(null);
   const stageReceiptsRef = useRef(new Map<string,StageReceipt>());
+  const frozenRenderArtifactsRef=useRef(new Map<string,RenderArtifact>());
   const handoffContextRef = useRef('');
   const lastConstructionTrialRef = useRef<{discovery:string;seed:number;modelOnly:true}|null>(null);
   
@@ -711,6 +719,7 @@ const SimulationView = ({
         // previous tour cannot silently satisfy the current dependency chain.
         if(currentVersion==='v0'){
           stageReceiptsRef.current.clear();
+          frozenRenderArtifactsRef.current.clear();
           lastConstructionTrialRef.current=null;
         }
         // V8's completed discovery is an INPUT to constructing a new V9
@@ -1410,6 +1419,7 @@ const SimulationView = ({
         if(context!==handoffContextRef.current){
           handoffContextRef.current=context;
           stageReceiptsRef.current.clear();
+          frozenRenderArtifactsRef.current.clear();
           lastConstructionTrialRef.current=null;
           // An altered goal is a new experiment. Never use outputs created
           // under the previous goal to skip any of its prerequisite stages.
@@ -1655,6 +1665,11 @@ const SimulationView = ({
           );
           if(decision.ok&&decision.receipt){
             stageReceiptsRef.current.set(currentVersion,decision.receipt);
+            const frozen=captureRenderArtifact(currentVersion,{
+              v5:v5Ref.current,v9:v9Ref.current,
+              v10:v10Ref.current,v13:v13Ref.current,
+            },decision.receipt.id);
+            if(frozen)frozenRenderArtifactsRef.current.set(currentVersion,frozen);
             rememberStageReceipt(decision.receipt);
             (window as any).simConstructionReceipt=decision.receipt;
             setHandoffStatus(
@@ -1750,6 +1765,17 @@ const SimulationView = ({
         const completed=SIMULATION_STAGES.filter(v=>stageReceiptsRef.current.has(v));
         setLiveTrace({stage:currentVersion,metric,detail,frames:stageFrameRef.current,
           completed,activeReady:completed.some(s=>s===currentVersion)});
+        const existing=stageReceiptsRef.current.get(currentVersion);
+        const snapshot=existing
+          ?frozenRenderArtifactsRef.current.get(currentVersion)||null
+          :captureRenderArtifact(currentVersion,{
+            v5:v5Ref.current,v9:v9Ref.current,
+            v10:v10Ref.current,v13:v13Ref.current,
+          });
+        onVisualEvidence({
+          stage:currentVersion,metric,detail,handoff:handoffStatus,
+          completed,artifact:snapshot,
+        });
         (window as any).aboveBoundLiveTrace={
           stage:currentVersion,metric,detail,completed,
           frames:stageFrameRef.current,
@@ -8747,6 +8773,12 @@ function App() {
   const [activeOptimizer, setActiveOptimizer] = useState<OptimizerType>(initialSimState.opt);
   const [thermalMode, setThermalMode] = useState<ThermalMode>(initialSimState.mode);
   const [activeVersion, setActiveVersion] = useState<SimVersion>(initialSimState.version);
+  const [visualEvidence,setVisualEvidence]=useState<{
+    stage:string;metric:string;detail:string;handoff:string;
+    completed:string[];artifact:RenderArtifact|null;
+  }>({stage:initialSimState.version,metric:'Preparing simulation',
+     detail:'Reading numerical models',handoff:'No recorded artifact',
+     completed:[],artifact:null});
   const [currentChainIndex, setCurrentChainIndex] = useState(initialSimState.chainIdx);
   const [compressionLevel, setCompressionLevel] = useState(1);
   const [discoveries, setDiscoveries] = useState<any[]>([]);
@@ -9223,6 +9255,7 @@ function App() {
                 activeVersion={activeVersion}
                 setActiveVersion={(v) => { setAutoTransition(false); setActiveVersion(v); }}
                 onStatsUpdate={setSimStats}
+                onVisualEvidence={setVisualEvidence}
                 currentChainIndex={currentChainIndex}
                 setCurrentChainIndex={setCurrentChainIndex}
                 simulationChain={simulationChain}
@@ -9517,6 +9550,19 @@ function App() {
                 </>
               )}
             </div>
+          {activeTab === 'sim' && (
+            <HexfieldArtifactInspector
+              stage={activeVersion}
+              metric={visualEvidence.stage===activeVersion
+                ?visualEvidence.metric:'Switching simulation…'}
+              detail={visualEvidence.stage===activeVersion
+                ?visualEvidence.detail:'Waiting for live evidence'}
+              handoff={visualEvidence.handoff}
+              completed={visualEvidence.completed}
+              artifact={visualEvidence.stage===activeVersion
+                ?visualEvidence.artifact:null}
+            />
+          )}
           {activeTab !== 'sim' && (activeTab === 'trajectory' ? (
             <IntelligenceTrajectory 
               log={discoveryLog} 
