@@ -1076,6 +1076,35 @@ const SimulationView = ({
         v6Ref.current.update(opt, tMode, compLevel);
       }
 
+      // A blocked V6 is NEGATIVE evidence, not a successful flow result.
+      // Allow V7 to inspect it, and schedule bounded independent V5
+      // reconfigurations; each new candidate must be evaluated by V6.
+      if(v6Ref.current?.isStable()&&v5Ref.current?.isStable()){
+        const m=v6Ref.current.getMetrics();
+        if(m.pathCount===0&&simulationFrame%180===0){
+          const loops=v5Ref.current.getLoops();
+          const index=loops.findIndex(l=>l.state!=='open');
+          if(index>=0){
+            v5Ref.current.setMembraneState(index,'open');
+            (window as any).aboveBoundV6Feedback={
+              status:'testing_revision',reason:'No connected V6 loop path',
+              loopIndex:index,modelOnly:true,
+            };
+          }else{
+            (window as any).aboveBoundV6Feedback={
+              status:'blocked',reason:'No connected V6 loop path; no remaining closed loop to test',
+              modelOnly:true,
+            };
+          }
+        }else if(m.pathCount>0){
+          (window as any).aboveBoundV6Feedback={
+            status:'candidate_path_found',pathCount:m.pathCount,
+            reason:'Modeled V6 loop paths exist; transport still requires independent physical verification',
+            modelOnly:true,
+          };
+        }
+      }
+
       // V7: Meta-optimizer — reads V6 metrics, tunes upstream params
       if (v7Ref.current) {
         if (v6Ref.current && v6Ref.current.isStable() && v5Ref.current) {
