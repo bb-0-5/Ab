@@ -3008,10 +3008,10 @@ export class V12HouseEngine {
       // This k is for the reference layer only; a V10 porous assembly
       // can have a different effective conductivity from bulk chemistry.
       maxThermalConductivityWmK:bottleneck.conductivity,
-      basis:'V12 modeled worst-U room '+selected.room.id+
+      basis:('V12 modeled worst-U room '+selected.room.id+
         ', wall '+selected.room.wallType+
         ', reference layer '+bottleneck.material+
-        ' at '+bottleneck.thickness.toFixed(3)+'m; constituent-only screen',
+        ' at '+bottleneck.thickness.toFixed(3)+'m; constituent-only screen').slice(0,250),
     };
   }
 
