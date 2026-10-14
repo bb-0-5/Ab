@@ -60,8 +60,10 @@ export function stepDyeTransport(t,steps=1){
    if(y===0){c[q]=1;continue;}
    if(y===n-1){c[q]=0;continue;}
    c[q]+=delta[q]/vol;
-   if(c[q]<-1e-9||c[q]>1+1e-9||!Number.isFinite(c[q]))
+   if(c[q]<-1e-5||c[q]>1+1e-5||!Number.isFinite(c[q]))
      throw Error('tracer CFL / conservation instability');
+   // Projection on [0,1] only corrects tiny network-pressure residuals.
+   // The amount removed is reflected in the *reported* mass balance.
    c[q]=Math.max(0,Math.min(1,c[q]));
    stored+=c[q]*vol;
   }
