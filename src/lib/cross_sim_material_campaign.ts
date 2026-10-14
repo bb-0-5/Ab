@@ -7,6 +7,7 @@
 import type {V13MaterialRequirement,MaterialComposite} from '../simulations/v13_material';
 import type {FlowMetrics} from '../simulations/v6';
 import type {VoxelChannelEvidence} from './voxel_connectivity';
+import type {VoxelConductionScreen} from './voxel_heat_conduction';
 
 export type ElementTrialSpec={
  id:string;
@@ -45,7 +46,20 @@ export type TrialRecord={
  targetMaxConductivityWmK:number|null;
  targetMaxTemperatureK:number;
  v10:{connected:boolean;solidFraction:number;voidFraction:number;
-       tortuosity:number|null};
+       tortuosity:number|null;tpms?:string;frequency?:number;threshold?:number};
+ /** Effective composite conductivity: V9 voxel property + V10 pore geometry
+  * numerically re-screened by V6. NOT V13's bulk chemistry estimate. */
+ coupledConduction?:{
+  effectiveConductivityWmK:number;
+  solidReferenceWmK:number;
+  maxResidual:number;
+  converged:boolean;
+  thermalPriority:number;
+  modeledTargetDeficit:number;
+  relativeReduction:number;
+  medium:'still_air';
+  model:'harmonic_face_steady_conduction_only';
+ };
  v6:{flow:number;resistance:number;efficiency:number;pathCount:number;
      bottlenecks:number}|null;
  v7:{score:number;acceptedTrials:number;rejectedTrials:number}|null;
@@ -77,19 +91,32 @@ export function selectElementTrial(
  const counts=new Map<string,number>();
  for(const r of compatible)counts.set(r.chemistryId,(counts.get(r.chemistryId)||0)+1);
  const unseen=CANDIDATE_POOL.find(spec=>!counts.has(spec.id));
- if(unseen)return unseen;
+ // Once three different elemental recipes have numerical geometry evidence,
+ // revisit the best paired recipe once every four trials. The remaining
+ // rounds explore unseen chemistry; do NOT rank only V13 bulk guesses.
+ const coupledWinner=compatible
+  .filter(r=>r.coupledConduction&&r.v10.connected
+    &&Number.isFinite(r.coupledConduction.thermalPriority))
+  .sort((a,b)=>b.coupledConduction!.thermalPriority
+    -a.coupledConduction!.thermalPriority)[0];
+ if(unseen){
+  if(compatible.length>=3&&compatible.length%4===3&&coupledWinner){
+   return CANDIDATE_POOL.find(s=>s.id===coupledWinner.chemistryId)||unseen;
+  }
+  return unseen;
+ }
  // If all families have been sampled, return to the best modeled family
  // occasionally while maintaining alternate configurations as controls.
- const best=compatible.filter(r=>r.assessment==='modeled_flow_observed'
-   &&r.v6&&r.v10.connected)
+ const best=compatible.filter(r=>r.v10.connected&&r.coupledConduction
+   &&Number.isFinite(r.coupledConduction.thermalPriority))
   .map(r=>{
    const thermalDeficit=r.targetMaxConductivityWmK
      ?Math.max(0,r.v13EstimatedThermalConductivityWmK/r.targetMaxConductivityWmK-1):0;
    const meltDeficit=Math.max(0,r.targetMaxTemperatureK-r.v13EstimatedMeltingPointK)
      /Math.max(1,r.targetMaxTemperatureK);
    return {id:r.chemistryId,
-     score:(r.v6!.efficiency||0)-(r.v6!.bottlenecks*0.04)
-       -Math.log1p(thermalDeficit)*0.1-meltDeficit};
+     score:r.coupledConduction!.thermalPriority
+       -Math.log1p(thermalDeficit)*0.02-meltDeficit*.1};
   }).sort((a,b)=>b.score-a.score)[0];
  const least=Math.min(...CANDIDATE_POOL.map(s=>counts.get(s.id)||0));
  const alternates=CANDIDATE_POOL.filter(s=>(counts.get(s.id)||0)===least);
@@ -104,6 +131,14 @@ export function recordModeledTrial(
  channel:VoxelChannelEvidence,
  flow:FlowMetrics|null,
  v7:{score:number;acceptedTrials:number;rejectedTrials:number}|null,
+ coupled?:{
+  screen:VoxelConductionScreen;
+  geometry:{tpms:string;frequency:number;threshold:number};
+  rank:{
+   priority:number;modeledTargetDeficit:number;
+   relativeConductionReduction:number;modelOnly:true;
+  };
+ },
 ):TrialRecord{
  const c=pending.composite.properties;
  const n=channel.solidCount+channel.voidCount;
@@ -137,7 +172,21 @@ export function recordModeledTrial(
   targetMaxTemperatureK:pending.workOrder.maxTemperatureK,
   v10:{connected,solidFraction:n?channel.solidCount/n:0,
     voidFraction:n?channel.voidCount/n:0,
-    tortuosity:channel.shortestPathTortuosity.y},
+    tortuosity:channel.shortestPathTortuosity.y,
+    ...(coupled?{tpms:coupled.geometry.tpms,
+      frequency:coupled.geometry.frequency,
+      threshold:coupled.geometry.threshold}:{}),
+  },
+  ...(coupled?{coupledConduction:{
+    effectiveConductivityWmK:coupled.screen.effectiveConductivityWmK,
+    solidReferenceWmK:coupled.screen.allSolidReferenceWmK,
+    maxResidual:coupled.screen.maxUpdate,
+    converged:coupled.screen.converged,
+    thermalPriority:coupled.rank.priority,
+    modeledTargetDeficit:coupled.rank.modeledTargetDeficit,
+    relativeReduction:coupled.rank.relativeConductionReduction,
+    medium:coupled.screen.medium,model:coupled.screen.model,
+  }}:{}),
   v6:usableFlow?{
     flow:flow!.totalFlow,resistance:flow!.avgResistance,
     efficiency:flow!.efficiency,pathCount:flow!.pathCount,
@@ -147,7 +196,7 @@ export function recordModeledTrial(
   assessment:!connected?'geometry_blocked':
     usableFlow?'modeled_flow_observed':'awaiting_solver_evidence',
   evidence:'model_only_not_empirical',
-  caveat:'V13 elemental-mixture properties are heuristic and NOT V9 constitutive inputs. V9 catalogue lattice is an exploratory surrogate; V10 proves geometry connectivity only. V6/V7 flow is modeled, evolving and observational, not a controlled material measurement or synthesis yield.',
+  caveat:'V13 elemental-mixture properties are heuristic and NOT V9 constitutive inputs. V9 lattice uses independent reference values. V10 porosity + V6 stationary-air conduction are a limited numerical proxy, not convection/radiation, mechanical strength, chemistry, a measured U-value or synthesis yield. V7 uses modeled relative priority, not a controlled material measurement or experimental performance.',
  };
 }
 export function readMaterialTrials():TrialRecord[]{

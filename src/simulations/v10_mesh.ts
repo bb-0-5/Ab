@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { CompositeField } from './v9_lattice';
 import {screenVoxelChannels,type VoxelChannelEvidence} from '../lib/voxel_connectivity';
+import {screenVoxelHeatConduction,type VoxelConductionScreen} from '../lib/voxel_heat_conduction';
 
 /**
  * V10 — Mesh / Surface Texture Optimizer
@@ -111,6 +112,16 @@ export class V10MeshEngine {
     bestTortuosity:number|null;modelOnly:true;
   }>=[];
   lastRecoveryContext:string|null=null;
+  lastCoupledThermalSearch:{
+    evaluated:number;
+    objective:'minimize_modeled_y_heat_conduction';
+    targetConductivityWmK:number;
+    winner:MeshConfig|null;
+    selected:VoxelConductionScreen|null;
+    baseline:VoxelConductionScreen|null;
+    improvements:number;
+    modelOnly:true;
+  }|null=null;
   lastSearch:{evaluated:number;axis:'x'|'y'|'z';baselineScore:number;bestScore:number;selected:MeshConfig;modeledOnly:true}|null=null;
 
   metrics: MeshMetrics = {
@@ -167,6 +178,7 @@ export class V10MeshEngine {
     this._built = false;
     this.recoveryHistory=[];
     this.lastRecoveryContext=null;
+    this.lastCoupledThermalSearch=null;
   }
 
   /** Build the mesh by evaluating the TPMS over the 3D grid */
@@ -394,6 +406,89 @@ export class V10MeshEngine {
       recovered:Boolean(bestConfig),exhausted:!bestConfig&&round>=2,
       round:round+1,evaluated:candidates.length,connected,reason,
     };
+  }
+
+  /**
+   * Joint material / topology trial: for the actual V9 voxelwise thermal k,
+   * optimize a TPMS mask and estimate its effective axial steady conduction.
+   * The same geometry can rank differently for different material mixtures.
+   *
+   * Enforces a nontrivial solid fraction and open through-void path, matching
+   * the original V10 construction gate. A fluid-open pore is NOT proven safe
+   * insulation: the solver omits convection, moisture and radiation.
+   * 8 configurations × <=120 bounded relaxation passes; browser-local only.
+   */
+  optimizeCoupledThermalGeometry(
+    composite:CompositeField,
+    targetConductivityWmK:number,
+  ){
+    if(!composite||!Number.isFinite(targetConductivityWmK)
+      ||targetConductivityWmK<=0||targetConductivityWmK>1e6)
+      throw Error('V10 requires a valid V9 material and thermal target');
+    const start={...this.config};
+    const candidates:MeshConfig[]=[
+      start,
+      {...start,tpms:'gyroid',frequency:1.3,threshold:-.4,roughness:0},
+      {...start,tpms:'gyroid',frequency:2.2,threshold:.25,roughness:0},
+      {...start,tpms:'diamond',frequency:1.3,threshold:-.35,roughness:0},
+      {...start,tpms:'diamond',frequency:2.4,threshold:.2,roughness:0},
+      {...start,tpms:'schwarz_p',frequency:1.5,threshold:-.3,roughness:0},
+      {...start,tpms:'lidinoid',frequency:1.7,threshold:.2,roughness:0},
+      {...start,tpms:'neovius',frequency:1.3,threshold:.35,roughness:0},
+    ];
+    let winner:MeshConfig|null=null;
+    let best:VoxelConductionScreen|null=null;
+    let baseline:VoxelConductionScreen|null=null;
+    let bestCost=Infinity,improvements=0;
+    for(let i=0;i<candidates.length;i++){
+      this.config={...candidates[i]};
+      this.buildMesh(composite);
+      const conn=this.connectivity;
+      if(!conn||!this.solidMask||!conn.spanning.y)continue;
+      const n=conn.solidCount+conn.voidCount;
+      const solidFraction=conn.solidCount/n;
+      // No bogus "membrane" that is almost entirely gas or solid.
+      if(solidFraction<.18||solidFraction>.82)continue;
+      const result=screenVoxelHeatConduction(
+        this.solidMask,composite.conductivityField,
+        composite.resolution,'y',120,
+      );
+      if(i===0)baseline=result;
+      // Model reduction compared with the target, plus a fixed structural
+      // constraint. No V13 bulk k is substituted for V9 local reference k.
+      const cost=Math.log1p(result.effectiveConductivityWmK/
+        targetConductivityWmK)
+        +.15*Math.abs(result.solidFraction-.5);
+      if(cost<bestCost-1e-9){
+        if(best!==null)improvements++;
+        bestCost=cost;best=result;winner={...this.config};
+      }
+    }
+    this.config=winner||start;
+    this.buildMesh(composite);
+    this.lastCoupledThermalSearch={
+      evaluated:candidates.length,
+      objective:'minimize_modeled_y_heat_conduction',
+      targetConductivityWmK,winner,
+      selected:best,baseline,improvements,
+      modelOnly:true,
+    };
+    if(winner){
+      this.lastSearch={
+        evaluated:candidates.length,axis:'y',
+        baselineScore:baseline?-baseline.effectiveConductivityWmK:-Infinity,
+        bestScore:-best!.effectiveConductivityWmK,
+        selected:{...winner},modeledOnly:true,
+      };
+    }else{
+      // Preserve a clear failure for the existing V10 recovery machinery.
+      this.lastSearch={
+        evaluated:candidates.length,axis:'y',
+        baselineScore:-Infinity,bestScore:-Infinity,
+        selected:{...start},modeledOnly:true,
+      };
+    }
+    return this.lastCoupledThermalSearch;
   }
 
   getConnectivity():VoxelChannelEvidence|null{return this.connectivity;}

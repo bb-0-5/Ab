@@ -3,6 +3,10 @@ import type { DetectedLoop, MembraneState, MembraneType, BoundaryPlane } from '.
 import type { V5Engine } from './v5';
 import type { Edge } from './v3';
 import type { Stabilization } from './v1';
+import type {CompositeField} from './v9_lattice';
+import {
+  screenVoxelHeatConduction,type VoxelConductionScreen,
+} from '../lib/voxel_heat_conduction';
 
 /**
  * V6 — Detailed Flow Channel Renderer
@@ -96,6 +100,18 @@ export class V6Engine {
   flowPaths: FlowPath[] = [];
   metrics: FlowMetrics = { totalFlow: 0, avgResistance: 0, bottleneckCount: 0, efficiency: 0, pathCount: 0, membranesModified: 0 };
   pendingRequests: MembraneRequest[] = [];
+  /** Independent downstream re-run of V10's proposed thermal topology.
+   * Shares the same limited conduction kernel, not independent validation. */
+  lastConstructedConduction:VoxelConductionScreen|null=null;
+  screenConstructedConduction(
+    mask:Float32Array,material:CompositeField,
+  ):VoxelConductionScreen{
+    const tested=screenVoxelHeatConduction(
+      mask,material.conductivityField,material.resolution,'y',240,
+    );
+    this.lastConstructedConduction=tested;
+    return tested;
+  }
 
   private _flowField: Float32Array = new Float32Array(0);
   private _resistanceField: Float32Array = new Float32Array(0);

@@ -745,10 +745,27 @@ const SimulationView = ({
               }
               lattice.setSeed(nextSeed);
               lattice.buildLattice();
-              mesh.optimizeConnectedChannels(
-                lattice.compositeField||undefined,
-                activeOptimizerRef.current==='electrical'?'x':'y',
-              );
+              if(workOrder?.maxThermalConductivityWmK
+                &&lattice.compositeField){
+                const paired=mesh.optimizeCoupledThermalGeometry(
+                  lattice.compositeField,
+                  workOrder.maxThermalConductivityWmK,
+                );
+                (window as any).coupledThermalGeometrySearch=paired;
+                if(paired.selected){
+                  setCampaignStatus('V13 hypothesis → V9 material → V10 '+
+                    paired.evaluated+' joint material/pore trials · modeled k='+
+                    paired.selected.effectiveConductivityWmK.toPrecision(3)+
+                    ' W/(m·K), target ≤ '+
+                    workOrder.maxThermalConductivityWmK.toPrecision(3)+
+                    ' (stationary air, not validated)');
+                }
+              }else{
+                mesh.optimizeConnectedChannels(
+                  lattice.compositeField||undefined,
+                  activeOptimizerRef.current==='electrical'?'x':'y',
+                );
+              }
               // Fresh geometry context means old failure attempts no longer
               // count toward the new discovery-derived construction trial.
               mesh.recoveryHistory=[];
@@ -1214,19 +1231,47 @@ const SimulationView = ({
               acceptedTrials:e.acceptedTrials,
               rejectedTrials:e.rejectedTrials,
             }:null;
+            // V6 re-evaluates the actual constructed mask independently
+            // of the V10 candidate-selection pass (same conduction model).
+            // V7 ranks insulation relative to *its own solid reference*,
+            // never a fictitious chemistry yield or generic flow score.
+            const model=v6Ref.current,optimizer=v7Ref.current;
+            const solidMask=v10?.getSolidMask();
+            const compositeField=v9?.compositeField;
+            const target=trial.workOrder.maxThermalConductivityWmK;
+            const coupled=solidMask&&compositeField&&model&&optimizer
+              &&target
+              ?(()=>{
+                const verified=model.screenConstructedConduction(
+                  solidMask,compositeField,
+                );
+                return {
+                  screen:verified,
+                  geometry:{
+                    tpms:v10!.config.tpms,
+                    frequency:v10!.config.frequency,
+                    threshold:v10!.config.threshold,
+                  },
+                  rank:optimizer.rankModeledInsulation(verified,target),
+                };
+              })():undefined;
             const report=recordModeledTrial(trial,{
               conductivity:field.conductivity,density:field.density,
-            },channels,flow,feedback);
+            },channels,flow,feedback,coupled);
             saveMaterialTrial(report);
             (window as any).materialCampaignLatestTrial=report;
             (window as any).materialCampaignHistory=readMaterialTrials();
             setCampaignStatus('V12→V13→V9→V10→V6→V7: '+
               report.elementSymbols.join('/')+' · '+
-              (report.assessment==='modeled_flow_observed'
-                ?'modeled flow observed (not measured)'
+              (report.coupledConduction
+                ?'stationary-air effective k ≈ '+
+                  report.coupledConduction.effectiveConductivityWmK.toPrecision(3)+
+                  ' W/(m·K); '+(report.coupledConduction.converged
+                    ?'numerically converged':'bounded estimate, not converged')
                 :report.assessment==='geometry_blocked'
                   ?'blocked geometry recorded'
-                  :'awaiting solver evidence recorded'));
+                  :'no coupled thermal reading')+
+              ' · model only');
             pendingMaterialTrialRef.current=null;
           }catch(error){
             console.warn('[Inter-Sim] Could not record material experiment',error);
