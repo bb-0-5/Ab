@@ -1,7 +1,9 @@
-/** Visualise numerical hydraulic pressure nodes. No particles, no misleading CFD. */
+/** Render measured NODE pressures; show exact V10 source and same-grid numerical evidence. */
+import {readSelectedV10PressureGeometry,storePressureFeedback} from './v10-pressure-handoff.mjs';
 const $=id=>document.getElementById(id);
 const main=$('mainCanvas'),stack=$('stackCanvas'),ctx=main.getContext('2d'),ctx2=stack.getContext('2d');
-const worker=new Worker('/membrane-worker.mjs?v=pressure-gears-20261015-r5',{type:'module'});
+const worker=new Worker('/membrane-worker.mjs?v=original-v10-selection-r6',{type:'module'});
+const originalV10=readSelectedV10PressureGeometry();
 let current=null,ranking=[],winner=null,last=null,inspected=null,paused=false,complete=false;
 let display='pressure',frames=0,layout=[];
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -68,6 +70,13 @@ function table(){const root=$('ranking');root.replaceChildren();
  const texts=[r.name,r.converged?`${fmt((r.relativeOpen||0)*100,1)}%`:'SOLVER FAILED',`${fmt(r.solidFraction*100,0)}%`,r.pressureAtTargetPa===null?'BLOCKED':`${fmt(r.pressureAtTargetPa,3)} Pa`];
  for(const [i,t]of texts.entries()){const el=document.createElement('span');el.textContent=t;if(i===0)el.title=r.reason;row.append(el)}root.append(row);}
 }
+function showOriginal(status){
+ const el=$('originalV10');if(el)el.textContent=status;
+}
+showOriginal(originalV10?
+ 'ORIGINAL V10 MASK LOADED · '+originalV10.n+'³ · '+originalV10.receipt.config.tpms+
+ ' · CHECKSUM '+originalV10.receipt.checksum+' · VERIFYING MATCHED REFERENCE':
+ 'NO CURRENT ORIGINAL V10 MASK · screening generated configurations (run Original V0–V13 to export it)');
 function show(status){$('status').textContent=status;}
 function renderUpdate(msg){
  if(msg.current){current=msg.current;inspected=null;}
@@ -88,7 +97,29 @@ function renderUpdate(msg){
 }
 worker.onmessage=e=>{
  const data=e.data||{};
- if(data.type==='ready'){worker.postMessage({type:'start'});show('RUNNING · LOCAL PRESSURE SOLVER');}
+ if(data.type==='ready'){
+  // Transfer locally stored original V10 geometry before launching the solver.
+  worker.postMessage({type:'source-v10',receipt:originalV10?.receipt||null});
+  worker.postMessage({type:'start'});show('RUNNING · LOCAL PRESSURE SOLVER');
+ }else if(data.type==='source-progress'){showOriginal(data.message);
+ }else if(data.type==='source-evidence'){
+  const x=data.source;
+  showOriginal('ORIGINAL V10 '+x.resolution+'³ REAL VOXELS · '+x.config.tpms+
+    ' · '+fmt(x.relativeOpen*100,2)+'% OF SAME-GRID OPEN FLOW · '+x.assessment+
+    ' · '+x.verdict);
+  if(originalV10&&originalV10.receipt.checksum===x.checksum)
+    storePressureFeedback(originalV10.receipt,{flowM3S:x.flowM3S,relativeOpen:x.relativeOpen,
+      valid:x.valid,meetsTarget:x.meetsTarget,reason:x.verdict,
+      pressureAtTargetPa:x.pressureAtTargetPa});
+  renderUpdate({type:'progress',current:data.current,
+    stage:'ORIGINAL V10 VOXEL MASK EVALUATED',
+    focus:{name:'ORIGINAL SELECTED V10 '+x.resolution+'³',flowM3S:x.flowM3S,
+      permeabilityM2:data.current?.permeabilityM2||0,solidFraction:x.solidFraction,
+      assessment:x.assessment,reason:x.verdict,imbalanceM3S:x.imbalanceM3S,
+      iterations:data.current?.iterations||0}});
+ }else if(data.type==='source-error'){
+  showOriginal('ORIGINAL V10 HANDOFF INVALID · '+data.message+' · continuing generic sweep');
+ }
  else if(data.type==='progress'||data.type==='complete'){renderUpdate(data);if(data.type==='complete'){complete=true;paused=false;$('run').textContent='↻ REPEAT SCREEN';}}
  else if(data.type==='decision'){$('frontProgress').textContent=data.message;}
  else if(data.type==='paused'){show('PAUSED · NO COMPUTATION');}
