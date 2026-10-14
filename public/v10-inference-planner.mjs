@@ -17,6 +17,7 @@ function priority(t){
 }
 export function planV10FollowUps(rows,alreadySeen=new Set(),limit=12){
  if(!Array.isArray(rows)||!Number.isInteger(limit)||limit<0||limit>48)throw Error('invalid experiment plan');
+ if(limit===0)return [];
  const ranked=rows.filter(x=>x?.config&&Number.isFinite(priority(x))&&priority(x)>-Infinity)
   .sort((a,b)=>priority(b)-priority(a));
  const planned=[],keys=new Set(alreadySeen),parents=ranked.slice(0,3);
