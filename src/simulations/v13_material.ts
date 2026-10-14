@@ -128,12 +128,15 @@ export interface V13MaterialRequirement {
  minTemperatureK:number;
  maxTemperatureK:number;
  purpose:'thermal_survival';
+ /** Bulk constituent k target in W/(m·K); not whole-wall U-value. */
+ maxThermalConductivityWmK?:number;
  basis:string;
 }
 export type V13RequirementScreen={
  requirement:V13MaterialRequirement;
- status:'awaiting_composite'|'estimated_melt_failure'|'conditional_estimate';
+ status:'awaiting_composite'|'estimated_melt_failure'|'estimated_transport_failure'|'conditional_estimate';
  estimatedMeltingPointK:number|null;
+ estimatedThermalConductivityWmK:number|null;
  missingEvidence:string;
 };
 
@@ -813,6 +816,10 @@ export class V13MaterialEngine {
     ||!Number.isFinite(need.maxTemperatureK)
     ||need.minTemperatureK<0||need.maxTemperatureK>20_000
     ||need.maxTemperatureK<need.minTemperatureK
+    ||(need.maxThermalConductivityWmK!==undefined&&(
+      !Number.isFinite(need.maxThermalConductivityWmK)
+      ||need.maxThermalConductivityWmK<=0
+      ||need.maxThermalConductivityWmK>1_000_000))
     ||typeof need.basis!=='string'||need.basis.length>250)
     throw new Error('Invalid machine-generated material requirement');
    const index=this.requirements.findIndex(old=>old.id===need.id);
@@ -825,11 +832,18 @@ export class V13MaterialEngine {
    return this.requirements.map(requirement=>{
     const estimated=latest?.properties.meltingPoint;
     const point=typeof estimated==='number'&&Number.isFinite(estimated)?estimated:null;
+    const conductivity=latest?.properties.thermalConductivity;
+    const k=typeof conductivity==='number'&&Number.isFinite(conductivity)
+      ?conductivity:null;
+    const status:V13RequirementScreen['status']=point===null
+      ?'awaiting_composite'
+      :point<requirement.maxTemperatureK?'estimated_melt_failure'
+      :requirement.maxThermalConductivityWmK!==undefined&&
+        (k===null||k>requirement.maxThermalConductivityWmK)
+        ?'estimated_transport_failure':'conditional_estimate';
     return {requirement,estimatedMeltingPointK:point,
-     status:point===null?'awaiting_composite' as const:
-      point<requirement.maxTemperatureK?'estimated_melt_failure' as const:
-      'conditional_estimate' as const,
-     missingEvidence:'Bulk melting point is only a heuristic estimate. Requires measured phase and transport properties at operating temperature, chemical compatibility, geometry, and safety margins. No material is certified.',
+     estimatedThermalConductivityWmK:k,status,
+     missingEvidence:'Bulk melting point and conductivity are heuristic estimates. Requires measured phase and transport properties at operating temperature, chemical compatibility, geometry, and safety margins. Porous assemblies require a separate effective-conductivity solver. No material is certified.',
     };
    });
   }

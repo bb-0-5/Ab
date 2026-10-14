@@ -33,7 +33,8 @@ export type MaterialPipelineEvidence={
     hypotheticalNotApplied:true;
   }|null;
   conclusion:'no_connected_channel'|'needs_composite_and_empirical_data'|
-     'estimated_melt_failure'|'provisional_geometry_and_thermal_only';
+     'estimated_melt_failure'|'estimated_transport_failure'|
+     'provisional_geometry_and_thermal_only';
   caveat:string;
 };
 type NumericMaterial={
@@ -75,6 +76,7 @@ export function screenMaterialPipeline(input:{
      v13.thermalScreen==='awaiting_composite'
     ?'needs_composite_and_empirical_data' as const:
    v13.thermalScreen==='estimated_melt_failure'?'estimated_melt_failure' as const:
+   v13.thermalScreen==='estimated_transport_failure'?'estimated_transport_failure' as const:
    'provisional_geometry_and_thermal_only' as const;
  return {
    model:'v9-v10-v11-v13-geometric-screen-v1',

@@ -108,3 +108,41 @@ export function getStageReceipts():StageReceipt[]{
     ):[];
   }catch{return [];}
 }
+
+/** Keep failed construction evidence separate from successful receipts. */
+export type FailedGeometryTrial={
+  context:string;
+  v9ReceiptId:string;
+  latticeSeed:number;
+  axis:'x'|'y'|'z';
+  tested:number;
+  reason:string;
+  modelOnly:true;
+};
+const FAILED_KEY='abovebound.v10.failed-geometry.v1';
+export function getFailedGeometryTrials():FailedGeometryTrial[]{
+  try{
+    const raw=JSON.parse(localStorage.getItem(FAILED_KEY)||'[]');
+    return Array.isArray(raw)?raw.slice(0,16).filter(
+      x=>x?.modelOnly===true&&typeof x?.v9ReceiptId==='string'
+        &&Number.isSafeInteger(x?.latticeSeed)
+        &&Number.isSafeInteger(x?.tested)&&x.tested>0):[];
+  }catch{return [];}
+}
+export function rememberFailedGeometryTrial(trial:FailedGeometryTrial):number{
+  if(!trial||!trial.context||trial.context.length>180
+    ||!trial.v9ReceiptId||trial.v9ReceiptId.length>120
+    ||!Number.isSafeInteger(trial.latticeSeed)||trial.latticeSeed<0
+    ||trial.latticeSeed>0xffffffff
+    ||!['x','y','z'].includes(trial.axis)
+    ||!Number.isSafeInteger(trial.tested)||trial.tested<1||trial.tested>1000
+    ||!trial.reason||trial.reason.length>240
+    ||trial.modelOnly!==true)throw Error('Invalid failed-geometry evidence');
+  const old=getFailedGeometryTrials();
+  const rest=old.filter(x=>x.v9ReceiptId!==trial.v9ReceiptId
+    ||x.latticeSeed!==trial.latticeSeed||x.axis!==trial.axis);
+  try{localStorage.setItem(FAILED_KEY,
+    JSON.stringify([trial,...rest].slice(0,16)));
+    return Math.min(16,1+rest.length);
+  }catch{return old.length;}
+}

@@ -44,7 +44,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SIMULATION_STAGES,mayAdvanceStage,indexOfStage } from './lib/sim_sequence';
 import {
-  qualifyStage,seedFromDiscovery,rememberStageReceipt,type StageReceipt,
+  qualifyStage,seedFromDiscovery,rememberStageReceipt,
+  rememberFailedGeometryTrial,type StageReceipt,
   type StageObservation,
 } from './lib/sim_artifact_handoffs';
 import {screenMaterialPipeline,type MaterialPipelineEvidence} from './lib/material_pipeline_evidence';
@@ -712,6 +713,10 @@ const SimulationView = ({
                 lattice.compositeField||undefined,
                 activeOptimizerRef.current==='electrical'?'x':'y',
               );
+              // Fresh geometry context means old failure attempts no longer
+              // count toward the new discovery-derived construction trial.
+              mesh.recoveryHistory=[];
+              mesh.lastRecoveryContext=null;
               const material=lattice.getMaterialForV1();
               if(material){
                 v1.setMaterial({
@@ -744,7 +749,19 @@ const SimulationView = ({
             let bestRecipe=recipes[0],bestMargin=-Infinity;
             for(const recipe of recipes){
               const trial=v13Ref.current.buildComposite(recipe);
-              const margin=trial.properties.meltingPoint-requiredK;
+              const needsWithK=needs.filter(row=>
+                row.requirement.maxThermalConductivityWmK!==undefined);
+              const meltDeficit=Math.max(0,requiredK-
+                trial.properties.meltingPoint);
+              const transportDeficit=needsWithK.reduce((sum,row)=>
+                sum+Math.max(0,
+                  trial.properties.thermalConductivity/
+                  row.requirement.maxThermalConductivityWmK!-1),0);
+              // Lowest normalized unmet demand wins. No physical property
+              // is inferred from this optimizer score, and no V12 assembly
+              // receives a new material without a separately validated model.
+              const margin=-(meltDeficit/Math.max(1,requiredK)
+                +transportDeficit);
               if(Number.isFinite(margin)&&margin>bestMargin){
                 bestMargin=margin;bestRecipe=recipe;
               }
@@ -1008,6 +1025,21 @@ const SimulationView = ({
           (window as any).v5PlaneCount = bPlanes.length;
         }
 
+        // V12 makes an actual typed property request from its evaluated
+        // wall assembly and modeled environmental temperatures. Chemistry
+        // can screen bulk constituents; it cannot silently alter the house.
+        if(v12Ref.current.isStable()&&v13Ref.current
+          &&simulationFrame%120===0){
+          const need=v12Ref.current.getMaterialRequirement();
+          if(need){
+            try{
+              v13Ref.current.receiveRequirement(need);
+              (window as any).v12MaterialNeed=need;
+            }catch(error){
+              console.warn('[V12] Cannot hand off material requirement',error);
+            }
+          }
+        }
         // Expose V12 metrics for HouseView
         (window as any).v12HouseMetrics = v12Ref.current.getMetrics();
         (window as any).v12Projections = v12Ref.current.getProjections();
@@ -1253,6 +1285,7 @@ const SimulationView = ({
           : Boolean(engine?.isStable());
         if(mayAdvanceStage(currentVersion,stageFrameRef.current,stable,150)){
           let output:StageObservation|null=null;
+          let restartDiscovery=false;
           switch(currentVersion){
             case 'v0': {
               const e=v0Ref.current;
@@ -1342,14 +1375,75 @@ const SimulationView = ({
               break;
             }
             case 'v10': {
-              const e=v10Ref.current,conn=e?.getConnectivity();
+              const e=v10Ref.current;
               const axis=opt==='electrical'?'x':'y';
-              if(e&&conn&&e.lastSearch)output={quantity:conn.voidCount,
-                signal:conn.spanning[axis]?1:0,support:e.lastSearch.evaluated,
-                signature:JSON.stringify([
-                  e.config,e.lastSearch.bestScore,conn.componentCount,
-                  conn.shortestPathTortuosity[axis],
-                ])};
+              let conn=e?.getConnectivity();
+              const volume=conn?conn.voidCount+conn.solidCount:0;
+              const viable=Boolean(conn?.spanning[axis]&&volume>0
+                &&conn!.solidCount/volume>=.05
+                &&conn!.voidCount/volume>=.05);
+              // Failure should trigger another actual experiment, not a
+              // permanent static screen. At most 3 rounds, every 90 frames.
+              if(e&&!viable&&stageFrameRef.current%90===60){
+                try{
+                  const result=e.recoverBlockedChannels(
+                    v9Ref.current?.compositeField||undefined,
+                    axis,JSON.stringify([context,stageReceiptsRef.current.get('v9')?.id]),
+                  );
+                  setHandoffStatus('V10 '+result.reason+
+                    ' · tested '+result.evaluated+' real voxel candidates');
+                  conn=e.getConnectivity();
+                  if(result.exhausted&&!result.recovered){
+                    const v9Receipt=stageReceiptsRef.current.get('v9');
+                    const v9Seed=v9Ref.current?.seed;
+                    if(v9Receipt&&v9Seed!==undefined){
+                      rememberFailedGeometryTrial({
+                        context,v9ReceiptId:v9Receipt.id,
+                        latticeSeed:v9Seed,axis,
+                        tested:e.recoveryHistory.reduce((n,t)=>n+t.tested,0),
+                        reason:'No connected solid-and-void membrane after bounded TPMS search',
+                        modelOnly:true,
+                      });
+                    }
+                    // Restart the same original discovery tour, not an
+                    // invented V10 success. Next V8 receipt gives V9 a NEW
+                    // lattice seed and all V1–V8 prerequisites are re-tested.
+                    stageFrameRef.current=0;
+                    restartDiscovery=true;
+                    setCurrentChainIndex(0);
+                    setHandoffStatus(
+                      'V10 failed: 3 geometry rounds checked; revisiting discovery for a new V9 lattice',
+                    );
+                  }
+                  if(result.recovered){
+                    const mat=v9Ref.current?.getMaterialForV1();
+                    if(mat&&v1Ref.current&&v2Ref.current){
+                      v1Ref.current.setMaterial({
+                        ...mat,geometry:'custom',
+                        customField:e.getFitnessField()||mat.customField,
+                      });
+                      v2Ref.current.setMaterialRef(v1Ref.current);
+                    }
+                  }
+                }catch(error){
+                  console.warn('[V10] Geometry recovery failure',error);
+                }
+              }
+              const updatedVolume=conn?conn.voidCount+conn.solidCount:0;
+              if(e&&conn&&e.lastSearch&&updatedVolume>0){
+                const connected=conn.spanning[axis]
+                  &&conn.solidCount/updatedVolume>=.05
+                  &&conn.voidCount/updatedVolume>=.05;
+                output={quantity:conn.voidCount,
+                  signal:connected?1:0,support:e.lastSearch.evaluated,
+                  signature:JSON.stringify([
+                    e.config,e.lastSearch.bestScore,conn.componentCount,
+                    conn.shortestPathTortuosity[axis],
+                    e.recoveryHistory.map(trial=>[
+                      trial.round,trial.tested,trial.connected,trial.reason,
+                    ]),
+                  ])};
+              }
               break;
             }
             case 'v11': {
@@ -1383,6 +1477,11 @@ const SimulationView = ({
                 ])};
               break;
             }
+          }
+          if(restartDiscovery){
+            controls?.update();
+            renderer?.render(scene,camera);
+            return;
           }
           const index=indexOfStage(currentVersion);
           const predecessor=index>0
@@ -8212,9 +8311,10 @@ const ElementsView = () => {
                       className="rounded-lg border border-white/10 bg-black/30 p-3 text-xs">
                       <div className="flex flex-wrap justify-between gap-2">
                         <span className="font-bold text-white">{screen.requirement.source.toUpperCase()} → V13</span>
-                        <span className={screen.status==='estimated_melt_failure'?'text-amber-300':'text-cyan-300'}>
+                        <span className={screen.status==='estimated_melt_failure'||screen.status==='estimated_transport_failure'?'text-amber-300':'text-cyan-300'}>
                           {screen.status==='awaiting_composite'?'BUILD A MATERIAL TO SCREEN':
                            screen.status==='estimated_melt_failure'?'MODEL FAILS MELT SCREEN':
+                           screen.status==='estimated_transport_failure'?'MODEL FAILS CONDUCTIVITY SCREEN':
                            'PROVISIONAL MODEL SCREEN — UNVERIFIED'}
                         </span>
                       </div>
@@ -8224,6 +8324,10 @@ const ElementsView = () => {
                         {Math.round(screen.requirement.maxTemperatureK)} K
                         {screen.estimatedMeltingPointK!==null
                          ?` · predicted bulk melting point ${Math.round(screen.estimatedMeltingPointK)} K`:''}
+                        {screen.requirement.maxThermalConductivityWmK!==undefined
+                         ?` · target constituent k ≤ ${screen.requirement.maxThermalConductivityWmK.toPrecision(3)} W/(m·K)`:''}
+                        {screen.estimatedThermalConductivityWmK!==null
+                         ?` · estimated bulk k ${screen.estimatedThermalConductivityWmK.toPrecision(3)} W/(m·K)`:''}
                       </p>
                       <p className="mt-1 text-slate-400">{screen.requirement.basis}</p>
                       <p className="mt-1 text-amber-200/80">{screen.missingEvidence}</p>
@@ -8231,7 +8335,7 @@ const ElementsView = () => {
                   ))}
                 </div>
               ) : (
-                <p className="mt-2 text-xs text-slate-400">Awaiting an actual V6 thermal field. The requirements appear automatically while the original simulations run.</p>
+                <p className="mt-2 text-xs text-slate-400">Awaiting V6 thermal-field or V12 wall-material needs. Requirements appear automatically as the simulations run.</p>
               )}
             </div>
 

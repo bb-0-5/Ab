@@ -104,6 +104,13 @@ export class V10MeshEngine {
   };
 
   connectivity:VoxelChannelEvidence|null=null;
+  /** A bounded, evidence-backed attempt to recover a blocked mesh. */
+  recoveryHistory:Array<{
+    round:number;tested:number;connected:number;
+    reason:string;bestConfig:MeshConfig|null;
+    bestTortuosity:number|null;modelOnly:true;
+  }>=[];
+  lastRecoveryContext:string|null=null;
   lastSearch:{evaluated:number;axis:'x'|'y'|'z';baselineScore:number;bestScore:number;selected:MeshConfig;modeledOnly:true}|null=null;
 
   metrics: MeshMetrics = {
@@ -158,6 +165,8 @@ export class V10MeshEngine {
         break;
     }
     this._built = false;
+    this.recoveryHistory=[];
+    this.lastRecoveryContext=null;
   }
 
   /** Build the mesh by evaluating the TPMS over the 3D grid */
@@ -281,6 +290,110 @@ export class V10MeshEngine {
       selected:{...winner},modeledOnly:true,
     };
     return this.lastSearch;
+  }
+
+  /**
+   * V10 RECOVERY: the original eight-way sweep may select disconnected
+   * geometry. Search actual alternative TPMS masks rather than waiting for
+   * animation time or declaring a nonexistent flow path.
+   *
+   * Each call makes at most 16 new numerical voxel realizations. At most
+   * three calls are permitted per material+environment context; no loop is
+   * allowed to exhaust a phone. All failures remain visible in the ledger.
+   * This is a geometry screen only: not permeability, flow rate or a yield.
+   */
+  recoverBlockedChannels(
+    composite:CompositeField|undefined,
+    axis:'x'|'y'|'z',context:string,
+  ):{
+    recovered:boolean;exhausted:boolean;round:number;
+    evaluated:number;connected:number;reason:string;
+  }{
+    if(!['x','y','z'].includes(axis)||!context||context.length>240)
+      throw Error('Invalid V10 recovery context');
+    if(this.lastRecoveryContext!==context){
+      this.lastRecoveryContext=context;
+      this.recoveryHistory=[];
+    }
+    const info=this.connectivity;
+    const total=info?info.solidCount+info.voidCount:0;
+    const currentValid=Boolean(info?.spanning[axis]
+      &&total>0&&info!.solidCount/total>=.05
+      &&info!.voidCount/total>=.05);
+    if(currentValid)return {
+      recovered:true,exhausted:false,round:this.recoveryHistory.length,
+      evaluated:0,connected:1,reason:'Existing V10 through-channel is connected',
+    };
+    const round=this.recoveryHistory.length;
+    if(round>=3)return {
+      recovered:false,exhausted:true,round,evaluated:0,connected:0,
+      reason:'V10 has exhausted bounded mesh revisions; upstream geometry/material revision required',
+    };
+    const original={...this.config};
+    // Absolute thresholds can recover an entirely solid/void starting mask.
+    // Round-specific frequency/shape combinations cannot repeat the same
+    // failed condition indefinitely. Every proposed mask is evaluated.
+    const shapes:TPMSType[]=['gyroid','diamond','schwarz_p','lidinoid','neovius'];
+    const thresholds=[-.7,-.35,0,.35,.7];
+    const candidates:MeshConfig[]=[];
+    for(let i=0;i<16;i++){
+      const tpms=shapes[(i+round*3)%shapes.length];
+      const frequency=[.8,1.2,1.7,2.25,2.8,3.35][(i+round*2)%6];
+      const threshold=thresholds[(i*2+round)%thresholds.length];
+      const candidate={...original,tpms,frequency,threshold,roughness:0};
+      candidates.push(candidate);
+    }
+    let bestConfig:MeshConfig|null=null;
+    let bestScore=-Infinity,bestTortuosity:number|null=null;
+    let connected=0;
+    for(const candidate of candidates){
+      this.config=candidate;
+      this.buildMesh(composite);
+      const evidence=this.connectivity!;
+      const n=evidence.solidCount+evidence.voidCount;
+      const solidFraction=evidence.solidCount/n;
+      const voidFraction=evidence.voidCount/n;
+      const through=evidence.spanning[axis];
+      if(through)connected++;
+      // Both material AND void must exist. An all-void cube is not a membrane.
+      if(!through||solidFraction<.05||voidFraction<.05)continue;
+      const tortuosity=evidence.shortestPathTortuosity[axis];
+      if(tortuosity===null)continue;
+      // Favor connected transport and usable wall fraction; the rest remains
+      // a context-specific geometry comparison, not physical conductivity.
+      const score=evidence.spanningVoidFraction
+        -(Math.max(0,tortuosity-1)*.2)
+        -Math.abs(voidFraction-.5)*.3;
+      if(score>bestScore){
+        bestScore=score;bestConfig={...candidate};
+        bestTortuosity=tortuosity;
+      }
+    }
+    if(bestConfig){
+      this.config=bestConfig;
+      this.buildMesh(composite);
+      this.lastSearch={
+        evaluated:(this.lastSearch?.evaluated||0)+candidates.length,
+        axis,baselineScore:this.lastSearch?.baselineScore??-Infinity,
+        bestScore,selected:{...bestConfig},modeledOnly:true,
+      };
+    }else{
+      // Preserve the last known candidate instead of promoting a random
+      // disconnected trial. A failure is a finding, not a construction.
+      this.config=original;
+      this.buildMesh(composite);
+    }
+    const reason=bestConfig
+      ?'Recovered a six-connected channel with nonzero solid material'
+      :'No viable through-channel: retaining previous design and its failure';
+    this.recoveryHistory.push({
+      round:round+1,tested:candidates.length,connected,reason,
+      bestConfig,bestTortuosity,modelOnly:true,
+    });
+    return {
+      recovered:Boolean(bestConfig),exhausted:!bestConfig&&round>=2,
+      round:round+1,evaluated:candidates.length,connected,reason,
+    };
   }
 
   getConnectivity():VoxelChannelEvidence|null{return this.connectivity;}
