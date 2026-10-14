@@ -329,6 +329,11 @@ const SimulationView = ({
   const previousVisibleVersionRef = useRef<SimVersion>(activeVersion);
   const [webGlError, setWebGlError] = useState<string | null>(null);
   const [handoffStatus,setHandoffStatus] = useState('Generating first artifact');
+  const handoffStatusRef=useRef('Generating first artifact');
+  const reportHandoffStatus=(message:string)=>{
+    handoffStatusRef.current=message;
+    setHandoffStatus(message);
+  };
   const [liveTrace,setLiveTrace]=useState({
     stage:'v0' as string,
     metric:'0 harmonic samples',
@@ -1564,7 +1569,7 @@ const SimulationView = ({
                     v9Ref.current?.compositeField||undefined,
                     axis,JSON.stringify([context,stageReceiptsRef.current.get('v9')?.id]),
                   );
-                  setHandoffStatus('V10 '+result.reason+
+                  reportHandoffStatus('V10 '+result.reason+
                     ' · tested '+result.evaluated+' real voxel candidates');
                   conn=e.getConnectivity();
                   if(result.exhausted&&!result.recovered){
@@ -1585,7 +1590,7 @@ const SimulationView = ({
                     stageFrameRef.current=0;
                     restartDiscovery=true;
                     setCurrentChainIndex(0);
-                    setHandoffStatus(
+                    reportHandoffStatus(
                       'V10 failed: 3 geometry rounds checked; revisiting discovery for a new V9 lattice',
                     );
                   }
@@ -1672,7 +1677,7 @@ const SimulationView = ({
             if(frozen)frozenRenderArtifactsRef.current.set(currentVersion,frozen);
             rememberStageReceipt(decision.receipt);
             (window as any).simConstructionReceipt=decision.receipt;
-            setHandoffStatus(
+            reportHandoffStatus(
               currentVersion==='v6'&&v6Ref.current?.getMetrics().pathCount===0
                 ?'V6 blockage measured (zero flow) → V7 must examine failure'
                 :'Created '+decision.receipt.id+' · model only',
@@ -1681,10 +1686,10 @@ const SimulationView = ({
             stageFrameRef.current=0;
             setCurrentChainIndex(nextIndex);
           }else if(stageFrameRef.current%60===0){
-            setHandoffStatus(decision.reason);
+            reportHandoffStatus(decision.reason);
           }
         }else if(stageFrameRef.current%120===0){
-          setHandoffStatus(
+          reportHandoffStatus(
             currentVersion.toUpperCase()+': simulating until output is ready',
           );
         }
@@ -1773,7 +1778,7 @@ const SimulationView = ({
             v10:v10Ref.current,v13:v13Ref.current,
           });
         onVisualEvidence({
-          stage:currentVersion,metric,detail,handoff:handoffStatus,
+          stage:currentVersion,metric,detail,handoff:handoffStatusRef.current,
           completed,artifact:snapshot,
         });
         (window as any).aboveBoundLiveTrace={
