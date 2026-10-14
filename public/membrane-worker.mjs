@@ -3,6 +3,7 @@
 import {buildV10Mask,V10_CANDIDATES} from './v10-membrane-masks.mjs';
 import {HYDRAULICS,solvePoreNetwork,assessMembrane,hydraulicEvidence} from './v10-pressure-network.mjs';
 import {decodeV10PressureSelection} from './v10-pressure-handoff.mjs';
+import {planV10FollowUps} from './v10-inference-planner.mjs?v=inference-r7';
 const n=13,layers=9;
 const seedConfigs=V10_CANDIDATES.map(x=>({...x}));
 const name=c=>c===null?'Open void reference':`${c.tpms} · f=${c.frequency.toFixed(2)} · threshold=${c.threshold.toFixed(2)}`;
@@ -28,18 +29,18 @@ function current(){
  const qualified=ranking.filter(x=>x.meetsTarget&&x.config);
  return qualified.length?qualified.sort((a,b)=>b.flowM3S-a.flowM3S)[0]:null;
 }
+const reasons=new Map();
 function pushMutations(){
- const starters=ranking.filter(x=>x.valid&&x.config).sort((a,b)=>b.flowM3S-a.flowM3S).slice(0,2);
- if(!starters.length)return;
- let count=0;
- for(const starter of starters){
-  for(const df of [-.25,.25])for(const dt of [-.18,0,.18]){
-   const x=starter.config,c={...x,frequency:Math.min(2.6,Math.max(.4,x.frequency+df)),threshold:Math.min(1.2,Math.max(-1.2,x.threshold+dt))};
-   const key=JSON.stringify(c);if(seen.has(key))continue;seen.add(key);queue.push(c);
-   count++;if(count>=12)return;
-  }
+ const planned=planV10FollowUps(ranking,seen,12);
+ for(const trial of planned){
+  const key=JSON.stringify(trial.config);
+  seen.add(key);
+  reasons.set(key,trial.reason);
+  queue.push(trial.config);
  }
+ return planned;
 }
+
 async function explore(g){
  try{
   if(originalV10){
@@ -77,15 +78,16 @@ async function explore(g){
    if(g!==generation)return;
    if(paused){await new Promise(ok=>setTimeout(ok,80));continue;}
    const cfg=queue.shift(),trial=makeShape(cfg),small=concise(trial);
+   const inference=reasons.get(JSON.stringify(cfg))||'Evaluate an original V10 geometry against measured hydraulic constraints';
    ranking.push(small);done++;
    if(trial.assessment.meetsTarget&&(!best||trial.result.flowM3S>best.result.flowM3S))best=trial;
    // Display each actual pressure solution for a moment, while retaining best separately.
    focus=trial;
    send({type:'progress',done:done+1,total:mutated?1+initialCount+12:1+initialCount,
-     stage:mutated?'REFINING GEOMETRY':'SCREENING V10 MASKS',ranking:ranking.slice(),current:hydraulicEvidence(trial.result),focus:small,
+     stage:mutated?'CONSTRAINT-DRIVEN TEST':'SCREENING V10 MASKS',reason:inference,ranking:ranking.slice(),current:hydraulicEvidence(trial.result),focus:small,
      winner:best?concise(best):null});
    await new Promise(ok=>setTimeout(ok,45));
-   if(!queue.length&&!mutated){mutated=true;pushMutations();send({type:'decision',stage:'AUTOMATIC GEAR',message:`Tested ${initialCount} V10 masks. ${queue.length} local revisions selected from physically admissible candidates. Open cavity remains the upper bound.`,winner:best?concise(best):null});}
+   if(!queue.length&&!mutated){mutated=true;const plan=pushMutations();send({type:'decision',stage:'AUTOMATIC GEAR',message:`Tested ${initialCount} V10 masks. ${plan.length} numerical follow-ups selected from measured flow/solid constraints. ${plan[0]?.reason||'No valid candidate for more tests'}.`,winner:best?concise(best):null});}
   }
   if(g!==generation)return;
   ended=true;
@@ -98,7 +100,7 @@ async function explore(g){
  }catch(error){ended=true;send({type:'error',message:String(error)})}
 }
 function start(){paused=false;if(ended){return;}if(!generation){generation++;explore(generation);}}
-function reset(){generation++;paused=false;ended=false;ranking=[];reference=null;focus=null;best=null;seen.clear();queue=[];send({type:'starting'});explore(generation);}
+function reset(){generation++;paused=false;ended=false;ranking=[];reference=null;focus=null;best=null;seen.clear();reasons.clear();queue=[];send({type:'starting'});explore(generation);}
 globalThis.onmessage=({data})=>{
  switch(data?.type){case 'source-v10':
   try{originalV10=data.receipt?decodeV10PressureSelection(data.receipt):null;}
