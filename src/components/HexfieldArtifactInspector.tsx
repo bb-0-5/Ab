@@ -1,5 +1,6 @@
 import React,{useEffect,useRef} from 'react';
 import type {SweepProgress} from '../lib/auto_transport_sweep';
+import type {LiveTransportSpec} from '../lib/live_transport_spec';
 import type {NetworkFlowResult} from '../lib/steady_transport_network';
 import * as THREE from 'three';
 import {
@@ -255,12 +256,136 @@ function TransportPotentialPlot({
    </div>
   </div>;
 }
+/**
+ * Hexfield-inspired ISO / Platonic 2D technical plate. Unlike a generic
+ * marketing card this renders the actual selected material/medium properties
+ * reported by the running V9/V10/transport engines, with status provenance.
+ * Platonic glyphs are symbolic. No unmeasured microstructure is depicted.
+ */
+export function HexfieldLiveSpecPlate({spec}:{spec:LiveTransportSpec}){
+ const ref=useRef<HTMLCanvasElement>(null);
+ useEffect(()=>{
+  const canvas=ref.current;if(!canvas)return;
+  const draw=()=>{
+   const width=Math.max(280,canvas.getBoundingClientRect().width||340);
+   const height=306,scale=Math.min(window.devicePixelRatio||1,2);
+   canvas.width=Math.round(width*scale);canvas.height=height*scale;
+   const ctx=canvas.getContext('2d');if(!ctx)return;
+   ctx.scale(scale,scale);
+   ctx.fillStyle='#081923';ctx.fillRect(0,0,width,height);
+   ctx.strokeStyle='rgba(92,171,198,.13)';ctx.lineWidth=1;
+   for(let x=8;x<width;x+=24){
+    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,height);ctx.stroke();
+   }
+   for(let y=8;y<height;y+=24){
+    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(width,y);ctx.stroke();
+   }
+   const t=(str:string,x:number,y:number,col='#e1f2f6',font='12px ui-monospace, monospace')=>{
+    ctx.font=font;ctx.fillStyle=col;
+    // Avoid clipped overprints on narrow mobile screens.
+    let current=str;
+    while(ctx.measureText(current).width>width-x-9&&current.length>4)
+     current=current.slice(0,-2);
+    if(current!==str)current+='…';
+    ctx.fillText(current,x,y);
+   };
+   const statusColor=spec.status==='applied'?'#65f5b1':
+     spec.status==='changed_upstream'?'#ffbd79':'#f9d089';
+   ctx.fillStyle=statusColor;
+   ctx.fillRect(12,13,5,17);
+   t('HEXFIELD / MATERIAL + MEDIUM',25,26,'#d7f2f4',
+     'bold 12px ui-monospace, monospace');
+   t(spec.status==='applied'?'APPLIED NOW':spec.status==='searching'
+      ?'AUTO SWEEP RUNNING':spec.status==='changed_upstream'
+      ?'EARLIER TRIAL — ENGINE CHANGED':'PROPOSED — NOT APPLIED',
+     12,47,statusColor,'bold 12px ui-monospace, monospace');
+   ctx.strokeStyle='#4b8795';ctx.beginPath();
+   ctx.moveTo(12,57);ctx.lineTo(width-12,57);ctx.stroke();
+   const left=width*.27,right=width*.73;
+   polyhedron(ctx,'cube',left,117,39,[123,208,233]);
+   // Independent symbol for a fluid network, not a molecule.
+   for(let n=0;n<3;n++){
+    ctx.beginPath();
+    for(let i=0;i<=40;i++){
+     const x=right-46+i*2.3;
+     const y=111+n*15+Math.sin(i*.32+n*.65)*6;
+     if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+    }
+    ctx.lineWidth=2.7;ctx.strokeStyle=
+      spec.medium==='water'?'#5b9eff':'#66e2d5';ctx.stroke();
+   }
+   const tag=(name:string,value:string,x:number,y:number,fill:string)=>{
+    ctx.textAlign='center';
+    ctx.fillStyle=fill;ctx.font='bold 12px ui-monospace, monospace';
+    ctx.fillText(name,x,y);
+    ctx.font='bold 14px ui-monospace, monospace';
+    const short=value.length>18?value.slice(0,16)+'…':value;
+    ctx.fillText(short,x,y+17);
+    ctx.textAlign='left';
+   };
+   tag('SOLID',spec.solid||'searching',left,173,'#a6e9fb');
+   tag('TEST FLUID',spec.medium||'searching',right,173,'#86dce5');
+   const fmt=(n:number|null,units:string,dp=3)=>
+    n===null?'pending':n.toPrecision(dp)+' '+units;
+   const sr=spec.physicalReference,fr=spec.fluidReference;
+   ctx.fillStyle='rgba(3,15,22,.94)';
+   ctx.fillRect(8,197,width-16,103);
+   ctx.strokeStyle='#2a5662';ctx.strokeRect(8.5,197.5,width-17,102);
+   t('PURPOSE '+(spec.goal==='thermal'?'HEAT DISSIPATION':'DC CURRENT ROUTING'),
+    16,214,'#f9d98f','bold 11px ui-monospace, monospace');
+   t('LATTICE '+(spec.crystal||'—')+
+      ' · PORES '+(spec.tpms||'—'),16,231,'#d6eaf1');
+   t('SOLID k '+fmt(sr?.thermalKwmK??null,'W/mK')+
+     ' · sigma '+(sr?.electricalSigmaSm===null?'unrated':
+       sr?.electricalSigmaSm?.toExponential(2)||'pending'),16,247,'#b7e1f8','11px ui-monospace, monospace');
+   t('FLUID k '+fmt(fr?.thermalKwmK??null,'W/mK')+
+     ' · mu '+(fr?.viscosityPaS?.toExponential(2)||'pending')+' Pa·s',
+      16,264,'#9fdcd9','11px ui-monospace, monospace');
+   t('Y PORE '+(spec.openFluidPath===null?'WAITING':
+       spec.openFluidPath?'OPEN':'BLOCKED')+
+      '  /  X SOLID '+(spec.openSolidPath===null?'WAITING':
+       spec.openSolidPath?'CONNECTED':'DISCONNECTED'),
+    16,283,'#fbe4a4','bold 11px ui-monospace, monospace');
+  };
+  draw();
+  const observer=typeof ResizeObserver==='undefined'?null:
+   new ResizeObserver(draw);
+  observer?.observe(canvas);
+  return ()=>observer?.disconnect();
+ },[spec]);
+ return <div className="mt-3 rounded-xl border border-sky-400/45 bg-[#091822] p-2.5"
+    aria-label="Live Hexfield material and fluid specification">
+   <canvas ref={ref} width={420} height={306}
+    className="w-full h-[306px] rounded-md bg-[#081923]"
+    role="img"
+    aria-label="Hexfield Platonic 2D specification plate: solid, tested fluid, purpose, conductivity, pore geometry and transport direction"/>
+   <p className="mt-1 text-[12px] font-semibold text-white">
+    V9/V10 currently contains: {spec.liveSolid} · {spec.liveStructure} · {spec.liveGeometry}.
+   </p>
+   <p className="mt-1 text-[12px] text-slate-200">
+    {spec.reason} {spec.solid&&'Screened '+spec.solid+
+      ' in '+spec.medium+' at 20°C.'}
+   </p>
+   {spec.physicalReference&&spec.fluidReference&&
+    <p className="mt-1 text-[12px] text-cyan-100">
+     Solid density {spec.physicalReference.densityKgM3.toLocaleString()} kg/m³
+     {' · '}fluid density {spec.fluidReference.densityKgM3.toLocaleString()} kg/m³
+     {' · '}modeled effective k {spec.effectiveThermalKwmK?.toPrecision(3)||'?'} W/(m·K)
+     {' · '}fluid flow {spec.flowM3s?.toExponential(2)||'not solved'} m³/s.
+    </p>}
+   <p className="mt-1 text-[11px] text-amber-200">
+    Platonic solids are symbolic Hexfield glyphs. Material properties are
+    approximate reference values; media are separately tested scenarios,
+    not individual moving particles. Model only, not manufacturing proof.
+   </p>
+ </div>;
+}
 export function HexfieldArtifactInspector({
- stage,metric,detail,handoff,completed,artifact,transport,
+ stage,metric,detail,handoff,completed,artifact,transport,spec,
 }:{
  stage:string;metric:string;detail:string;handoff:string;
  completed:string[];artifact:RenderArtifact|null;
- transport:SweepProgress|null;
+ transport:SweepProgress|null;spec:LiveTransportSpec|null;
 }){
  const guide=STAGE_GUIDES[stage]||STAGE_GUIDES.v0;
  const canvasRef=useRef<HTMLCanvasElement>(null);
@@ -303,6 +428,7 @@ export function HexfieldArtifactInspector({
   <p className="mt-2 text-[13px] font-semibold text-white">
    Watch for: <span className="font-normal text-slate-200">{guide.watch}</span>
   </p>
+  {spec&&<HexfieldLiveSpecPlate spec={spec}/>}
   {(stage==='v1'||stage==='v2')&&(
    <div className="mt-3 rounded-lg border-2 border-amber-400/60 bg-amber-300/10 p-3">
     <p className="font-bold text-[14px] text-amber-100">

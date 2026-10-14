@@ -52,11 +52,16 @@ export class V4Engine {
       .map(p => `${p.x.toFixed(3)},${p.y.toFixed(3)},${p.z.toFixed(3)}`)
       .join('|');
     if (signature === this._captureSignature) return;
+    const wasCaptured=this._captured;
     this._captureSignature = signature;
     this.nodes = settledNodes.map(p => p.clone());
     this._buildGraph();
     this._captured = true;
-    this._framesSinceCapture = 0;
+    // Inputs evolve every frame. Resetting readiness after EVERY valid
+    // recapture made the route/membrane stage permanently unstable. This
+    // counts consecutive frames of *usable* measured geometry instead of
+    // requiring search optimizers to stop moving altogether.
+    if(!wasCaptured)this._framesSinceCapture=0;
   }
 
   private _buildGraph() {
@@ -110,7 +115,9 @@ export class V4Engine {
   }
 
   isStable() {
-    return this._captured && this._framesSinceCapture > 10;
+    return this._captured && this._framesSinceCapture>10
+      &&this.nodes.length>=3&&this.mstEdges.length>=this.nodes.length-1
+      &&Number.isFinite(this.getMSTLength());
   }
 
   update() {
