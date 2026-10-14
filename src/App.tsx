@@ -1490,10 +1490,22 @@ const SimulationView = ({
             }
             case 'v6': {
               const e=v6Ref.current,m=e?.getMetrics();
-              if(e&&m)output={quantity:m.pathCount,signal:m.efficiency,
-                support:e.getFlowPaths().length,signature:JSON.stringify([
-                  m.totalFlow,m.avgResistance,m.bottleneckCount,m.pathCount,
-                ])};
+              // Real browser 2026-10-14: V6 stabilized but reported ZERO
+              // through-paths. Requiring pathCount>0 made it stall forever
+              // before V7 could evaluate the failed topology and revise it.
+              // A sampled, *blocked* network is valid NEGATIVE evidence,
+              // not a successful flow design. Its artifact count is the
+              // actual boundary/resistance geometry that V6 evaluated.
+              const planes=e?.boundaryPlanes.length||0;
+              const cells=e?.getResistanceField().length||0;
+              if(e&&m&&planes+cells>0)
+                output={quantity:planes+cells,signal:m.efficiency,
+                  support:planes+cells,
+                  signature:JSON.stringify([
+                    m.pathCount>0?'flow_observed':'no_connected_flow',
+                    m.totalFlow,m.avgResistance,m.bottleneckCount,
+                    m.pathCount,planes,cells,
+                  ])};
               break;
             }
             case 'v7': {
@@ -1645,7 +1657,11 @@ const SimulationView = ({
             stageReceiptsRef.current.set(currentVersion,decision.receipt);
             rememberStageReceipt(decision.receipt);
             (window as any).simConstructionReceipt=decision.receipt;
-            setHandoffStatus('Created '+decision.receipt.id+' · model only');
+            setHandoffStatus(
+              currentVersion==='v6'&&v6Ref.current?.getMetrics().pathCount===0
+                ?'V6 blockage measured (zero flow) → V7 must examine failure'
+                :'Created '+decision.receipt.id+' · model only',
+            );
             const nextIndex=(currentIndex+1)%goal.tasks.length;
             stageFrameRef.current=0;
             setCurrentChainIndex(nextIndex);
@@ -1693,7 +1709,9 @@ const SimulationView = ({
             break;
           case 'v6':
             metric=(v6m?.pathCount||0)+' simulated flow paths';
-            detail='Modeled efficiency '+((v6m?.efficiency||0)*100).toFixed(1)+'%';
+            detail=v6m?.pathCount
+              ?'Modeled efficiency '+((v6m.efficiency||0)*100).toFixed(1)+'%'
+              :'BLOCKED: no transport route · reporting negative evidence to V7';
             break;
           case 'v7':
             metric=((v7Ref.current?.acceptedTrials||0)+(v7Ref.current?.rejectedTrials||0))+' tested revisions';
