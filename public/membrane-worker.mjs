@@ -1,102 +1,78 @@
-/** Experimental V10 3D CFD. Streams *computed* cross-sections during screening.
- * Candidate ranking is a coarse transient surrogate, not validated permeability.
- */
-import {createSliceEngine,advanceSlices,snapshot,sliceEvidence,MODEL} from './slice-engine.mjs?v=visible-20261015-r3';
-import {buildV10Mask,poreConnectivity,V10_CANDIDATES} from './v10-membrane-masks.mjs?v=visible-20261015-r3';
-const SMALL={n:13,layers:7},BIG={n:19,layers:9},TRIAL=65,CHUNK=5;
-const options=[{label:'Open cavity · reference',config:null},...V10_CANDIDATES.map(c=>({label:`${c.tpms.replace('_',' ')} · ${c.frequency.toFixed(1)} / ${c.threshold.toFixed(2)}`,config:c}))];
-let engine=null,ranking=[],winner=null,active=false,timer=null,epoch=0,hotspot=0,stage='idle';
-let remaining=[],trial=null,nextTrialAt=80,trialId=0;
-const send=d=>postMessage(d),later=()=>new Promise(ok=>setTimeout(ok,0));
-function stop(){active=false;if(timer!==null){clearInterval(timer);timer=null}}
-function publish(){if(engine)send({type:'state',state:snapshot(engine),ranking,winner,stage})}
-function trialSetup(config,size){
- const data=config?buildV10Mask({...size,...config}):null;
- const connectivity=data?poreConnectivity(data.mask,size.n,size.layers):{reachesTop:true,connectedVoidFraction:1,voidFraction:1};
- const valid=connectivity.reachesTop&&connectivity.connectedVoidFraction>.95&&connectivity.voidFraction>.4;
- return {connectivity,valid,sim:valid?createSliceEngine({...size,hotspot,solidMask:data?.mask||null}):null};
+/** AboveBound experiment 003. Real steady pressure-driven THROAT NETWORK,
+ * not a transient closed-cavity heat model and not 3D CFD. */
+import {buildV10Mask,V10_CANDIDATES} from './v10-membrane-masks.mjs';
+import {HYDRAULICS,solvePoreNetwork,assessMembrane,hydraulicEvidence} from './v10-pressure-network.mjs';
+const n=13,layers=9;
+const seedConfigs=V10_CANDIDATES.map(x=>({...x}));
+const name=c=>c===null?'Open void reference':`${c.tpms} · f=${c.frequency.toFixed(2)} · threshold=${c.threshold.toFixed(2)}`;
+const send=x=>postMessage(x);
+let generation=0,paused=false,ended=false,seen=new Set(),queue=[],ranking=[],reference=null,focus=null,best=null,serial=0,initialCount=0;
+function makeShape(config){
+  const mask=config?buildV10Mask({n,layers,...config}).mask:new Uint8Array(n*n*layers);
+  const result=solvePoreNetwork(mask,n,layers);
+  const assessment=reference?assessMembrane(result,reference):{status:'REFERENCE',valid:true,meetsTarget:false,reason:'Unconstrained open-void upper bound',relativeOpen:1};
+  const targetFlowM3S=(reference?.flowM3S||result.flowM3S)*HYDRAULICS.targetOpenFraction;
+  const pressureAtTargetPa=result.flowM3S>0?targetFlowM3S*HYDRAULICS.pressureDifferencePa/result.flowM3S:null;
+  return {config,name:name(config),result,assessment,pressureAtTargetPa};
 }
-function resultFor(id,label,config,connectivity,sim){
- const e=sim?sliceEvidence(sim):null;
- const accepted=Boolean(e&&e.divergenceMax<=MODEL.tolerance&&Number.isFinite(e.plateHeatFlux));
- return {id,label,config,connectivity,accepted,plateHeatFlux:accepted?e.plateHeatFlux:null,divergence:e?.divergenceMax??null,peakW:e?.peakW??null,score:accepted?e.plateHeatFlux:null};
+function concise(v){
+ const {result:r,config,assessment:a,pressureAtTargetPa}=v;
+ return {name:v.name,config,assessment:a.status,reason:a.reason,valid:a.valid,meetsTarget:a.meetsTarget,
+  relativeOpen:a.relativeOpen,flowM3S:r.flowM3S,pressureAtTargetPa,
+  permeabilityM2:r.permeabilityM2,solidFraction:r.solidFraction,iterations:r.iterations,
+  converged:r.converged,residual:r.residual,imbalanceM3S:r.imbalanceM3S,throughCells:r.throughCells};
 }
-function mutationalCandidates(seed){
- if(!seed)return [];
- const found=new Set(),all=[];
- for(const f of [-.40,-.20,.20,.40])for(const t of [-.2,0,.2]){
-  const config={...seed,frequency:Math.max(.5,Math.min(2.5,seed.frequency+f)),threshold:Math.max(-1,Math.min(1,seed.threshold+t))};
-  const label=`${config.tpms} · ${config.frequency.toFixed(2)} / ${config.threshold.toFixed(2)}`;
-  if(!found.has(label)){found.add(label);all.push({label,config})}
- }return all;
+function current(){
+ const qualified=ranking.filter(x=>x.meetsTarget&&x.config);
+ return qualified.length?qualified.sort((a,b)=>b.flowM3S-a.flowM3S)[0]:null;
 }
-async function restart(){
- stop();const ticket=++epoch;engine=null;winner=null;ranking=[];remaining=[];trial=null;trialId=options.length;nextTrialAt=80;stage='screening';
- send({type:'screening',ranking:[],progress:0,total:options.length,activeLabel:'Starting reference physics',step:0,steps:TRIAL});
+function pushMutations(){
+ const starters=ranking.filter(x=>x.valid&&x.config).sort((a,b)=>b.flowM3S-a.flowM3S).slice(0,2);
+ if(!starters.length)return;
+ let count=0;
+ for(const starter of starters){
+  for(const df of [-.25,.25])for(const dt of [-.18,0,.18]){
+   const x=starter.config,c={...x,frequency:Math.min(2.6,Math.max(.4,x.frequency+df)),threshold:Math.min(1.2,Math.max(-1.2,x.threshold+dt))};
+   const key=JSON.stringify(c);if(seen.has(key))continue;seen.add(key);queue.push(c);
+   count++;if(count>=12)return;
+  }
+ }
+}
+async function explore(g){
  try{
-  for(let k=0;k<options.length;k++){
-   if(ticket!==epoch)return;
-   const opt=options[k],{valid,connectivity,sim}=trialSetup(opt.config,SMALL);
-   send({type:'screening',ranking:[...ranking],progress:k,total:options.length,activeLabel:opt.label,step:0,steps:TRIAL});
-   if(valid)for(let s=0;s<TRIAL;s+=CHUNK){
-    if(ticket!==epoch)return;
-    advanceSlices(sim,Math.min(CHUNK,TRIAL-s));
-    // Render the actual masked field, before screening is complete.
-    send({type:'preview',state:snapshot(sim),activeLabel:opt.label,progress:k,total:options.length,step:sim.step,steps:TRIAL});
-    await later();
-   }
-   ranking.push(resultFor(k,opt.label,opt.config,connectivity,sim));
-   send({type:'screening',ranking:[...ranking],progress:k+1,total:options.length,activeLabel:opt.label,step:TRIAL,steps:TRIAL});
-   await later();
+  const ref=makeShape(null);if(!ref.result.converged||ref.result.flowM3S<=0)throw Error('Open-reference pressure network failed its analytic gate');
+  reference=ref.result;focus=ref;
+  ranking.push(concise(ref));send({type:'progress',done:1,total:7,stage:'REFERENCE VERIFIED',ranking:ranking.slice(),current:hydraulicEvidence(ref.result),focus:concise(ref)});
+  queue=seedConfigs.slice();queue.forEach(c=>seen.add(JSON.stringify(c)));initialCount=queue.length;
+  let done=0,mutated=false;
+  while(queue.length){
+   if(g!==generation)return;
+   if(paused){await new Promise(ok=>setTimeout(ok,80));continue;}
+   const cfg=queue.shift(),trial=makeShape(cfg),small=concise(trial);
+   ranking.push(small);done++;
+   if(trial.assessment.meetsTarget&&(!best||trial.result.flowM3S>best.result.flowM3S))best=trial;
+   // Display each actual pressure solution for a moment, while retaining best separately.
+   focus=trial;
+   send({type:'progress',done:done+1,total:mutated?1+initialCount+12:1+initialCount,
+     stage:mutated?'REFINING GEOMETRY':'SCREENING V10 MASKS',ranking:ranking.slice(),current:hydraulicEvidence(trial.result),focus:small,
+     winner:best?concise(best):null});
+   await new Promise(ok=>setTimeout(ok,45));
+   if(!queue.length&&!mutated){mutated=true;pushMutations();send({type:'decision',stage:'AUTOMATIC GEAR',message:`Tested ${initialCount} V10 masks. ${queue.length} local revisions selected from physically admissible candidates. Open cavity remains the upper bound.`,winner:best?concise(best):null});}
   }
-  if(ticket!==epoch)return;
-  const eligible=ranking.filter(x=>x.accepted&&x.config).sort((a,b)=>b.score-a.score);
-  for(const best of eligible){
-    const fine=trialSetup(best.config,BIG);if(!fine.valid)continue;
-    engine=fine.sim;winner={...best,vsEmptyPercent:ranking[0]?.accepted?100*(best.score/ranking[0].score-1):null,
-      coarseGrid:'13×13×7',liveGrid:'19×19×9',connectedAtLiveGrid:true};break;
-  }
-  if(!engine){ // A negative result must not produce a blank screen.
-   engine=createSliceEngine({...BIG,hotspot});winner={id:-1,label:'Open cavity · no viable membrane',config:null,score:ranking[0]?.score||0,vsEmptyPercent:0};
-  }
-  remaining=mutationalCandidates(winner.config);
-  stage='running';active=true;publish();loop();
- }catch(e){if(ticket!==epoch)return;stop();stage='error';send({type:'error',message:String(e)})}
+  if(g!==generation)return;
+  ended=true;
+  const winner=best?concise(best):null;
+  const display=best||focus;
+  send({type:'complete',done:ranking.length,total:ranking.length,stage:'SEARCH FINISHED',ranking:ranking.slice(),
+    current:hydraulicEvidence(display.result),focus:concise(display),winner,
+    message:best?`Provisional pore-network candidate: ${best.name}. Δp needed for a fixed flow ≈ ${winner.pressureAtTargetPa.toFixed(3)} Pa vs open reference ${HYDRAULICS.targetOpenFraction.toFixed(2)} Pa. Requires CFD and experimental validation.`:
+      'No tested solid membrane met the preset solid fraction and flow target. No fabricated improvement.'});
+ }catch(error){ended=true;send({type:'error',message:String(error)})}
 }
-function evaluateMutation(){
- if(!trial){
-  if(engine.step<nextTrialAt||!remaining.length)return;
-  const opt=remaining.shift(),setup=trialSetup(opt.config,SMALL);
-  trial={...opt,...setup,id:trialId++};
-  send({type:'exploring',activeLabel:opt.label,step:0,steps:TRIAL,remaining:remaining.length,ranking:[...ranking]});
- }
- if(trial.sim){
-  advanceSlices(trial.sim,Math.min(CHUNK,TRIAL-trial.sim.step));
-  send({type:'exploring',activeLabel:trial.label,step:trial.sim.step,steps:TRIAL,remaining:remaining.length,ranking:[...ranking]});
-  if(trial.sim.step<TRIAL)return;
- }
- const result=resultFor(trial.id,trial.label,trial.config,trial.connectivity,trial.sim);
- ranking.push(result);
- if(result.accepted && winner.config && result.score>winner.score+1e-9){
-  const fine=trialSetup(result.config,BIG);
-  if(fine.valid){
-    const previous=winner.label;
-    winner={...result,vsEmptyPercent:ranking[0]?.accepted?100*(result.score/ranking[0].score-1):null,coarseGrid:'13×13×7',liveGrid:'19×19×9',connectedAtLiveGrid:true};
-    engine=fine.sim;
-    send({type:'discovery',winner,previous,ranking:[...ranking]});
-  }
- }
- nextTrialAt=engine.step+4;trial=null;
- send({type:'exploring',activeLabel:result.label,step:TRIAL,steps:TRIAL,remaining:remaining.length,ranking:[...ranking],winner});
-}
-function tick(){if(!active||!engine)return;try{
- advanceSlices(engine,2);publish();evaluateMutation();
- }catch(e){stop();stage='error';send({type:'error',message:String(e)})}}
-function loop(){if(timer!==null)clearInterval(timer);timer=setInterval(tick,190);tick()}
-onmessage=({data})=>{switch(data?.type){
- case 'start':if(stage==='idle'||stage==='error'||stage==='paused-screening')restart();else if(engine&&!active){active=true;stage='running';loop()}break;
- case 'pause':if(stage==='screening'){++epoch;stage='paused-screening';send({type:'paused-screening',message:'Screening paused; resume restarts the bounded search.'})}stop();if(stage!=='paused-screening')stage='paused';publish();break;
- case 'reset':hotspot=(hotspot+1)%3;restart();break;
- case 'snapshot':publish();break;
-}};
-send({type:'ready',description:'V10 CFD computed-field streaming with bounded autonomous geometry refinement'});
+function start(){paused=false;if(ended){return;}if(!generation){generation++;explore(generation);}}
+function reset(){generation++;paused=false;ended=false;ranking=[];reference=null;focus=null;best=null;seen.clear();queue=[];send({type:'starting'});explore(generation);}
+globalThis.onmessage=({data})=>{
+ switch(data?.type){case 'start':start();break;case 'pause':paused=true;send({type:'paused'});break;case 'resume':paused=false;send({type:'resumed'});break;case 'reset':reset();break;
+ case 'snapshot':send({type:'progress',done:ranking.length,ranking:ranking.slice(),current:focus?hydraulicEvidence(focus.result):null,focus:focus?concise(focus):null,winner:best?concise(best):null});break;}
+};
+send({type:'ready',description:'V10 pressure-driven pore-network optimizer, mass-conserving, finite-campaign'});
