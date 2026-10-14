@@ -4,7 +4,7 @@ globalThis.postMessage=x=>{messages.push(x)};
 await import('../public/membrane-worker.mjs');
 assert.equal(messages[0]?.type,'ready');
 globalThis.onmessage({data:{type:'start'}});
-for(let i=0;i<100;i++){
+for(let i=0;i<750;i++){
  if(messages.some(x=>x.type==='complete'||x.type==='error'))break;
  await new Promise(ok=>setTimeout(ok,25));
 }
@@ -22,4 +22,7 @@ if(complete.winner){
  assert.ok(complete.winner.solidFraction>=.25&&complete.winner.solidFraction<=.75);
 }
 assert.ok(messages.some(x=>x.type==='progress'&&x.current?.pressure?.length),'must display computed pressure while screening');
+assert.ok(messages.some(x=>x.type==='dye-step'&&x.transport?.concentration?.length),'must show time-stepped computed dye, not drawn random motion');
+assert.ok(complete.transport?.step>=150,'chosen geometry should retain chronological final state');
+assert.ok(complete.ranking.slice(1).some(x=>x.chronologicalSteps>0),'candidate results have time-domain evidence');
 console.log('PASS campaign', {trials:complete.ranking.length,winner:complete.winner?.name||'no feasible',referenceQ:open.flowM3S,accepted:complete.ranking.filter(x=>x.meetsTarget).length});
