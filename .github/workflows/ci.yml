@@ -50,6 +50,12 @@ jobs:
       - name: Verify primary experience route and original V0–V13 access
         run: node scripts/home-routing-smoke.mjs
 
+      - name: Validate original V10 voxel handoff and storage provenance
+        run: npx tsx scripts/v10-pressure-handoff-smoke.ts
+      - name: Verify actual V10 native-resolution mask solves in pressure worker
+        run: node scripts/v10-pressure-worker-handoff-smoke.mjs
+      - name: Check same-origin handoff assets in production bundle
+        run: test -f dist/v10-pressure-handoff.mjs
       - name: Verify pressure-driven membrane physics against analytic tube flow
         run: node scripts/pressure-network-smoke.mjs
       - name: Verify bounded autonomous pressure-driven membrane campaign
