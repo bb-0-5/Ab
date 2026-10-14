@@ -12,16 +12,21 @@ export function bottomTemperature(x,seed=0,z=.5){
   const zc=[.31,.70,.44][((seed%3)+3)%3];
   return 0.24+0.76*Math.exp(-((x-c)**2/.055+(z-zc)**2/.105));
 }
-export function createSliceEngine({n=MODEL.n,layers=MODEL.layers,hotspot=0}={}){
+export function createSliceEngine({n=MODEL.n,layers=MODEL.layers,hotspot=0,solidMask=null}={}){
   if(!Number.isInteger(n)||n<7||n>39||!Number.isInteger(layers)||layers<5||layers>19)throw Error('invalid 3D grid');
   const N=n*n*layers;
+  if(solidMask!==null&&solidMask.length!==N)throw Error('solidMask must match full CFD cell grid');
+  const solid=solidMask===null?null:Uint8Array.from(solidMask,v=>v>0.5?1:0);
+  const fluidCount=solid===null?N:solid.reduce((total,v)=>total+(v?0:1),0);
+  if(fluidCount<20)throw Error('Insufficient connected fluid volume');
   const e={n,layers,hotspot,dx:1/n,dz:1/layers,dt:MODEL.dt,step:0,time:0,
     T:new Float64Array(N),Tnext:new Float64Array(N),p:new Float64Array(N),
     u:new Float64Array((n+1)*n*layers),v:new Float64Array(n*(n+1)*layers),w:new Float64Array(n*n*(layers+1)),
     uNext:new Float64Array((n+1)*n*layers),vNext:new Float64Array(n*(n+1)*layers),wNext:new Float64Array(n*n*(layers+1)),
     lastPressureSweeps:0,divergenceMax:0,preDivergence:0,pressureResidual:0,projectionConverged:false,pressureActive:false,
-    maxSpeed:0,initialEnergy:0};
+    maxSpeed:0,initialEnergy:0,solidMask:solid,fluidCount};
   for(let k=0;k<layers;k++)for(let j=0;j<n;j++)for(let i=0;i<n;i++){
+    if(solid&&solid[(k*n+j)*n+i])continue;
     const y=(j+.5)/n,zb=(k+.5)/layers;
     e.T[(k*n+j)*n+i]=(1-y)*bottomTemperature((i+.5)/n,hotspot,zb);
   }
@@ -34,6 +39,8 @@ function physicsStep(e){
   const U=(i,j,k)=>(k*n+j)*(n+1)+i;
   const V=(i,j,k)=>(k*(n+1)+j)*n+i;
   const W=(i,j,k)=>(k*n+j)*n+i;
+  const solid=e.solidMask;
+  const fluid=(i,j,k)=>i>=0&&i<n&&j>=0&&j<n&&k>=0&&k<nz&&(!solid||!solid[C(i,j,k)]);
   // Dirichlet normal velocity on all six walls; mirrored ghosts for tangential
   // viscous derivatives enforce an approximate no-slip at the solid boundaries.
   const uVal=(i,j,k)=>i<0||i>n||j<0||j>=n||k<0||k>=nz?0:u[U(i,j,k)];
@@ -44,6 +51,7 @@ function physicsStep(e){
   // diffuse across Z: perpendicular flux is not invented by a graphics layer.
   uNext.fill(0);vNext.fill(0);wNext.fill(0);
   for(let k=0;k<nz;k++)for(let j=0;j<n;j++)for(let i=1;i<n;i++){
+    if(!fluid(i-1,j,k)||!fluid(i,j,k))continue;
     const q=U(i,j,k),a=u[q];
     const vy=(vVal(i-1,j,k)+vVal(i,j,k)+vVal(i-1,j+1,k)+vVal(i,j+1,k))*.25;
     const wz=(wVal(i-1,j,k)+wVal(i,j,k)+wVal(i-1,j,k+1)+wVal(i,j,k+1))*.25;
@@ -54,6 +62,7 @@ function physicsStep(e){
     uNext[q]=norm(a+dt*(MODEL.nu*lap-adv));
   }
   for(let k=0;k<nz;k++)for(let j=1;j<n;j++)for(let i=0;i<n;i++){
+    if(!fluid(i,j-1,k)||!fluid(i,j,k))continue;
     const q=V(i,j,k),a=v[q];
     const ux=(uVal(i,j-1,k)+uVal(i+1,j-1,k)+uVal(i,j,k)+uVal(i+1,j,k))*.25;
     const wz=(wVal(i,j-1,k)+wVal(i,j,k)+wVal(i,j-1,k+1)+wVal(i,j,k+1))*.25;
@@ -64,6 +73,7 @@ function physicsStep(e){
     vNext[q]=norm(a+dt*(MODEL.nu*lap-adv+MODEL.buoyancy*temp));
   }
   for(let k=1;k<nz;k++)for(let j=0;j<n;j++)for(let i=0;i<n;i++){
+    if(!fluid(i,j,k-1)||!fluid(i,j,k))continue;
     const q=W(i,j,k),a=w[q];
     const ux=(uVal(i,j,k-1)+uVal(i+1,j,k-1)+uVal(i,j,k)+uVal(i+1,j,k))*.25;
     const vy=(vVal(i,j,k-1)+vVal(i,j+1,k-1)+vVal(i,j,k)+vVal(i,j+1,k))*.25;
@@ -74,7 +84,7 @@ function physicsStep(e){
   }
   const divergence=(uu,vv,ww,i,j,k)=>(uu[U(i+1,j,k)]-uu[U(i,j,k)])/dx+(vv[V(i,j+1,k)]-vv[V(i,j,k)])/dx+(ww[W(i,j,k+1)]-ww[W(i,j,k)])/dz;
   let pre=0;
-  for(let k=0;k<nz;k++)for(let j=0;j<n;j++)for(let i=0;i<n;i++)pre=Math.max(pre,Math.abs(divergence(uNext,vNext,wNext,i,j,k)));
+  for(let k=0;k<nz;k++)for(let j=0;j<n;j++)for(let i=0;i<n;i++)if(fluid(i,j,k))pre=Math.max(pre,Math.abs(divergence(uNext,vNext,wNext,i,j,k)));
   e.preDivergence=pre;e.pressureActive=pre>1e-10;
   // Pressure Poisson on all cells with zero-normal-gradient boundary condition,
   // one global gauge. Iterative corrector increases work until tolerance met.
@@ -84,51 +94,56 @@ function physicsStep(e){
     const tolerance=MODEL.tolerance;const target=tolerance/dt;
     // Warm-start pressure by adjusting from the previous timestep.
     const rhs=new Float64Array(N);
-    for(let k=0;k<nz;k++)for(let j=0;j<n;j++)for(let i=0;i<n;i++)rhs[C(i,j,k)]=divergence(uNext,vNext,wNext,i,j,k)/dt;
-    let rhsMean=0;for(let q=0;q<N;q++)rhsMean+=rhs[q];rhsMean/=N;
-    for(let q=0;q<N;q++)rhs[q]-=rhsMean;
+    for(let k=0;k<nz;k++)for(let j=0;j<n;j++)for(let i=0;i<n;i++)if(fluid(i,j,k))rhs[C(i,j,k)]=divergence(uNext,vNext,wNext,i,j,k)/dt;
+    let rhsMean=0;for(let q=0;q<N;q++)rhsMean+=rhs[q];rhsMean/=e.fluidCount;
+    for(let q=0;q<N;q++)if(!solid||!solid[q])rhs[q]-=rhsMean;
     for(sweeps=1;sweeps<=MODEL.maxPressureSweeps;sweeps++){
       for(let k=0;k<nz;k++)for(let j=0;j<n;j++)for(let i=0;i<n;i++){
-        const q=C(i,j,k);let sum=0,den=0;
-        if(i>0){sum+=xx*p[C(i-1,j,k)];den+=xx;}if(i<n-1){sum+=xx*p[C(i+1,j,k)];den+=xx;}
-        if(j>0){sum+=xx*p[C(i,j-1,k)];den+=xx;}if(j<n-1){sum+=xx*p[C(i,j+1,k)];den+=xx;}
-        if(k>0){sum+=zz*p[C(i,j,k-1)];den+=zz;}if(k<nz-1){sum+=zz*p[C(i,j,k+1)];den+=zz;}
-        p[q]=p[q]+1.54*((sum-rhs[q])/den-p[q]);
+        const q=C(i,j,k);if(!fluid(i,j,k))continue;
+        let sum=0,den=0;
+        if(fluid(i-1,j,k)){sum+=xx*p[C(i-1,j,k)];den+=xx;}if(fluid(i+1,j,k)){sum+=xx*p[C(i+1,j,k)];den+=xx;}
+        if(fluid(i,j-1,k)){sum+=xx*p[C(i,j-1,k)];den+=xx;}if(fluid(i,j+1,k)){sum+=xx*p[C(i,j+1,k)];den+=xx;}
+        if(fluid(i,j,k-1)){sum+=zz*p[C(i,j,k-1)];den+=zz;}if(fluid(i,j,k+1)){sum+=zz*p[C(i,j,k+1)];den+=zz;}
+        if(den>0)p[q]+=1.54*((sum-rhs[q])/den-p[q]);
       }
       if(sweeps%12===0||sweeps===MODEL.maxPressureSweeps){
         residual=0;
         for(let k=0;k<nz;k++)for(let j=0;j<n;j++)for(let i=0;i<n;i++){
-          const q=C(i,j,k);let lap=0;
-          if(i>0)lap+=xx*(p[C(i-1,j,k)]-p[q]);if(i<n-1)lap+=xx*(p[C(i+1,j,k)]-p[q]);
-          if(j>0)lap+=xx*(p[C(i,j-1,k)]-p[q]);if(j<n-1)lap+=xx*(p[C(i,j+1,k)]-p[q]);
-          if(k>0)lap+=zz*(p[C(i,j,k-1)]-p[q]);if(k<nz-1)lap+=zz*(p[C(i,j,k+1)]-p[q]);
+          const q=C(i,j,k);if(!fluid(i,j,k))continue;
+          let lap=0;
+          if(fluid(i-1,j,k))lap+=xx*(p[C(i-1,j,k)]-p[q]);if(fluid(i+1,j,k))lap+=xx*(p[C(i+1,j,k)]-p[q]);
+          if(fluid(i,j-1,k))lap+=xx*(p[C(i,j-1,k)]-p[q]);if(fluid(i,j+1,k))lap+=xx*(p[C(i,j+1,k)]-p[q]);
+          if(fluid(i,j,k-1))lap+=zz*(p[C(i,j,k-1)]-p[q]);if(fluid(i,j,k+1))lap+=zz*(p[C(i,j,k+1)]-p[q]);
           residual=Math.max(residual,Math.abs(lap-rhs[q]));
         }
         if(residual<=target)break;
       }
     }
-    let mean=0;for(let q=0;q<N;q++)mean+=p[q];mean/=N;for(let q=0;q<N;q++)p[q]-=mean;
-    for(let k=0;k<nz;k++)for(let j=0;j<n;j++)for(let i=1;i<n;i++)uNext[U(i,j,k)]-=dt*(p[C(i,j,k)]-p[C(i-1,j,k)])/dx;
-    for(let k=0;k<nz;k++)for(let j=1;j<n;j++)for(let i=0;i<n;i++)vNext[V(i,j,k)]-=dt*(p[C(i,j,k)]-p[C(i,j-1,k)])/dx;
-    for(let k=1;k<nz;k++)for(let j=0;j<n;j++)for(let i=0;i<n;i++)wNext[W(i,j,k)]-=dt*(p[C(i,j,k)]-p[C(i,j,k-1)])/dz;
+    let mean=0;for(let q=0;q<N;q++)mean+=p[q];mean/=e.fluidCount;for(let q=0;q<N;q++)if(!solid||!solid[q])p[q]-=mean;
+    for(let k=0;k<nz;k++)for(let j=0;j<n;j++)for(let i=1;i<n;i++)if(fluid(i-1,j,k)&&fluid(i,j,k))uNext[U(i,j,k)]-=dt*(p[C(i,j,k)]-p[C(i-1,j,k)])/dx;
+    for(let k=0;k<nz;k++)for(let j=1;j<n;j++)for(let i=0;i<n;i++)if(fluid(i,j-1,k)&&fluid(i,j,k))vNext[V(i,j,k)]-=dt*(p[C(i,j,k)]-p[C(i,j-1,k)])/dx;
+    for(let k=1;k<nz;k++)for(let j=0;j<n;j++)for(let i=0;i<n;i++)if(fluid(i,j,k-1)&&fluid(i,j,k))wNext[W(i,j,k)]-=dt*(p[C(i,j,k)]-p[C(i,j,k-1)])/dz;
   }
   e.lastPressureSweeps=Math.min(sweeps,MODEL.maxPressureSweeps);e.pressureResidual=residual;
   e.divergenceMax=0;e.maxSpeed=0;
   for(let k=0;k<nz;k++)for(let j=0;j<n;j++)for(let i=0;i<n;i++){
+    if(!fluid(i,j,k))continue;
     e.divergenceMax=Math.max(e.divergenceMax,Math.abs(divergence(uNext,vNext,wNext,i,j,k)));
     const q=C(i,j,k),uc=(uNext[U(i,j,k)]+uNext[U(i+1,j,k)])*.5,vc=(vNext[V(i,j,k)]+vNext[V(i,j+1,k)])*.5,wc=(wNext[W(i,j,k)]+wNext[W(i,j,k+1)])*.5;
     e.maxSpeed=Math.max(e.maxSpeed,Math.hypot(uc,vc,wc));
   }
   // Scalar advection in 3D, conservative face-flux form. Face velocities
   // are from the pressure-projected, impermeable MAC field.
-  const temp=(i,j,k)=>{
+  const temp=(i,j,k,center)=>{
+    if(i<0||i>=n||k<0||k>=nz)return center;
     if(j<0)return 2*bottomTemperature((i+.5)/n,e.hotspot,(k+.5)/nz)-T[C(i,0,k)];
     if(j>=n)return -T[C(i,n-1,k)]; // cold upper Dirichlet face
-    return T[C(clamp(i,0,n-1),j,clamp(k,0,nz-1))]; // insulated x,z walls
+    return fluid(i,j,k)?T[C(i,j,k)]:center; // adiabatic voxel walls
   };
   for(let k=0;k<nz;k++)for(let j=0;j<n;j++)for(let i=0;i<n;i++){
     const q=C(i,j,k),q0=T[q];
-    const l=temp(i-1,j,k),r=temp(i+1,j,k),b=temp(i,j-1,k),t=temp(i,j+1,k),back=temp(i,j,k-1),front=temp(i,j,k+1);
+    if(!fluid(i,j,k)){Tnext[q]=0;continue;}
+    const l=temp(i-1,j,k,q0),r=temp(i+1,j,k,q0),b=temp(i,j-1,k,q0),t=temp(i,j+1,k,q0),back=temp(i,j,k-1,q0),front=temp(i,j,k+1,q0);
     const faces=[uNext[U(i,j,k)],uNext[U(i+1,j,k)],vNext[V(i,j,k)],vNext[V(i,j+1,k)],wNext[W(i,j,k)],wNext[W(i,j,k+1)]];
     const fluxX=(faces[1]*(faces[1]>=0?q0:r)-faces[0]*(faces[0]>=0?l:q0))/dx;
     const fluxY=(faces[3]*(faces[3]>=0?q0:t)-faces[2]*(faces[2]>=0?b:q0))/dx;
@@ -147,7 +162,7 @@ export function advanceSlices(e,steps=1){
   return e;
 }
 export function sliceEvidence(e){
- const {n,layers:nz,T,p,u,v,w,dx,dz}=e,N=n*n*nz;
+ const {n,layers:nz,T,p,u,v,w,dx,dz}=e,N=n*n*nz,solid=e.solidMask;
  const C=(i,j,k)=>(k*n+j)*n+i;
  const U=(i,j,k)=>(k*n+j)*(n+1)+i;
  const V=(i,j,k)=>(k*(n+1)+j)*n+i;
@@ -157,7 +172,8 @@ export function sliceEvidence(e){
  for(let k=0;k<nz;k++){
    let grad=0,speed=0,wSlice=0,net=0;
    for(let j=0;j<n;j++)for(let i=0;i<n;i++){
-     const q=C(i,j,k),uc=(u[U(i,j,k)]+u[U(i+1,j,k)])*.5,vc=(v[V(i,j,k)]+v[V(i,j+1,k)])*.5,wc=(w[W(i,j,k)]+w[W(i,j,k+1)])*.5;
+     const q=C(i,j,k);if(solid&&solid[q])continue;
+     const uc=(u[U(i,j,k)]+u[U(i+1,j,k)])*.5,vc=(v[V(i,j,k)]+v[V(i,j+1,k)])*.5,wc=(w[W(i,j,k)]+w[W(i,j,k+1)])*.5;
      if(i>0&&i<n-1&&j>0&&j<n-1)grad+=Math.hypot((T[C(i+1,j,k)]-T[C(i-1,j,k)])/(2*dx),(T[C(i,j+1,k)]-T[C(i,j-1,k)])/(2*dx));
      speed+=Math.hypot(uc,vc,wc);energy+=uc*uc+vc*vc+wc*wc;
      wSlice+=Math.abs(wc);wMax=Math.max(wMax,Math.abs(wc));
@@ -186,7 +202,13 @@ export function sliceEvidence(e){
  signals.push({id:'heat-advection',type:'necessary',text:'3D HEAT TRANSPORT: cross-plane advection w·∂zT + diffusion; all three momentum components are coupled.'});
  signals.push({id:'gear-scheduler',type:'observed',text:`AUTO GEARS: pressure iterates to tolerance; all cells remain coupled. Priority selects the most informative display slice, not which physics is allowed to run.`});
  signals.push({id:'limitations',type:'limit',text:'RESEARCH SOLVER: low resolution, approximate tangential wall treatment, no obstacle masks or external CFD benchmarks. Not certified engineering prediction.'});
- const physical={perpendicularRms:Math.sqrt(w.reduce((acc,s)=>acc+s*s,0)/w.length),peakW:wMax,interlayerThroughput:fluxAbs,
+ let plateHeatFlux=0,plateOpen=0;
+ for(let k=0;k<nz;k++)for(let i=0;i<n;i++){
+  if(solid&&solid[C(i,n-1,k)])continue;
+  plateHeatFlux+=2*MODEL.alpha*T[C(i,n-1,k)]/dx*dx*dz;
+  plateOpen++;
+ }
+ const physical={plateHeatFlux,plateOpenFraction:plateOpen/(n*nz),voidFraction:e.fluidCount/N,perpendicularRms:Math.sqrt(w.reduce((acc,s)=>acc+s*s,0)/w.length),peakW:wMax,interlayerThroughput:fluxAbs,
    kineticRms:Math.sqrt(energy/N),pressureResidual:e.pressureResidual,divergenceMax:e.divergenceMax,preDivergence:e.preDivergence,pressureSweeps:e.lastPressureSweeps,projectionConverged:e.divergenceMax<=MODEL.tolerance};
  e.projectionConverged=physical.projectionConverged;
  return {focus,priority,signals,...physical,kineticRms:physical.kineticRms,maxVerticalGradient:Math.max(...gradients),modelTime:e.time,step:e.step,flux};
@@ -195,14 +217,15 @@ export function snapshot(e){
  const {n,layers,T,p,u,v,w}=e,evidence=sliceEvidence(e),slices=[];
  const C=(i,j,k)=>(k*n+j)*n+i,U=(i,j,k)=>(k*n+j)*(n+1)+i,V=(i,j,k)=>(k*(n+1)+j)*n+i,W=(i,j,k)=>(k*n+j)*n+i;
  for(let k=0;k<layers;k++){
-   const slab={temperature:[],u:[],v:[],w:[],pressure:[]};
+   const slab={temperature:[],u:[],v:[],w:[],pressure:[],solid:[]};
    for(let j=0;j<n;j++)for(let i=0;i<n;i++){
      slab.temperature.push(T[C(i,j,k)]);slab.pressure.push(p[C(i,j,k)]);
+     slab.solid.push(e.solidMask?.[C(i,j,k)]||0);
      slab.u.push((u[U(i,j,k)]+u[U(i+1,j,k)])*.5);
      slab.v.push((v[V(i,j,k)]+v[V(i,j+1,k)])*.5);
      slab.w.push((w[W(i,j,k)]+w[W(i,j,k+1)])*.5);
    }slices.push(slab);
  }
  return {n,layers,time:e.time,step:e.step,slices,evidence,
-  model:{nu:MODEL.nu,alpha:MODEL.alpha,buoyancy:MODEL.buoyancy,dt:e.dt,note:'Prototype 3D staggered velocity + pressure projection. XY slices are 2D views of a coupled 3D model, not independent 2D CFD.'}};
+  model:{obstacles:Boolean(e.solidMask),heatTreatment:e.solidMask?'Adiabatic impermeable solids; excludes solid conduction':'Single fluid domain',nu:MODEL.nu,alpha:MODEL.alpha,buoyancy:MODEL.buoyancy,dt:e.dt,note:'Prototype 3D staggered velocity + pressure projection. XY slices are 2D views of a coupled 3D model, not independent 2D CFD.'}};
 }

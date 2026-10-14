@@ -21,6 +21,10 @@ jobs:
         run: node scripts/fluid-physics-smoke.mjs
       - name: Verify coupled 2.5D slice physics and inference
         run: node scripts/slice-engine-smoke.mjs
+      - name: Validate V10 masks, pressure fields and solid impermeability
+        run: node scripts/v10-membrane-smoke.mjs
+      - name: Check CFD masks match V10MeshEngine
+        run: npx tsx scripts/v10-membrane-parity-smoke.ts
       - name: Verify restored V0–V13 frontend and static bundle
         run: |
           test -f dist/index.html
@@ -35,6 +39,9 @@ jobs:
           test -f src/simulations/v0_compression.ts
           test -f src/simulations/v7.ts
           test -f src/simulations/v13_material.ts
+          test -f dist/membrane.html
+          test -f dist/v10-membrane-masks.mjs
+          test -f dist/membrane-worker.mjs
           test -f dist/slices.html
           test -f dist/torus-v3.html
           test -f dist/slice-worker.mjs
