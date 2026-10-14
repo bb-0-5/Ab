@@ -39,7 +39,6 @@ export type NetworkFlowResult={
  modelOnly:true;
  limitations:string;
 };
-const N=16;
 const pitch=.001;
 const dp=1;
 const dv=.001;
@@ -130,7 +129,7 @@ export function solveSteadyVoxelTransport(
  // Re < 100 is intentionally stricter than pipe transition ~2300, because
  // this crude voxel-throat model cannot represent inertial bends reliably.
  const laminar=re===null||re<100;
- const samples:NetworkFlowResult['pressureSamples']=[];
+ const samples:{position:number;fraction:number}[]=[];
  for(let p=0;p<res;p++){
   let count=0,sum=0;
   for(let i=0;i<n;i++)if(active[i]&&axisPosition(i)===p){
