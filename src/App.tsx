@@ -1834,10 +1834,13 @@ const SimulationView = ({
             const engine=currentVersion==='v3'?v3Ref.current:v4Ref.current;
             const nodes=engine?.getNodes().length||0;
             const mst=engine?.getMSTEdges().length||0;
-            metric=mst+' chosen backbone edges';
+            metric=mst+' proposed backbone edges';
             detail=nodes+' input sites · connected tree '+
               (nodes>=3&&mst===nodes-1?'YES':'NOT YET')+
-              ' · route length '+(engine?.getMSTLength()||0).toFixed(2);
+              ' · bridging disconnected search basins '+
+              (engine?.syntheticBridges||0)+
+              ' (model proposals) · route length '+
+              (engine?.getMSTLength()||0).toFixed(2);
             break;
           }
           case 'v5':{
