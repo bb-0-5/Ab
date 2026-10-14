@@ -52,6 +52,7 @@ import {
 } from './lib/sim_artifact_handoffs';
 import {screenMaterialPipeline,type MaterialPipelineEvidence} from './lib/material_pipeline_evidence';
 import {screenReferenceMaterial,rankTransportSweep,buildSelectedTransportDesign,
+ verificationShortlist,verifyTransportCandidate,
  SOLID_OPTIONS,type TransportGoal,type ScreenedDesign,type SweepProgress,
 } from './lib/auto_transport_sweep';
 import {
@@ -349,8 +350,10 @@ const SimulationView = ({
   const [campaignStatus,setCampaignStatus] = useState('Awaiting a V12-derived material need');
   const transportSweepRef=useRef<{
     context:string;next:number;results:ScreenedDesign[];
-    complete:boolean;applied:boolean;
-  }>({context:'',next:0,results:[],complete:false,applied:false});
+    shortlist:ScreenedDesign[];verifyNext:number;
+    prescreenComplete:boolean;complete:boolean;applied:boolean;
+  }>({context:'',next:0,results:[],shortlist:[],verifyNext:0,
+       prescreenComplete:false,complete:false,applied:false});
   const pendingMaterialTrialRef=useRef<TrialPending|null>(null);
   const stageReceiptsRef = useRef(new Map<string,StageReceipt>());
   const frozenRenderArtifactsRef=useRef(new Map<string,RenderArtifact>());
@@ -438,7 +441,8 @@ const SimulationView = ({
   useEffect(() => {
     activeOptimizerRef.current = activeOptimizer;
     transportSweepRef.current={
-      context:'',next:0,results:[],complete:false,applied:false,
+      context:'',next:0,results:[],shortlist:[],verifyNext:0,
+      prescreenComplete:false,complete:false,applied:false,
     };
     // When optimizer type changes, rebuild entire material pipeline
     if (v9Ref.current && v10Ref.current && v11Ref.current) {
@@ -924,41 +928,67 @@ const SimulationView = ({
         const state=transportSweepRef.current,context=JSON.stringify([opt,tMode]);
         if(state.context!==context){
           state.context=context;state.next=0;state.results=[];
-          state.complete=false;state.applied=false;
+          state.shortlist=[];state.verifyNext=0;
+          state.prescreenComplete=false;state.complete=false;
+          state.applied=false;
         }
         if(!state.complete&&simulationFrame%16===6){
-          try{
-            const batch=screenReferenceMaterial(
-              v9Ref.current,v10Ref.current,opt as TransportGoal,
-              state.next,20261014,
-            );
-            state.results.push(...batch);state.next++;
-            state.complete=state.next>=SOLID_OPTIONS;
-            const outcome=rankTransportSweep(
-              state.results,opt as TransportGoal,state.complete,
-            );
-            (window as any).aboveBoundTransportSweep=outcome;
-            if(state.complete&&outcome.best&&!state.applied){
-              buildSelectedTransportDesign(
-                v9Ref.current,v10Ref.current,outcome.best,20261014,
+          if(!state.prescreenComplete){
+            try{
+              const batch=screenReferenceMaterial(
+                v9Ref.current,v10Ref.current,opt as TransportGoal,
+                state.next,20261014,
               );
-              const material=v9Ref.current.getMaterialForV1();
-              if(material){
-                v1Ref.current.setMaterial({
-                  ...material,geometry:'custom',
-                  customField:v10Ref.current.getFitnessField()
-                    ||material.customField,
-                });
-                v2Ref.current.setMaterialRef(v1Ref.current);
-                v2Ref.current.gbestFitness=-Infinity;
-                for(const node of v2Ref.current.nodes)
-                  node.pbestFitness=-Infinity;
-              }
-              state.applied=true;
+              state.results.push(...batch);
+            }catch(error){
+              console.warn('[Transport] Reference screen failed:',error);
             }
-          }catch(error){
-            console.warn('[Transport] Candidate screen failed:',error);
-            state.next++;state.complete=state.next>=SOLID_OPTIONS;
+            state.next++;
+            state.prescreenComplete=state.next>=SOLID_OPTIONS;
+            if(state.prescreenComplete){
+              state.shortlist=verificationShortlist(state.results);
+              state.complete=state.shortlist.length===0;
+            }
+          }else if(state.verifyNext<state.shortlist.length){
+            // After fast 40-case geometry/thermal sweep, actually solve
+            // pore pressure AND conductive-current potentials for finalists.
+            // Work in frame-sized batches rather than blocking mobile UI.
+            const selected=state.shortlist[state.verifyNext++];
+            try{
+              const row=verifyTransportCandidate(
+                v9Ref.current,v10Ref.current,selected,opt as TransportGoal,
+              );
+              const idx=state.results.findIndex(x=>x.candidate===row.candidate
+                &&x.fluid===row.fluid&&x.tpms===row.tpms
+                &&x.frequency===row.frequency
+                &&x.threshold===row.threshold);
+              if(idx>=0)state.results[idx]=row;
+            }catch(error){
+              console.warn('[Transport] Network verification failed:',error);
+            }
+            state.complete=state.verifyNext>=state.shortlist.length;
+          }
+          const outcome=rankTransportSweep(
+            state.results,opt as TransportGoal,state.complete,
+          );
+          (window as any).aboveBoundTransportSweep=outcome;
+          if(state.complete&&outcome.best?.verified&&!state.applied){
+            buildSelectedTransportDesign(
+              v9Ref.current,v10Ref.current,outcome.best,20261014,
+            );
+            const material=v9Ref.current.getMaterialForV1();
+            if(material){
+              v1Ref.current.setMaterial({
+                ...material,geometry:'custom',
+                customField:v10Ref.current.getFitnessField()
+                  ||material.customField,
+              });
+              v2Ref.current.setMaterialRef(v1Ref.current);
+              v2Ref.current.gbestFitness=-Infinity;
+              for(const node of v2Ref.current.nodes)
+                node.pbestFitness=-Infinity;
+            }
+            state.applied=true;
           }
         }
       }
@@ -1511,7 +1541,8 @@ const SimulationView = ({
           : currentVersion==='v1'
             ?Boolean(v1Ref.current&&v1Ref.current.frameCount>=90
               &&Number.isFinite(v1Ref.current.gbestFitness)
-              &&transportSweepRef.current.complete)
+              &&transportSweepRef.current.complete
+              &&transportSweepRef.current.applied)
           : currentVersion==='v2'
             ?Boolean(v2Ref.current&&v2Ref.current.frameCount>=90
               &&Number.isFinite(v2Ref.current.gbestFitness))
