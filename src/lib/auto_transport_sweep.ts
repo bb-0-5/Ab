@@ -16,6 +16,9 @@ import type {V9LatticeEngine,CompositeField,CrystalStructure} from '../simulatio
 import type {V10MeshEngine,MeshConfig} from '../simulations/v10_mesh';
 import {screenVoxelChannels} from './voxel_connectivity';
 import {screenVoxelHeatConduction} from './voxel_heat_conduction';
+import {
+ solveSteadyVoxelTransport,type NetworkFlowResult,
+} from './steady_transport_network';
 
 export type TestMedium='air'|'water';
 export const FLUID_REFERENCES:Readonly<Record<TestMedium,{
@@ -64,6 +67,14 @@ export type ScreenedDesign={
  /** NOT a frequency-dependent impedance or transport measurement */
  estimatedSolidPathSigmaSm:number|null;
  score:number;
+ verified?:{
+   hydraulic:NetworkFlowResult;
+   electric:NetworkFlowResult|null;
+   normalizedHydraulicThroughput:number;
+   electricalSigmaSm:number|null;
+   validatedRankingScore:number;
+   modelOnly:true;
+ };
  referenceOnly:true;
 };
 export type SweepProgress={
@@ -71,6 +82,8 @@ export type SweepProgress={
  airBest:ScreenedDesign|null;waterBest:ScreenedDesign|null;
  testedMaterials:string[];
  complete:boolean;
+ verifiedCount:number;
+ targetVerificationCount:number;
 };
 export const SOLID_OPTIONS=SOLID_REFERENCES.length;
 export const GEOMETRY_OPTIONS:ReadonlyArray<{
@@ -167,8 +180,13 @@ export function screenReferenceMaterial(
 export function rankTransportSweep(
  results:readonly ScreenedDesign[],goal:TransportGoal,complete=false,
 ):SweepProgress{
- const sorted=[...results].filter(x=>Number.isFinite(x.score)
-   &&x.score>0).sort((a,b)=>b.score-a.score);
+ // Verified resistive pressure/current networks take precedence over mere
+ // geometrical connectivity. Keep non-verified entries only as previews.
+ const ranked=results.filter(x=>Number.isFinite(x.score)&&x.score>0);
+ const checked=ranked.filter(x=>x.verified);
+ const sorted=[...(checked.length?checked:ranked)].sort((a,b)=>
+   (b.verified?.validatedRankingScore??b.score)-
+   (a.verified?.validatedRankingScore??a.score));
  const airBest=sorted.find(x=>x.fluid==='air')||null;
  const waterBest=sorted.find(x=>x.fluid==='water')||null;
  // A water circuit is not automatically assumed from a higher k.
@@ -176,7 +194,10 @@ export function rankTransportSweep(
  // independently optimized water design to compare, no pump sizing.
  const best=goal==='thermal'?(airBest||waterBest):(airBest||waterBest);
  return {goal,evaluated:results.length,best,airBest,waterBest,
-  testedMaterials:[...new Set(results.map(x=>x.candidate))],complete};
+  testedMaterials:[...new Set(results.map(x=>x.candidate))],complete,
+  verifiedCount:results.filter(x=>x.verified).length,
+  targetVerificationCount:Math.min(10,results.filter(x=>x.score>0).length),
+ };
 }
 export function buildSelectedTransportDesign(
  lattice:V9LatticeEngine,mesh:V10MeshEngine,
@@ -197,4 +218,71 @@ export function buildSelectedTransportDesign(
   axis:'y',baselineScore:0,bestScore:selected.score,
   selected:{...mesh.config},modeledOnly:true,
  };
+}
+
+/** Choose top screen for each known reference and test fluid; this prevents
+ * a high-conductivity material from monopolising the verification queue. */
+export function verificationShortlist(
+ rows:readonly ScreenedDesign[],
+):ScreenedDesign[]{
+ const selected:ScreenedDesign[]=[];
+ for(const medium of ['air','water'] as const){
+  for(const reference of SOLID_REFERENCES){
+   const row=rows.filter(x=>x.fluid===medium
+     &&x.candidate===reference.symbol
+     &&x.score>0).sort((a,b)=>b.score-a.score)[0];
+   if(row)selected.push(row);
+  }
+ }
+ return selected;
+}
+/**
+ * Rebuild the actual V9 material and V10 mask, then solve steady hydraulic
+ * pressure drop through pores and DC potential through its solid phase.
+ * Ranks using these measured MODEL fluxes; not just a connected path count.
+ * Each call is bounded and intended to run on a different animation frame.
+ */
+export function verifyTransportCandidate(
+ lattice:V9LatticeEngine,mesh:V10MeshEngine,
+ row:ScreenedDesign,goal:TransportGoal,
+):ScreenedDesign{
+ const ref=candidates.find(x=>x.symbol===row.candidate);
+ if(!ref)throw Error('Unknown physical reference');
+ const material=prepareMaterial(lattice,ref,20261014);
+ mesh.config={...mesh.config,tpms:row.tpms,frequency:row.frequency,
+  threshold:row.threshold,porosity:.5,roughness:0};
+ mesh.buildMesh(material);
+ const mask=mesh.getSolidMask();
+ if(!mask)throw Error('Missing V10 solid/void mask');
+ const hydraulic=solveSteadyVoxelTransport(
+  mask,material.resolution,'hydraulic','y',
+  {medium:row.fluid,maxIterations:135},
+ );
+ const electrical=ref.bulkElectricalSigma===null?null:
+  solveSteadyVoxelTransport(mask,material.resolution,'ohmic','x',{
+   bulkElectricalSigmaSm:ref.bulkElectricalSigma,maxIterations:135,
+  });
+ // Normalize flow to an ideal 100%-open array of identical pore throats.
+ // The score is comparative under identical assumed 1Pa, 1mm, tube radius.
+ const r=hydraulic.throatRadiusM!,a=hydraulic.voxelPitchM;
+ const fluid=FLUID_REFERENCES[row.fluid];
+ const single=Math.PI*r**4/(8*fluid.viscosityPaS*a);
+ const ideal=single*material.resolution**2/(material.resolution-1);
+ const relative=ideal>0?hydraulic.resolvedFlux/ideal:0;
+ const sigma=electrical?.effectiveConductivity??null;
+ const connected=hydraulic.resolvedFlux>0&&row.fluidSpansY
+  &&row.solidSpansX&&hydraulic.laminarAssumption;
+ const physicalTransfer=goal==='electrical'
+  ?Math.log1p((sigma||0)/1e5)
+  :Math.log1p(row.modeledEffectiveThermalKWmK);
+ const valid=connected&&Number.isFinite(relative)&&relative>=0
+  &&(goal!=='electrical'||Boolean(sigma&&sigma>0));
+ const ranked=valid?physicalTransfer*(.1+relative)
+  *(.75+.25*row.geometricSteering):0;
+ return {...row,verified:{
+  hydraulic,electric:electrical,
+  normalizedHydraulicThroughput:relative,
+  electricalSigmaSm:sigma,
+  validatedRankingScore:ranked,modelOnly:true,
+ }};
 }
