@@ -196,7 +196,7 @@ export function recordModeledTrial(
   assessment:!connected?'geometry_blocked':
     usableFlow?'modeled_flow_observed':'awaiting_solver_evidence',
   evidence:'model_only_not_empirical',
-  caveat:'V13 elemental-mixture properties are heuristic and NOT V9 constitutive inputs. V9 lattice uses independent reference values. V10 porosity + V6 stationary-air conduction are a limited numerical proxy, not convection/radiation, mechanical strength, chemistry, a measured U-value or synthesis yield. V7 uses modeled relative priority, not experimental performance.',
+  caveat:'V13 elemental-mixture properties are heuristic and NOT V9 constitutive inputs. V9 lattice uses independent reference values. V10 porosity + V6 stationary-air conduction are a limited numerical proxy, not convection/radiation, mechanical strength, chemistry, a measured U-value or synthesis yield. V7 uses modeled relative priority, not a controlled material measurement or experimental performance.',
  };
 }
 export function readMaterialTrials():TrialRecord[]{
