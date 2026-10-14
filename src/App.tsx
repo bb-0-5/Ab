@@ -313,6 +313,7 @@ const SimulationView = ({
   onVisualEvidence:(ev:{
     stage:string;metric:string;detail:string;handoff:string;
     completed:string[];artifact:RenderArtifact|null;
+    transport:SweepProgress|null;
   })=>void;
   currentChainIndex: number;
   setCurrentChainIndex: (i: number) => void;
@@ -1849,6 +1850,11 @@ const SimulationView = ({
         onVisualEvidence({
           stage:currentVersion,metric,detail,handoff:handoffStatusRef.current,
           completed,artifact:snapshot,
+          transport:opt==='thermal'||opt==='electrical'
+            ?rankTransportSweep(
+              transportSweepRef.current.results,opt as TransportGoal,
+              transportSweepRef.current.complete,
+            ):null,
         });
         (window as any).aboveBoundLiveTrace={
           stage:currentVersion,metric,detail,completed,
@@ -8850,9 +8856,10 @@ function App() {
   const [visualEvidence,setVisualEvidence]=useState<{
     stage:string;metric:string;detail:string;handoff:string;
     completed:string[];artifact:RenderArtifact|null;
+    transport:SweepProgress|null;
   }>({stage:initialSimState.version,metric:'Preparing simulation',
      detail:'Reading numerical models',handoff:'No recorded artifact',
-     completed:[],artifact:null});
+     completed:[],artifact:null,transport:null});
   const [currentChainIndex, setCurrentChainIndex] = useState(initialSimState.chainIdx);
   const [compressionLevel, setCompressionLevel] = useState(1);
   const [discoveries, setDiscoveries] = useState<any[]>([]);
@@ -9643,6 +9650,7 @@ function App() {
               completed={visualEvidence.completed}
               artifact={visualEvidence.stage===activeVersion
                 ?visualEvidence.artifact:null}
+              transport={visualEvidence.transport}
             />
           )}
           {activeTab !== 'sim' && (activeTab === 'trajectory' ? (
