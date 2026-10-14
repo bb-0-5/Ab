@@ -604,7 +604,7 @@ const SimulationView = ({
       v0Ref.current.lines.visible = activeVersion === 'v0';
     }
     
-    const isFundamental = activeVersion === 'v1' || activeVersion === 'v2';
+    const isFundamental = false; // Physical transport uses only PSO optimizers, not number-theory nodes.
     if (fundamental1Ref.current) {
       fundamental1Ref.current.group.visible = isFundamental;
     }
@@ -616,14 +616,14 @@ const SimulationView = ({
     }
 
     // V1+V2 are BOTH visible when either is active (overlaid 90° views)
-    const showSwarm = activeVersion === 'v1' || activeVersion === 'v2';
+    const showSwarm = activeVersion;
     if (v1Ref.current) {
-      v1Ref.current.points.visible = showSwarm;
-      v1Ref.current.lines.visible = showSwarm;
+      v1Ref.current.points.visible = showSwarm === 'v1';
+      v1Ref.current.lines.visible = showSwarm === 'v1';
     }
     if (v2Ref.current) {
-      v2Ref.current.points.visible = showSwarm;
-      v2Ref.current.lines.visible = showSwarm;
+      v2Ref.current.points.visible = showSwarm === 'v2';
+      v2Ref.current.lines.visible = showSwarm === 'v2';
     }
     // V3+V4 both visible when either is active (overlaid MST networks)
     const showMSTInit = activeVersion === 'v3' || activeVersion === 'v4';
@@ -1955,7 +1955,7 @@ const SimulationView = ({
       orbitRef.current?.update();
     }
     previousVisibleVersionRef.current=activeVersion;
-    const isFundamental = activeVersion === 'v1' || activeVersion === 'v2';
+    const isFundamental = false; // Physical transport uses only PSO optimizers, not number-theory nodes.
 
     if (v0Ref.current) {
       v0Ref.current.points.visible = activeVersion === 'v0';
@@ -1966,14 +1966,14 @@ const SimulationView = ({
     if (membraneLinesRef.current) membraneLinesRef.current.visible = isFundamental;
 
     // V1+V2 both visible when either is active (overlaid orthogonal views)
-    const showSwarm = activeVersion === 'v1' || activeVersion === 'v2';
+    const showSwarm = activeVersion;
     if (v1Ref.current?.points) {
-      v1Ref.current.points.visible = showSwarm;
-      v1Ref.current.lines.visible = showSwarm;
+      v1Ref.current.points.visible = showSwarm === 'v1';
+      v1Ref.current.lines.visible = showSwarm === 'v1';
     }
     if (v2Ref.current?.points) {
-      v2Ref.current.points.visible = showSwarm;
-      v2Ref.current.lines.visible = showSwarm;
+      v2Ref.current.points.visible = showSwarm === 'v2';
+      v2Ref.current.lines.visible = showSwarm === 'v2';
     }
     // V3+V4 both visible when either is active (overlaid MST networks)
     const showMST = activeVersion === 'v3' || activeVersion === 'v4';
