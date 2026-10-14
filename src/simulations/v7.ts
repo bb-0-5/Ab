@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { FlowMetrics, FlowPath } from './v6';
 import type { DetectedLoop } from './v5';
+import type {VoxelConductionScreen} from '../lib/voxel_heat_conduction';
 
 /**
  * V7 — Meta-Optimizer
@@ -513,6 +514,38 @@ export class V7Engine {
     if (this.flowParticles.geometry.attributes.color) {
       this.flowParticles.geometry.attributes.color.needsUpdate = true;
     }
+  }
+
+  /**
+   * Rank a V6-evaluated V9/V10 material/geometry combination relative to
+   * the same material's fully-solid baseline. This objective is *separate*
+   * from V7's network-flow score: unlike flow, conduction is minimized for
+   * a V12 insulation demand. No experimental success is inferred.
+   */
+  rankModeledInsulation(
+    screen:VoxelConductionScreen,targetConductivityWmK:number,
+  ):{
+    relativeConductionReduction:number;
+    modeledTargetDeficit:number;
+    priority:number;
+    modelOnly:true;
+  }{
+    if(!screen||!Number.isFinite(targetConductivityWmK)
+      ||targetConductivityWmK<=0
+      ||!Number.isFinite(screen.effectiveConductivityWmK)
+      ||!Number.isFinite(screen.allSolidReferenceWmK)
+      ||screen.allSolidReferenceWmK<=0)
+      throw Error('Invalid V7 thermal construction ranking input');
+    const reduction=1-
+      screen.effectiveConductivityWmK/screen.allSolidReferenceWmK;
+    const targetDeficit=Math.max(0,
+      screen.effectiveConductivityWmK/targetConductivityWmK-1);
+    const priority=reduction-Math.log1p(targetDeficit)
+      -(screen.converged?0:.2);
+    return {
+      relativeConductionReduction:reduction,
+      modeledTargetDeficit:targetDeficit,priority,modelOnly:true,
+    };
   }
 
   getScore(): number { return this.currentScore; }
