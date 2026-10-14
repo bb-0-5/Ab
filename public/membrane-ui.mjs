@@ -1,6 +1,6 @@
 const $=s=>document.getElementById(s);
 const main=$('mainCanvas'),stack=$('stackCanvas'),a=main.getContext('2d',{alpha:false}),b=stack.getContext('2d',{alpha:false});
-const worker=new Worker('/membrane-worker.mjs?v=visible-20261015-r3',{type:'module'});
+const worker=new Worker('/membrane-worker.mjs?v=evidence-20261015-r4',{type:'module'});
 let latest=null,paused=false,manualFocus=null,boxes=[],lastRender=0,fieldMode='cross',selected=null,ranking=[],displayPhase='STARTING';
 const frontProgress=$('frontProgress');
 new MutationObserver(()=>{frontProgress.textContent=$('progress').textContent;}).observe($('progress'),{childList:true,subtree:true,characterData:true});
@@ -126,6 +126,16 @@ worker.onmessage=ev=>{
   selected=winner;ranking=rows||ranking;paintRanking();
   $('chosen').textContent=winner.label.toUpperCase();
   $('progress').textContent=`NEW COARSE-GRID CANDIDATE: ${winner.label} replaces ${previous}. Physics field restarted for this different geometry; validation is still required.`;
+ }else if(type==='decision'){
+  selected=winner||null;ranking=rows||ranking;paintRanking();
+  $('chosen').textContent=selected?.config?selected.label.toUpperCase():'NO MEMBRANE IMPROVEMENT';
+  $('progress').textContent=`EVIDENCE GATE: ${ev.data.reason} · ${remaining??0} automatically generated checks queued. Open cavity remains the baseline.`;
+ }else if(type==='campaign-complete'){
+  paused=true;selected=winner||selected;ranking=rows||ranking;paintRanking();
+  $('chosen').textContent=selected?.config?selected.label.toUpperCase():'OPEN CAVITY · NO GAIN';
+  $('progress').textContent=`SEARCH FINISHED · ${ev.data.tested} numerical trials. ${ev.data.reason}`;
+  $('status').textContent='SEARCH FINISHED · RESULTS RECORDED';
+  $('run').textContent='↻ RESTART SEARCH';
  }else if(type==='paused-screening'){
   paused=true;$('status').textContent=message||'SCREENING PAUSED';
  }else if(type==='error'){
@@ -135,7 +145,7 @@ worker.onmessage=ev=>{
  }
 };
 worker.onerror=err=>{$('status').textContent=`WORKER ERROR: ${err.message}`;$('progress').textContent='Worker failed: '+err.message+' · Unable to run numerical physics on this device.';paused=true};
-$('run').onclick=()=>{paused=!paused;worker.postMessage({type:paused?'pause':'start'});$('run').textContent=paused?'▶ RESUME':'Ⅱ PAUSE';updateNotes()};
+$('run').onclick=()=>{if($('run').textContent.includes('RESTART')){paused=false;latest=null;selected=null;ranking=[];worker.postMessage({type:'reset'});$('run').textContent='Ⅱ PAUSE';return;}paused=!paused;worker.postMessage({type:paused?'pause':'start'});$('run').textContent=paused?'▶ RESUME':'Ⅱ PAUSE';updateNotes()};
 $('seed').onclick=()=>{manualFocus=null;selected=null;latest=null;ranking=[];paused=false;worker.postMessage({type:'reset'});$('auto').textContent='◎ AUTO FOCUS';$('run').textContent='Ⅱ PAUSE'};
 $('auto').onclick=()=>{manualFocus=null;$('auto').textContent='◎ AUTO FOCUS';mainCanvas()};
 $('view').onclick=()=>{fieldMode=fieldMode==='cross'?'heat':'cross';$('view').textContent=fieldMode==='cross'?'◉ VIEW TEMPERATURE':'◉ VIEW CROSS-FLOW';$('fieldLegend').textContent=fieldMode==='cross'?'W > 0: AMBER • · W < 0: CYAN ○':'TEMPERATURE: COOL → HOT';};
