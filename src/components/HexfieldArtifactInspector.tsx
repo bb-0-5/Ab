@@ -124,7 +124,7 @@ function drawArtifact(canvas:HTMLCanvasElement,artifact:RenderArtifact){
     if(i===0)ctx.moveTo(x,yy);else ctx.lineTo(x,yy);
    });
    ctx.strokeStyle='#ffe08a';ctx.lineWidth=Math.max(2,cell*.25);ctx.stroke();
-   const a=artifact.path[0],b=artifact.path.at(-1)!;
+   const a=artifact.path[0],b=artifact.path[artifact.path.length-1];
    for(const p of [a,b]){
     ctx.beginPath();ctx.arc(left+(p.y+.5)*cell,top+(p.z+.5)*cell,4,0,Math.PI*2);
     ctx.fillStyle='#fff9cc';ctx.fill();
@@ -216,8 +216,8 @@ export function HexfieldArtifactInspector({
   return ()=>ro?.disconnect();
  },[artifact]);
  const done=completed.includes(stage);
- const negative=/BLOCKED|FAILED|No valid|Waiting for|zero flow|no transport|NO THROUGH/i
-   .test(metric+' '+detail+' '+handoff);
+ const negative=/BLOCKED|FAILED|zero flow|no transport|NO THROUGH/i
+   .test(metric+' '+detail);
  return <section
    aria-label="What this simulation means"
    className="mt-3 border border-cyan-500/30 rounded-xl bg-[#07131d] p-3 sm:p-4"
