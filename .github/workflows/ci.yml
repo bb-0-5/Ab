@@ -17,6 +17,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:all
+      - name: Verify exact torus physics and 3D topology renderer
+        run: node scripts/fluid-physics-smoke.mjs
       - name: Verify restored V0–V13 frontend and static bundle
         run: |
           test -f dist/index.html

@@ -17,20 +17,20 @@
   </header>
   <div class="eyebrow">PHYSICS LABORATORY <span> / </span> EXPERIMENT 001</div>
   <section class="heading">
-    <div><h1>Fluid, <em>not fiction.</em></h1><p class="lede">Watch actual calculated fields in a sealed, heated cube—or explore an exact smooth flow on a periodic torus. Geometry and equations determine the movement.</p></div>
+    <div><h1>Fluid, <em>not fiction.</em></h1><p class="lede">Watch actual calculated fields in a sealed, heated cube—or rotate a visible 3D doughnut representing the mathematical torus of an exact periodic flow. The shape illustrates the topology; the equations govern the flow.</p></div>
     <div class="tag">3D CAVITY <span>+</span> 2D PERIODIC BENCHMARK</div>
   </section>
   <section class="workspace" aria-label="Numerical fluid experiment">
     <div class="visual-panel">
       <div class="panel-top"><div class="panel-name"><span class="tiny-square"></span><span id="panelTitle">SEALED CAVITY · 3D FIELD SLICE</span></div><span class="live-indicator"><span class="tiny-dot"></span><span id="solverLabel">ARCHIVED NUMERICAL FIELD</span></span></div>
-      <div class="viewport"><canvas id="field" role="img" aria-label="Numerical fluid heatmap and velocity field"></canvas><div class="corner top-left"><span id="axisLabel">X–Y PLANE</span><span id="sampleLabel">Z = 50%</span></div><div class="corner top-right">MODEL ONLY<br><span>NOT EXPERIMENTALLY VALIDATED</span></div><div class="corner bottom-left"><div class="gradient"></div><div class="gradient-labels"><span id="lowLegend">COOL</span><span id="highLegend">HOT</span></div></div><div class="corner bottom-right">↗ <span id="flowNote">VELOCITY VECTORS</span></div></div>
+      <div class="viewport"><canvas id="field" role="img" aria-label="Numerical fluid heatmap and velocity field"></canvas><div class="corner top-left"><span id="axisLabel">X–Y PLANE</span><span id="sampleLabel">Z = 50%</span></div><div class="corner top-right">MODEL ONLY<br><span>NOT EXPERIMENTALLY VALIDATED</span></div><div class="corner bottom-left"><div class="gradient"></div><div class="gradient-labels"><span id="lowLegend">COOL</span><span id="highLegend">HOT</span></div></div><div class="corner bottom-right">↗ <span id="flowNote">VELOCITY VECTORS</span></div><div id="torusOrbitHint" class="torus-orbit-hint" hidden>↔ DRAG TO ROTATE · DOUBLE CLICK TO RESET</div></div>
       <div class="panel-foot"><div><span>MODEL</span><strong id="methodInfo">3-D Boussinesq · Ra 20,000</strong></div><div><span>GEOMETRY</span><strong id="geometryInfo">Impermeable insulating baffle</strong></div><div><span>STATUS</span><strong id="statusInfo">Loaded from numerical result</strong></div></div>
     </div>
     <aside class="control-panel">
       <div class="control-header"><span>EXPERIMENT CONTROL</span><span class="light">● ACTIVE</span></div>
       <div class="section-label">01 / DOMAIN</div>
       <div class="choice-group" role="group" aria-label="Fluid experiment domain"><button class="mode active" type="button" id="modeCube"><strong>Closed cube</strong><small>3D numerical snapshot</small></button><button class="mode" type="button" id="modeTorus"><strong>Periodic torus</strong><small>Exact 2D solution</small></button></div>
-      <div class="section-label" id="domainSubhead">02 / FIELD SLICE</div>
+      <div id="torusViews" class="torus-views" hidden><div class="section-label">TORUS REPRESENTATION</div><div class="toggle-group"><button id="torusDonut" type="button" class="toggle active" aria-pressed="true">3D DOUGHNUT</button><button id="torusMap" type="button" class="toggle" aria-pressed="false">FLAT PERIODIC MAP</button></div></div><div class="section-label" id="domainSubhead">02 / FIELD SLICE</div>
       <label class="slider-header" for="slice"><span id="sliderLabel">DEPTH INSIDE CUBE</span><output id="sliceValue">50%</output></label><input type="range" id="slice" min="0" max="100" value="50" />
       <div class="section-label">03 / DISPLAY</div>
       <div class="toggle-group"><button type="button" id="displayHeat" class="toggle active">HEAT / VORTICITY</button><button type="button" id="displaySpeed" class="toggle">SPEED</button></div>
