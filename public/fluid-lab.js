@@ -1,8 +1,9 @@
 import { taylorGreen, periodic, decodeCavity, cubeCell } from '/fluid-physics.mjs';
+import { renderPeriodicTorus } from '/torus-visual.mjs';
 const $ = id => document.getElementById(id);
 const canvas = $('field'), ctx = canvas.getContext('2d',{alpha:false});
 const modes = {cube:'cube',torus:'torus'};
-const state = {mode:modes.cube,field:null,playing:true,display:'heat',depth:.5,time:0,nu:.035,lastFrame:0,particles:[], width:1,height:1,offscreen:document.createElement('canvas')};
+const state = {mode:modes.cube,field:null,playing:true,display:'heat',depth:.5,time:0,nu:.035,lastFrame:0,particles:[], width:1,height:1,offscreen:document.createElement('canvas'),torusView:'donut',angles:{x:.91,y:-.21,z:.25},drag:null};
 const setText = (id,text) => {$(id).textContent=text};
 const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
 const mix=(a,b,t)=>a+(b-a)*t;
@@ -31,19 +32,22 @@ function torusField(x,y){const v=taylorGreen(periodic(x)*Math.PI*2,periodic(y)*M
 function vector(x,y){return state.mode==='cube'?cubeField(x,y):torusField(x,y)}
 function showMode(mode){state.mode=mode;state.time=0;state.depth=.5;$('slice').value=50;
  $('modeCube').classList.toggle('active',mode==='cube');$('modeTorus').classList.toggle('active',mode==='torus');
- setText('panelTitle',mode==='cube'?'SEALED CAVITY · 3D FIELD SLICE':'PERIODIC TORUS · EXACT 2D FLOW');
+ $('torusViews').hidden=mode!=='torus';
+ $('torusOrbitHint').hidden=mode!=='torus';
+ canvas.classList.toggle('orbitable',mode==='torus');
+ setText('panelTitle',mode==='cube'?'SEALED CAVITY · 3D FIELD SLICE':'PERIODIC TORUS · 3D TOPOLOGY VIEW');
  setText('solverLabel',mode==='cube'?'ARCHIVED NUMERICAL FIELD':'LIVE EXACT SOLUTION');
  setText('domainSubhead',mode==='cube'?'02 / FIELD SLICE':'02 / EVOLUTION');
  setText('sliderLabel',mode==='cube'?'DEPTH INSIDE CUBE':'TIME / DIMENSIONLESS');
- setText('axisLabel',mode==='cube'?'X–Y PLANE':'T² PERIODIC DOMAIN');
+ setText('axisLabel',mode==='cube'?'X–Y PLANE':(state.torusView==='donut'?'T² · 3D SHAPE VIEW':'T² · FLAT PERIODIC MAP'));
  setText('methodInfo',mode==='cube'?'3-D Boussinesq · Ra 20,000':'Taylor–Green vortex · T²');
- setText('geometryInfo',mode==='cube'?'Impermeable insulating baffle':'Edges wrap periodically');
- setText('flowNote',mode==='cube'?'ARROWS = WATER VELOCITY · DOTS = TRACERS':'ARROWS = VELOCITY · DOTS = TRACERS');
+ setText('geometryInfo',mode==='cube'?'Impermeable insulating baffle':'Opposite edges identified · no pipe walls');
+ setText('flowNote',mode==='cube'?'3D MODEL VELOCITY SLICE':'EXACT ANALYTICAL VELOCITY');
  setText('lowLegend',mode==='cube'?'COOL':'NEGATIVE VORTICITY');
  setText('highLegend',mode==='cube'?'HOT':'POSITIVE VORTICITY');
  setText('modeHelp',mode==='cube'
   ?'The cube is an archived 3-D Python calculation. Colours, arrows and moving tracers all derive from its computed fields; the animated tracers are visualised within the frozen velocity field.'
-  :'A real exact solution of 2-D Navier–Stokes on a periodic torus is evaluated locally every animation frame. It is one smooth solution, not a proof for every 3-D flow.');
+  :'The coloured doughnut shows the periodic T² domain. Drag to rotate or switch to FLAT MAP. The exact Taylor–Green flow is computed on flat periodic coordinates and then mapped onto the shape for display; it is NOT fluid inside a toroidal pipe.');
  setText('explainHeading',mode==='cube'?"Pressure alone doesn't create flow.":'A torus is in the actual prize question.');
  setText('explainText',mode==='cube'
   ?'Water fills an impermeable cubic cavity, heated below and cooled above. The 3-D Python solver calculated the motion driven by buoyancy. A dark baffle changes the flow topology; the grid is a slice from the recorded numerical field.'
@@ -51,11 +55,21 @@ function showMode(mode){state.mode=mode;state.time=0;state.depth=.5;$('slice').v
  setText('caveatTitle',mode==='cube'?'RESEARCH LIMITATION':'MATHEMATICAL DISTINCTION');
  setText('caveatText',mode==='cube'
   ?'A 12³ grid showed +1.94% modeled heat extraction, and 16³ showed +4.84%. That resolution dependence means no mesh-independent engineering claim is justified. Our wall approximation and solver need external CFD benchmarks.'
-  :'T² is not a doughnut-shaped pipe; it is a domain whose opposite edges identify. A physical pipe shaped like a doughnut has walls and different boundary conditions. This smooth T² solution does not establish global smoothness for arbitrary initial data on T³.');
+  :'This familiar doughnut is a 3D picture of the two-dimensional topological torus T². Its curved surface has different distances from the original flat periodic square, so the displayed arrows are a chart mapping—not a CFD simulation of water in a doughnut-shaped pipe. The prize problem concerns arbitrary flows in 3D (T³ or ℝ³).');
  setText('statusInfo',mode==='cube'?'3D snapshot · unvalidated':'Exact 2D benchmark · analytic');
  setText('rankTitle',mode==='cube'?'Eight structures, one model.':'One explicit smooth solution.');
+ syncTorusViewButtons();
  $('rankingFooter').textContent=mode==='cube'?'Modeled heat extraction at fixed temperature difference. Not a physical performance guarantee.':'The exact velocity field shrinks exponentially while remaining smooth and divergence-free. Its kinetic energy decays as e⁻⁴νᵗ.';
  initParticles();renderRanking();updateStats();updateSlider();
+}
+function syncTorusViewButtons(){
+ const donut=state.torusView==='donut';
+ $('torusDonut').classList.toggle('active',donut);
+ $('torusMap').classList.toggle('active',!donut);
+ $('torusDonut').setAttribute('aria-pressed',String(donut));
+ $('torusMap').setAttribute('aria-pressed',String(!donut));
+ $('torusOrbitHint').hidden=state.mode!=='torus'||!donut;
+ if(state.mode==='torus')setText('axisLabel',donut?'T² · 3D SHAPE VIEW':'T² · FLAT PERIODIC MAP');
 }
 function updateSlider(){if(state.mode==='cube')setText('sliceValue',Math.round(state.depth*100)+'%');else setText('sliceValue',state.time.toFixed(1));setText('sampleLabel',state.mode==='cube'?`Z = ${Math.round(state.depth*100)}%`:`t = ${state.time.toFixed(2)}`);}
 function updateStats(){if(state.mode==='cube'){
@@ -94,11 +108,9 @@ function drawGrid(view){const {x,y,size}=view;const n=state.mode==='cube'?state.
  for(let gy=0;gy<count;gy++)for(let gx=0;gx<count;gx++){
   const px=(gx+.5)/count,py=(gy+.5)/count,q=vector(px,py);if(q.solid)continue;
   const speed=Math.hypot(q.vx,q.vy);if(speed<.006)continue;
-  const relative=speed/(state.mode==='cube'?.14:.9);
-  const len=clamp(relative*size/count*.62,size/count*.18,size/count*.72);
-  const head=Math.max(3,Math.min(5,size/100));
+  const len=clamp(speed*(state.mode==='cube'?130:18)*size/500,3,size/count*.44);
   const a=Math.atan2(-q.vy,q.vx),sx=x+px*size,sy=y+(1-py)*size;
-  const dx=Math.cos(a)*len,dy=Math.sin(a)*len;ctx.strokeStyle='rgba(240,255,251,.9)';ctx.fillStyle='rgba(240,255,251,.9)';ctx.beginPath();ctx.moveTo(sx-dx*.35,sy-dy*.35);ctx.lineTo(sx+dx*.65,sy+dy*.65);ctx.stroke();ctx.beginPath();ctx.moveTo(sx+dx*.65,sy+dy*.65);ctx.lineTo(sx+dx*.65-Math.cos(a-.65)*head,sy+dy*.65-Math.sin(a-.65)*head);ctx.lineTo(sx+dx*.65-Math.cos(a+.65)*head,sy+dy*.65-Math.sin(a+.65)*head);ctx.fill();
+  const dx=Math.cos(a)*len,dy=Math.sin(a)*len;ctx.strokeStyle='rgba(232,255,248,.70)';ctx.fillStyle='rgba(232,255,248,.70)';ctx.beginPath();ctx.moveTo(sx-dx*.35,sy-dy*.35);ctx.lineTo(sx+dx*.65,sy+dy*.65);ctx.stroke();ctx.beginPath();ctx.moveTo(sx+dx*.65,sy+dy*.65);ctx.lineTo(sx+dx*.65-Math.cos(a-.65)*3.4,sy+dy*.65-Math.sin(a-.65)*3.4);ctx.lineTo(sx+dx*.65-Math.cos(a+.65)*3.4,sy+dy*.65-Math.sin(a+.65)*3.4);ctx.fill();
  }
  ctx.strokeStyle='rgba(195,239,230,.68)';ctx.lineWidth=Math.max(1,canvas.width/650);ctx.strokeRect(x+.5,y+.5,size-1,size-1);
 }
@@ -118,17 +130,25 @@ function drawParticles(view){const {x,y,size}=view;for(const p of state.particle
  ctx.beginPath();ctx.arc(x+p.x*size,y+(1-p.y)*size,Math.max(.8,canvas.width/1100),0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.8)';ctx.fill();}}
 function render(time){resize();const w=state.width,h=state.height;ctx.fillStyle='#08151d';ctx.fillRect(0,0,w,h);
  const size=Math.min(w*.72,h*.88),view={x:(w-size)*.5,y:(h-size)*.5,size};
- if(state.field||state.mode==='torus'){drawGrid(view);drawParticles(view);}else{ctx.fillStyle='#a7c3c8';ctx.font=`${Math.max(12,w/60)}px system-ui`;ctx.textAlign='center';ctx.fillText('Loading archived numerical field…',w/2,h/2);}
+ if(state.mode==='torus'&&state.torusView==='donut'){
+   renderPeriodicTorus(ctx,{width:w,height:h,time:state.time,nu:state.nu,display:state.display,particles:state.particles,angles:state.angles});
+ }else if(state.field||state.mode==='torus'){drawGrid(view);drawParticles(view);}else{ctx.fillStyle='#a7c3c8';ctx.font=`${Math.max(12,w/60)}px system-ui`;ctx.textAlign='center';ctx.fillText('Loading archived numerical field…',w/2,h/2);}
  const dt=clamp((time-(state.lastFrame||time))/1000,0,.04);state.lastFrame=time;
- if(state.playing){if(state.mode==='torus'){state.time+=dt*.7;if(state.time>18){state.time=0;initParticles();}const slider=Math.round(state.time/18*100);$('slice').value=slider;updateSlider();if(Math.floor(time/200)!==Math.floor((time-dt*1000)/200))updateStats();}advanceParticles(dt);}
+ if(state.playing){if(state.mode==='torus'){if(state.torusView==='donut'&&!state.drag)state.angles.z+=dt*.085;state.time+=dt*.7;if(state.time>18){state.time=0;initParticles();}const slider=Math.round(state.time/18*100);$('slice').value=slider;updateSlider();if(Math.floor(time/200)!==Math.floor((time-dt*1000)/200))updateStats();}advanceParticles(dt);}
  requestAnimationFrame(render);
 }
 $('modeCube').addEventListener('click',()=>showMode('cube'));
 $('modeTorus').addEventListener('click',()=>showMode('torus'));
+$('torusDonut').addEventListener('click',()=>{state.torusView='donut';syncTorusViewButtons()});
+$('torusMap').addEventListener('click',()=>{state.torusView='map';syncTorusViewButtons()});
+canvas.addEventListener('pointerdown',e=>{if(state.mode!=='torus'||state.torusView!=='donut')return;state.drag={x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointermove',e=>{if(!state.drag)return;const dx=e.clientX-state.drag.x,dy=e.clientY-state.drag.y;state.angles.z+=dx*.009;state.angles.x=clamp(state.angles.x+dy*.009,.12,Math.PI-.12);state.drag={x:e.clientX,y:e.clientY};});
+for(const ev of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(ev,()=>{state.drag=null});
+canvas.addEventListener('dblclick',()=>{if(state.mode==='torus'){state.angles={x:.91,y:-.21,z:.25};}});
 $('slice').addEventListener('input',e=>{const k=Number(e.target.value)/100;if(state.mode==='cube'){state.depth=k;initParticles();}else{state.time=k*18;updateStats();}updateSlider()});
 $('displayHeat').addEventListener('click',()=>{state.display='heat';$('displayHeat').classList.add('active');$('displaySpeed').classList.remove('active')});
 $('displaySpeed').addEventListener('click',()=>{state.display='speed';$('displayHeat').classList.remove('active');$('displaySpeed').classList.add('active')});
 $('play').addEventListener('click',()=>{state.playing=!state.playing;setText('playText',state.playing?'PAUSE FLOW TRACERS':'RESUME FLOW TRACERS');setText('playIcon',state.playing?'Ⅱ':'▷')});
 $('reset').addEventListener('click',()=>{state.time=0;initParticles();if(state.mode==='torus')$('slice').value=0;updateSlider();updateStats()});
-showMode('cube');requestAnimationFrame(render);
+showMode(new URLSearchParams(window.location.search).get('mode')==='torus'?'torus':'cube');requestAnimationFrame(render);
 fetch('/fluid-fields.json',{cache:'no-store'}).then(response=>{if(!response.ok)throw Error('HTTP '+response.status);return response.json()}).then(raw=>{state.field=decodeCavity(raw);initParticles();updateStats();renderRanking();}).catch(error=>{setText('statusInfo','Field unavailable');setText('modeHelp','The 3D field could not be loaded ('+error.message+'). The exact periodic benchmark remains available.');setText('solverLabel','ARCHIVED FIELD UNAVAILABLE');});

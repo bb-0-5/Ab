@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {taylorGreen,periodic,decodeCavity,cubeCell} from '../public/fluid-physics.mjs';
+import {torusPoint,torusNormal,torusChartVelocity,TORUS_VISUAL_META} from '../public/torus-visual.mjs';
 // Periodicity / divergence / exact exponential energy decay on the two-dimensional torus.
 for(let i=0;i<12;i++){
  const x=i*.419,y=i*.318,t=.2+i*.09,nu=.04,h=1e-5;
@@ -29,5 +30,21 @@ assert.ok(field.metadata.relative_gain_percent>0&&field.metadata.benchmark_valid
 // Verify render files exist, and explicitly disclose no prize proof / no experimental validation.
 const page=readFileSync(new URL('../public/fluid.html',import.meta.url),'utf8');
 const js=readFileSync(new URL('../public/fluid-lab.js',import.meta.url),'utf8');
-assert.match(page,/not fiction/i);assert.match(js,/not a proof for every 3-D flow/i);
-console.log('PASS: T² exact periodic field, divergence and decay; archived 3D data integrity; disclosures');
+assert.match(page,/not fiction/i);
+assert.match(page,/3D DOUGHNUT/);
+assert.match(js,/not a proof for every 3-D flow|not.*pipe|does not establish global smoothness/i);
+assert.match(js,/torusView:'donut'/);
+assert.match(js,/renderPeriodicTorus/);
+assert.equal(TORUS_VISUAL_META.surface,'T²');
+assert.match(TORUS_VISUAL_META.representation,/embedding only/);
+for(let i=0;i<11;i++){
+ const a=i*.37,b=i*.23;
+ for(const [p,q] of [[torusPoint(a,b),torusPoint(a+2*Math.PI,b)],
+                    [torusPoint(a,b),torusPoint(a,b+2*Math.PI)]]){
+  assert.ok(p.every((v,k)=>Math.abs(v-q[k])<1e-12),'3D torus mesh must glue both periodic edges');
+ }
+ const v=torusChartVelocity(a,b,.3,.04),n=torusNormal(a,b);
+ assert.ok(Math.abs(v.reduce((sum,e,k)=>sum+e*n[k],0))<1e-12,'Displayed chart velocity must be tangent to the donut surface');
+}
+
+console.log('PASS: exact T² dynamics; genuinely toroidal 3D topology rendering and tangent mapped flow; archived 3D field integrity');
