@@ -1006,6 +1006,11 @@ const SimulationView = ({
 
       // V3: Routes within hardware boundaries (V11) + V1 settled discoveries
       if (v3Ref.current) {
+        // PSO search points evolve constantly. Rebuilding an O(N²) route
+        // graph every 30ms resets stability and starves the mobile renderer.
+        // Sample reproducible topology at a bounded rate, then freeze when
+        // the V5 construction receives its handoff.
+        if(!stageReceiptsRef.current.has('v5')&&simulationFrame%24===0){
         if (v1Ref.current && v1Ref.current.frameCount>=90) {
           // Merge V1 discoveries with V11 hardware boundary nodes
           const v1Settled = v1Ref.current.getSettledNodes();
@@ -1017,11 +1022,13 @@ const SimulationView = ({
           // Before V1 settles, seed V3 with hardware nodes so routing begins
           v3Ref.current.captureFromV1(v11Ref.current.getBoundaryNodes());
         }
+        }
         v3Ref.current.update();
       }
 
       // V4: Routes within hardware boundaries (V11) + V2 settled discoveries
       if (v4Ref.current) {
+        if(!stageReceiptsRef.current.has('v5')&&simulationFrame%24===0){
         if (v2Ref.current && v2Ref.current.frameCount>=90) {
           const v2Settled = v2Ref.current.getSettledNodes();
           const hwNodes = v11Ref.current?.getBoundaryNodes() || [];
@@ -1030,12 +1037,15 @@ const SimulationView = ({
         } else if (v11Ref.current?.isStable()) {
           v4Ref.current.captureFromV2(v11Ref.current.getBoundaryNodes());
         }
+        }
         v4Ref.current.update();
       }
 
       // V5: Closed loop detection → membranes from V3+V4 edges
       if (v5Ref.current) {
-        if (v3Ref.current && v4Ref.current && v3Ref.current.isStable() && v4Ref.current.isStable()) {
+        if (!stageReceiptsRef.current.has('v5')&&simulationFrame%72===0
+          &&v3Ref.current&&v4Ref.current
+          &&v3Ref.current.isStable()&&v4Ref.current.isStable()) {
           v5Ref.current.captureFromV3V4(
             v3Ref.current.getNodes(), v3Ref.current.getEdges(),
             v4Ref.current.getNodes(), v4Ref.current.getEdges(),
@@ -1820,14 +1830,22 @@ const SimulationView = ({
             break;
           case 'v3':case 'v4':{
             const engine=currentVersion==='v3'?v3Ref.current:v4Ref.current;
-            metric=(engine?.getMSTEdges().length||0)+' verified route edges';
-            detail='Shortest network '+(engine?.getMSTLength()||0).toFixed(2)+' units';
+            const nodes=engine?.getNodes().length||0;
+            const mst=engine?.getMSTEdges().length||0;
+            metric=mst+' chosen backbone edges';
+            detail=nodes+' input sites · connected tree '+
+              (nodes>=3&&mst===nodes-1?'YES':'NOT YET')+
+              ' · route length '+(engine?.getMSTLength()||0).toFixed(2);
             break;
           }
-          case 'v5':
-            metric=(v5Ref.current?.getBoundaryPlanes().length||0)+' physical partitions';
-            detail=(v5Ref.current?.getLoops().length||0)+' detected loops';
+          case 'v5':{
+            const planes=v5Ref.current?.getBoundaryPlanes()||[];
+            const n=v5Ref.current?.getLoops().length||0;
+            metric=planes.length+' constructed model planes';
+            detail=n+' detected route loops · '+Math.max(0,planes.length-n)+
+              ' parametric architectural planes (not topology discoveries)';
             break;
+          }
           case 'v6':
             metric=(v6m?.pathCount||0)+' simulated flow paths';
             detail=v6m?.pathCount
