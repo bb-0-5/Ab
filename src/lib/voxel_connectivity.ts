@@ -92,3 +92,44 @@ export function screenVoxelChannels(mask:Float32Array|Uint8Array|number[],res:nu
   evidence:'six_neighbour_voxel_geometry_only',
  };
 }
+
+/**
+ * One EXACT six-neighbour face-to-face path through void voxels.
+ * Returned indices are physically adjacent; an empty result means no
+ * qualifying passage. This is geometry, not a particle-flow measurement.
+ */
+export function traceVoxelThroughPath(
+ mask:Float32Array|Uint8Array|number[],res:number,axis:'x'|'y'|'z'='y',
+):number[]{
+ if(!Number.isInteger(res)||res<2||res>64||mask.length!==res**3
+   ||!['x','y','z'].includes(axis))
+   throw new RangeError('Invalid path mask dimensions or axis');
+ const n=res**3,rs=res*res,queue=new Int32Array(n);
+ const parent=new Int32Array(n).fill(-1);
+ const pos=(i:number)=>axis==='x'?Math.floor(i/rs):
+   axis==='y'?Math.floor(i%rs/res):i%res;
+ let head=0,tail=0,last=-1;
+ for(let i=0;i<n;i++)if(pos(i)===0&&mask[i]<.5){
+   parent[i]=i;queue[tail++]=i;
+ }
+ while(head<tail){
+   const i=queue[head++],x=Math.floor(i/rs);
+   const y=Math.floor(i%rs/res),z=i%res;
+   if(pos(i)===res-1){last=i;break;}
+   const nbrs=[
+    x>0?i-rs:-1,x+1<res?i+rs:-1,
+    y>0?i-res:-1,y+1<res?i+res:-1,
+    z>0?i-1:-1,z+1<res?i+1:-1,
+   ];
+   for(const j of nbrs)if(j>=0&&parent[j]<0&&mask[j]<.5){
+     parent[j]=i;queue[tail++]=j;
+   }
+ }
+ if(last<0)return [];
+ const path:number[]=[];
+ while(parent[last]!==last){
+   path.push(last);last=parent[last];
+ }
+ path.push(last);
+ return path.reverse();
+}
