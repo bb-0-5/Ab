@@ -45,6 +45,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SIMULATION_STAGES,mayAdvanceStage,indexOfStage } from './lib/sim_sequence';
 import {captureRenderArtifact,STAGE_GUIDES,type RenderArtifact} from './lib/render_artifact';
 import {HexfieldArtifactInspector} from './components/HexfieldArtifactInspector';
+import {buildLiveTransportSpec,type LiveTransportSpec} from './lib/live_transport_spec';
 import {
   qualifyStage,seedFromDiscovery,rememberStageReceipt,
   rememberFailedGeometryTrial,type StageReceipt,
@@ -315,6 +316,7 @@ const SimulationView = ({
     stage:string;metric:string;detail:string;handoff:string;
     completed:string[];artifact:RenderArtifact|null;
     transport:SweepProgress|null;
+    spec:LiveTransportSpec|null;
   })=>void;
   currentChainIndex: number;
   setCurrentChainIndex: (i: number) => void;
@@ -1896,15 +1898,27 @@ const SimulationView = ({
             v5:v5Ref.current,v9:v9Ref.current,
             v10:v10Ref.current,v13:v13Ref.current,
           });
+        const transport=opt==='thermal'||opt==='electrical'
+          ?rankTransportSweep(
+             transportSweepRef.current.results,opt as TransportGoal,
+             transportSweepRef.current.complete,
+           ):null;
+        const livePhysicalSpec=transport
+          ?buildLiveTransportSpec(
+              opt as TransportGoal,transport,
+              transportSweepRef.current.applied,
+              v9Ref.current&&v10Ref.current?{
+                primary:v9Ref.current.primaryElement,
+                secondary:v9Ref.current.secondaryElement,
+                structure:v9Ref.current.structure,
+                tpms:v10Ref.current.config.tpms,
+              }:null,
+            ):null;
         onVisualEvidence({
           stage:currentVersion,metric,detail,handoff:handoffStatusRef.current,
-          completed,artifact:snapshot,
-          transport:opt==='thermal'||opt==='electrical'
-            ?rankTransportSweep(
-              transportSweepRef.current.results,opt as TransportGoal,
-              transportSweepRef.current.complete,
-            ):null,
+          completed,artifact:snapshot,transport,spec:livePhysicalSpec,
         });
+        (window as any).aboveBoundMaterialSpec=livePhysicalSpec;
         (window as any).aboveBoundLiveTrace={
           stage:currentVersion,metric,detail,completed,
           frames:stageFrameRef.current,
@@ -8906,9 +8920,10 @@ function App() {
     stage:string;metric:string;detail:string;handoff:string;
     completed:string[];artifact:RenderArtifact|null;
     transport:SweepProgress|null;
+    spec:LiveTransportSpec|null;
   }>({stage:initialSimState.version,metric:'Preparing simulation',
      detail:'Reading numerical models',handoff:'No recorded artifact',
-     completed:[],artifact:null,transport:null});
+     completed:[],artifact:null,transport:null,spec:null});
   const [currentChainIndex, setCurrentChainIndex] = useState(initialSimState.chainIdx);
   const [compressionLevel, setCompressionLevel] = useState(1);
   const [discoveries, setDiscoveries] = useState<any[]>([]);
@@ -9704,6 +9719,7 @@ function App() {
               artifact={visualEvidence.stage===activeVersion
                 ?visualEvidence.artifact:null}
               transport={visualEvidence.transport}
+              spec={visualEvidence.spec}
             />
           )}
           {activeTab !== 'sim' && (activeTab === 'trajectory' ? (
