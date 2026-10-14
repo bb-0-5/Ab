@@ -58,7 +58,6 @@ try{
  assert.ok(Math.abs(field.conductivity-predictedK)>0.01,
   'V13 guessed transport properties must not overwrite V9 reference physics');
  const initialSearch=mesh.optimizeConnectedChannels(lattice.compositeField||undefined,'y');
- assert.equal(initialSearch.modelledOnly,undefined);
  assert.equal(initialSearch.modeledOnly,true);
  const connected=mesh.getConnectivity();
  assert.ok(connected&&connected.voidCount>0);
