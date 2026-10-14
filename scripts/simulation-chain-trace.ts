@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import {readFileSync} from 'node:fs';
 import {qualifyStage,type StageObservation,type StageReceipt} from '../src/lib/sim_artifact_handoffs';
 import {SIMULATION_STAGES} from '../src/lib/sim_sequence';
 
