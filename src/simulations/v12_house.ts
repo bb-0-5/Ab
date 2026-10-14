@@ -2980,7 +2980,11 @@ export class V12HouseEngine {
    * equivalence, or permission to substitute an untested material.
    */
   getMaterialRequirement():V13MaterialRequirement|null{
-    if(!this._stable||!this._rooms.length)return null;
+    // This requirement follows wall geometry and recorded climate, not
+    // convergence of the separate house airflow solver. Eight real V12
+    // numerical updates suffice to form a provisional work order; it is
+    // refreshed if climate/assembly changes while V12 keeps simulating.
+    if(this._iteration<8||!this._rooms.length)return null;
     const rooms=this._rooms.map(room=>({room,wall:WALL_LIBRARY[room.wallType]}))
       .filter((x):x is {room:RoomDef;wall:WallAssembly}=>Boolean(x.wall))
       .sort((a,b)=>b.wall.totalU-a.wall.totalU);
