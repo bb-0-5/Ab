@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#090f15" />
+<meta name="description" content="AboveBound's real fluid-physics laboratory: archived 3-D Boussinesq cavity fields and an exact two-dimensional Navier–Stokes torus benchmark." />
+<title>AboveBound / TORUS v3 — Fluid Laboratory</title>
+<link rel="stylesheet" href="/fluid-lab.css?build=gears20261014b" />
+</head>
+<body>
+<main class="shell">
+  <header class="mast">
+    <a class="brand" href="/"><span class="mark">A<span>↗</span></span><span>ABOVEBOUND<small>RESEARCH SYSTEM</small></span></a>
+    <nav class="mastnav"><a href="/">V0–V13 SIMULATIONS ↗</a><a href="https://github.com/bb-0-5/Ab/tree/main/research" target="_blank" rel="noopener noreferrer">SOURCE / METHODS ↗</a></nav>
+    <div class="signal"><span class="pulse"></span> LOCAL VISUALISATION</div>
+  </header>
+  <div class="eyebrow">PHYSICS LABORATORY <span> / </span> EXPERIMENT 001 <span> · </span> 3D TORUS BUILD v3 · 2026-10-14</div><a class="gear-lab-link" href="/slices.html?build=gears20261014b">⟶ NEW: COUPLED 2.5D FLUID SLICE GEARS — LOCAL NUMERICAL WORKER</a>
+  <section class="heading">
+    <div><h1>Fluid, <em>not fiction.</em></h1><p class="lede">Watch actual calculated fields in a sealed, heated cube—or rotate a visible 3D doughnut representing the mathematical torus of an exact periodic flow. The shape illustrates the topology; the equations govern the flow.</p></div>
+    <div class="tag">3D CAVITY <span>+</span> 2D PERIODIC BENCHMARK</div>
+  </section>
+  <section class="workspace" aria-label="Numerical fluid experiment">
+    <div class="visual-panel">
+      <div class="panel-top"><div class="panel-name"><span class="tiny-square"></span><span id="panelTitle">SEALED CAVITY · 3D FIELD SLICE</span></div><span class="live-indicator"><span class="tiny-dot"></span><span id="solverLabel">ARCHIVED NUMERICAL FIELD</span></span></div>
+      <div class="viewport"><canvas id="field" role="img" aria-label="Numerical fluid heatmap and velocity field"></canvas><div class="corner top-left"><span id="axisLabel">X–Y PLANE</span><span id="sampleLabel">Z = 50%</span></div><div class="corner top-right">MODEL ONLY<br><span>NOT EXPERIMENTALLY VALIDATED</span></div><div class="corner bottom-left"><div class="gradient"></div><div class="gradient-labels"><span id="lowLegend">COOL</span><span id="highLegend">HOT</span></div></div><div class="corner bottom-right">↗ <span id="flowNote">VELOCITY VECTORS</span></div><div id="torusOrbitHint" class="torus-orbit-hint" hidden>↔ DRAG TO ROTATE · DOUBLE CLICK TO RESET</div></div>
+      <div class="panel-foot"><div><span>MODEL</span><strong id="methodInfo">3-D Boussinesq · Ra 20,000</strong></div><div><span>GEOMETRY</span><strong id="geometryInfo">Impermeable insulating baffle</strong></div><div><span>STATUS</span><strong id="statusInfo">Loaded from numerical result</strong></div></div>
+    </div>
+    <aside class="control-panel">
+      <div class="control-header"><span>EXPERIMENT CONTROL</span><span class="light">● ACTIVE</span></div>
+      <div class="section-label">01 / DOMAIN</div>
+      <div class="choice-group" role="group" aria-label="Fluid experiment domain"><button class="mode active" type="button" id="modeCube"><strong>Closed cube</strong><small>3D numerical snapshot</small></button><button class="mode" type="button" id="modeTorus"><strong>Periodic torus</strong><small>Exact 2D solution</small></button></div>
+      <div id="torusViews" class="torus-views" hidden><div class="section-label">TORUS REPRESENTATION</div><div class="toggle-group"><button id="torusDonut" type="button" class="toggle active" aria-pressed="true">3D DOUGHNUT</button><button id="torusMap" type="button" class="toggle" aria-pressed="false">FLAT PERIODIC MAP</button></div></div><div class="section-label" id="domainSubhead">02 / FIELD SLICE</div>
+      <label class="slider-header" for="slice"><span id="sliderLabel">DEPTH INSIDE CUBE</span><output id="sliceValue">50%</output></label><input type="range" id="slice" min="0" max="100" value="50" />
+      <div class="section-label">03 / DISPLAY</div>
+      <div class="toggle-group"><button type="button" id="displayHeat" class="toggle active">HEAT / VORTICITY</button><button type="button" id="displaySpeed" class="toggle">SPEED</button></div>
+      <div class="section-label">04 / ANIMATION</div>
+      <button class="primary" id="play" type="button"><span id="playIcon">Ⅱ</span><span id="playText">PAUSE FLOW TRACERS</span><span>→</span></button>
+      <button class="subtle" id="reset" type="button">↻ RESTART TRACERS / TIME</button>
+      <p class="help" id="modeHelp">Coloured cells show the final computed temperature; arrows and moving tracers follow a stored 3D velocity field. Physics is not recalculated in this browser view.</p>
+    </aside>
+  </section>
+  <section class="statistics" aria-label="Numerical evidence"><div class="stat"><span>MODEL RESULT</span><strong id="metricMain">3.194</strong><small id="metricMainLabel">NUSSELT / COLD PLATE</small></div><div class="stat"><span>AGAINST BASELINE</span><strong id="metricDelta">+1.94%</strong><small id="metricDeltaLabel">COARSE 12³ EXPERIMENT</small></div><div class="stat"><span>INDEPENDENT CHECK</span><strong id="metricCheck">+4.84%</strong><small id="metricCheckLabel">16³ REFINEMENT / UNCONVERGED</small></div><div class="stat"><span>NUMERICAL STATUS</span><strong id="metricStatus">PROVISIONAL</strong><small id="metricStatusLabel">NO EXPERIMENTAL VALIDATION</small></div></section>
+  <section class="lower">
+    <div class="explain"><div class="eyebrow">WHAT YOU ARE LOOKING AT</div><h2 id="explainHeading">Pressure alone doesn't create flow.</h2><p id="explainText">This sealed cube contains water with a hot bottom and cold top. Density differences produce buoyancy. The 3D Python solver evolved the velocity and temperature fields with impermeable walls. You are inspecting its recorded output, not watching invented molecules.</p><div class="note"><strong id="caveatTitle">RESEARCH LIMITATION</strong><span id="caveatText">The 12³ result is coarse. The candidate improves the modeled heat extraction at 12³ and 16³, but the change varies with resolution; it is not a mesh-independent or physically validated design.</span></div></div>
+    <div class="rank"><div class="eyebrow">AUTOMATED GEOMETRY SWEEP</div><h3 id="rankTitle">Eight structures, one model.</h3><div id="ranking" aria-label="Modeled configuration rankings"></div><div class="rank-footer" id="rankingFooter">Higher values indicate more heat transferred at a fixed temperature difference. Results are numerical estimates.</div></div>
+  </section>
+  <footer><div>ABOVEBOUND / NUMERICAL RESEARCH <span>—</span> NO CLOUD COMPUTE</div><div>NOT A CERTIFIED CFD SOLVER <span>·</span> SOURCE AND ASSUMPTIONS DISCLOSED</div></footer>
+</main>
+<script type="module" src="/fluid-lab.js?build=torusv3-20261014"></script>
+</body></html>
