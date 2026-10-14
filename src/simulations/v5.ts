@@ -164,6 +164,10 @@ export class V5Engine {
       }
     }
 
+    // Rebuild a BOUNDED snapshot from current input evidence. Formerly
+    // this list was never reset, accumulating hundreds of duplicate planes
+    // and 3D meshes on every changing V3/V4 capture (a real mobile stall).
+    this.boundaryPlanes=[];
     // Step 1: find legacy loops for V6/V7 compat
     this._findLoops(optimizer);
 
