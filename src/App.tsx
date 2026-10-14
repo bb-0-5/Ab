@@ -44,7 +44,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SIMULATION_STAGES,mayAdvanceStage,indexOfStage } from './lib/sim_sequence';
 import {
-  qualifyStage,seedFromDiscovery,rememberStageReceipt,type StageReceipt,
+  qualifyStage,seedFromDiscovery,rememberStageReceipt,
+  rememberFailedGeometryTrial,type StageReceipt,
   type StageObservation,
 } from './lib/sim_artifact_handoffs';
 import {screenMaterialPipeline,type MaterialPipelineEvidence} from './lib/material_pipeline_evidence';
@@ -1284,6 +1285,7 @@ const SimulationView = ({
           : Boolean(engine?.isStable());
         if(mayAdvanceStage(currentVersion,stageFrameRef.current,stable,150)){
           let output:StageObservation|null=null;
+          let restartDiscovery=false;
           switch(currentVersion){
             case 'v0': {
               const e=v0Ref.current;
@@ -1391,6 +1393,28 @@ const SimulationView = ({
                   setHandoffStatus('V10 '+result.reason+
                     ' · tested '+result.evaluated+' real voxel candidates');
                   conn=e.getConnectivity();
+                  if(result.exhausted&&!result.recovered){
+                    const v9Receipt=stageReceiptsRef.current.get('v9');
+                    const v9Seed=v9Ref.current?.seed;
+                    if(v9Receipt&&v9Seed!==undefined){
+                      rememberFailedGeometryTrial({
+                        context,v9ReceiptId:v9Receipt.id,
+                        latticeSeed:v9Seed,axis,
+                        tested:e.recoveryHistory.reduce((n,t)=>n+t.tested,0),
+                        reason:'No connected solid-and-void membrane after bounded TPMS search',
+                        modelOnly:true,
+                      });
+                    }
+                    // Restart the same original discovery tour, not an
+                    // invented V10 success. Next V8 receipt gives V9 a NEW
+                    // lattice seed and all V1–V8 prerequisites are re-tested.
+                    stageFrameRef.current=0;
+                    restartDiscovery=true;
+                    setCurrentChainIndex(0);
+                    setHandoffStatus(
+                      'V10 failed: 3 geometry rounds checked; revisiting discovery for a new V9 lattice',
+                    );
+                  }
                   if(result.recovered){
                     const mat=v9Ref.current?.getMaterialForV1();
                     if(mat&&v1Ref.current&&v2Ref.current){
@@ -1453,6 +1477,11 @@ const SimulationView = ({
                 ])};
               break;
             }
+          }
+          if(restartDiscovery){
+            controls?.update();
+            renderer?.render(scene,camera);
+            return;
           }
           const index=indexOfStage(currentVersion);
           const predecessor=index>0
