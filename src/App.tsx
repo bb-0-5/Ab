@@ -9326,10 +9326,13 @@ function App() {
         <div className={activeTab === 'house' ? 'lg:col-span-12 space-y-6' : 'lg:col-span-8 space-y-6'}>
           <div
             className={activeTab === 'sim'
-              ? 'relative h-[440px] sm:h-[520px] lg:h-[600px]'
+              ? 'relative'
               : 'fixed left-[-10000px] top-0 w-[320px] h-[180px] pointer-events-none opacity-0'}
             aria-hidden={activeTab !== 'sim'}
           >
+            <div className={activeTab==='sim'
+              ?'relative h-[440px] sm:h-[520px] lg:h-[600px]'
+              :'h-full'}>
               <SimulationView
                 activeOptimizer={activeOptimizer}
                 thermalMode={thermalMode}
@@ -9347,11 +9350,12 @@ function App() {
                 isSimulating={isSimulating}
                 activeModule={activeTab}
               />
+            </div>
               {activeTab === 'sim' && (
                 <>
               
               {/* Task Description Overlay */}
-              <div className="absolute top-20 left-4 md:top-6 md:left-6 pointer-events-none z-10">
+              <div className="hidden md:block absolute top-20 left-4 md:top-6 md:left-6 pointer-events-none z-10">
                 <div className="bg-black/80 backdrop-blur-md border border-white/10 p-4 rounded-xl max-w-xs shadow-2xl">
                   <div className="text-[9px] font-bold text-cyan-300 uppercase tracking-widest mb-1">
                     Current experiment · {activeVersion.toUpperCase()}
