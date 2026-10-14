@@ -49,6 +49,10 @@ import {
   type StageObservation,
 } from './lib/sim_artifact_handoffs';
 import {screenMaterialPipeline,type MaterialPipelineEvidence} from './lib/material_pipeline_evidence';
+import {
+  selectElementTrial,recordModeledTrial,saveMaterialTrial,readMaterialTrials,
+  type TrialPending,
+} from './lib/cross_sim_material_campaign';
 import {loadMaterialRecipes,rememberMaterialRecipe} from './lib/material_recipe_archive';
 import {
  feedbackScenarioKey,findCompatibleFeedback,rememberFeedback,validTuningHints,
@@ -318,6 +322,8 @@ const SimulationView = ({
   const previousVisibleVersionRef = useRef<SimVersion>(activeVersion);
   const [webGlError, setWebGlError] = useState<string | null>(null);
   const [handoffStatus,setHandoffStatus] = useState('Generating first artifact');
+  const [campaignStatus,setCampaignStatus] = useState('Awaiting a V12-derived material need');
+  const pendingMaterialTrialRef=useRef<TrialPending|null>(null);
   const stageReceiptsRef = useRef(new Map<string,StageReceipt>());
   const handoffContextRef = useRef('');
   const lastConstructionTrialRef = useRef<{discovery:string;seed:number;modelOnly:true}|null>(null);
@@ -707,6 +713,36 @@ const SimulationView = ({
           if(discovery&&lattice&&mesh&&v1&&v2){
             try{
               const nextSeed=seedFromDiscovery(discovery,lattice.seed);
+              // This is a real V12 work order, NOT a user-selected fictional
+              // material property. V13 produces a chemical *hypothesis*;
+              // V9 independently supplies only its known elemental references.
+              const workOrder=activeOptimizerRef.current==='thermal'
+                ?v12Ref.current?.getMaterialRequirement():null;
+              const chemistry=v13Ref.current;
+              pendingMaterialTrialRef.current=null;
+              if(workOrder&&chemistry){
+                chemistry.receiveRequirement(workOrder);
+                const context=JSON.stringify([
+                  activeOptimizerRef.current,thermalModeRef.current,
+                  compressionLevelRef.current,
+                ]);
+                const spec=selectElementTrial(
+                  context,workOrder,readMaterialTrials(),
+                );
+                const composite=chemistry.buildComposite(spec.elements.map(part=>({
+                  z:part.z,fraction:part.massFraction,
+                })));
+                const atomicSiteRatio=lattice.applyV13ElementalHypothesis(composite);
+                pendingMaterialTrialRef.current={
+                  spec,workOrder,composite,
+                  seed:nextSeed,atomicSiteRatio,
+                  startedFrame:simulationFrame,context,
+                };
+                setCampaignStatus(
+                  'V12 work order → V13 '+spec.elements.map(e=>e.symbol).join('/')+
+                  ' hypothesis → V9 reference lattice (unverified)',
+                );
+              }
               lattice.setSeed(nextSeed);
               lattice.buildLattice();
               mesh.optimizeConnectedChannels(
@@ -1028,13 +1064,17 @@ const SimulationView = ({
         // V12 makes an actual typed property request from its evaluated
         // wall assembly and modeled environmental temperatures. Chemistry
         // can screen bulk constituents; it cannot silently alter the house.
-        if(v12Ref.current.isStable()&&v13Ref.current
+        if(opt==='thermal'&&v13Ref.current
           &&simulationFrame%120===0){
           const need=v12Ref.current.getMaterialRequirement();
           if(need){
             try{
               v13Ref.current.receiveRequirement(need);
               (window as any).v12MaterialNeed=need;
+              if(!pendingMaterialTrialRef.current)
+                setCampaignStatus('V12 requested bulk constituent k ≤ '+
+                  (need.maxThermalConductivityWmK?.toPrecision(3)||'?')+
+                  ' W/(m·K); V13 exploring hypotheses');
             }catch(error){
               console.warn('[V12] Cannot hand off material requirement',error);
             }
@@ -1152,6 +1192,48 @@ const SimulationView = ({
         (window as any).v13MaterialEngine = v13Ref.current;
       }
 
+      // V13→V9→V10→V1/V2→V3/V4/V5→V6→V7:
+      // numerical outputs are sampled AFTER the upstream engines have had
+      // time to react to the newly built lattice, not at construction time.
+      // Observation is not a controlled causality/material-yield claim.
+      const trial=pendingMaterialTrialRef.current;
+      if(trial&&simulationFrame-trial.startedFrame>=240
+        &&simulationFrame%60===0){
+        const v9=v9Ref.current,v10=v10Ref.current;
+        const field=v9?.getMaterialForV1(),channels=v10?.getConnectivity();
+        // Allow V10's bounded geometry recovery to complete first.
+        const ready=Boolean(channels?.spanning.y)||
+          (simulationFrame-trial.startedFrame>=420);
+        if(ready&&field&&channels){
+          try{
+            const flow=v6Ref.current?.isStable()
+              ?v6Ref.current.getMetrics():null;
+            const e=v7Ref.current;
+            const feedback=e?.isStable()?{
+              score:e.getScore(),
+              acceptedTrials:e.acceptedTrials,
+              rejectedTrials:e.rejectedTrials,
+            }:null;
+            const report=recordModeledTrial(trial,{
+              conductivity:field.conductivity,density:field.density,
+            },channels,flow,feedback);
+            saveMaterialTrial(report);
+            (window as any).materialCampaignLatestTrial=report;
+            (window as any).materialCampaignHistory=readMaterialTrials();
+            setCampaignStatus('V12→V13→V9→V10→V6→V7: '+
+              report.elementSymbols.join('/')+' · '+
+              (report.assessment==='modeled_flow_observed'
+                ?'modeled flow observed (not measured)'
+                :report.assessment==='geometry_blocked'
+                  ?'blocked geometry recorded'
+                  :'awaiting solver evidence recorded'));
+            pendingMaterialTrialRef.current=null;
+          }catch(error){
+            console.warn('[Inter-Sim] Could not record material experiment',error);
+            pendingMaterialTrialRef.current=null;
+          }
+        }
+      }
       // Publish real engine state for the dashboard and smoke tests. This
       // replaces the previous placeholder stats that were never updated.
       if (simulationFrame % 15 === 0) {
@@ -1784,6 +1866,9 @@ const SimulationView = ({
         </div>
         <div className="text-[9px] font-mono text-gray-200 break-words">
           {handoffStatus}
+        </div>
+        <div className="text-[9px] font-mono text-emerald-300/90 break-words mt-1">
+          {campaignStatus}
         </div>
       </div>
       {webGlError && (
