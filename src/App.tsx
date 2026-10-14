@@ -76,6 +76,7 @@ import { V7Engine } from './simulations/v7';
 import { V8Engine } from './simulations/v8_riemann';
 import { V9LatticeEngine } from './simulations/v9_lattice';
 import { V10MeshEngine } from './simulations/v10_mesh';
+import {publishV10PressureSelection,readV10PressureFeedback} from './lib/v10_pressure_bridge';
 import { V11HardwareEngine } from './simulations/v11_hardware';
 import { V12HouseEngine } from './simulations/v12_house';
 import { V13MaterialEngine, IsotopeData, MaterialComposite, AROMATIC_RINGS, CARBON_ALLOTROPES, ABIOGENESIS_TIMELINE, huckelEnergies, zetaZeroMapping, stackedRingCoupling, AromaticRing } from './simulations/v13_material';
@@ -978,6 +979,10 @@ const SimulationView = ({
             buildSelectedTransportDesign(
               v9Ref.current,v10Ref.current,outcome.best,20261014,
             );
+            // Export the SELECTED real V10 voxel mask, not an intermediate
+            // screening geometry or a reconstructed low-grid TPMS approximation.
+            publishV10PressureSelection(v10Ref.current,
+              'V9/V10 selected material and connected transport geometry');
             const material=v9Ref.current.getMaterialForV1();
             if(material){
               v1Ref.current.setMaterial({
@@ -1722,6 +1727,16 @@ const SimulationView = ({
                 const connected=conn.spanning[axis]
                   &&conn.solidCount/updatedVolume>=.05
                   &&conn.voidCount/updatedVolume>=.05;
+                if(connected){
+                  const exported=publishV10PressureSelection(
+                    e,'V10 connected geometry qualified by original discovery chain');
+                  // Feedback is a tagged, provisional model result, never a
+                  // physical fact or reason to mutate V0-V13 automatically.
+                  (window as any).aboveBoundV10PressureFeedback=
+                    readV10PressureFeedback();
+                  if(exported)reportHandoffStatus(
+                    'V10 selected 3D voxel mask exported locally to pressure network');
+                }
                 output={quantity:conn.voidCount,
                   signal:connected?1:0,support:e.lastSearch.evaluated,
                   signature:JSON.stringify([

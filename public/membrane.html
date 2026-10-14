@@ -17,10 +17,11 @@ body{background:#06141b} .shell{max-width:1360px} .mast{min-height:64px} .intro{
 </style></head>
 <body><main class="shell">
 <header class="mast"><a class="brand" href="/simulator.html">ABOVEBOUND <span>/</span> RESEARCH</a><nav><a href="/simulator.html">ORIGINAL V0–V13</a><a href="/fluid.html">ARCHIVED CFD</a></nav><strong class="alive">ON-DEVICE ENGINE</strong></header>
-<section class="intro"><div class="eyebrow">V10 PHYSICS GEAR · PRESSURE FLOW · RELEASE R5</div>
+<section class="intro"><div class="eyebrow">V10 PHYSICS GEAR · PRESSURE FLOW · RELEASE R6 · ORIGINAL V10 MASK LINK</div>
 <h1>Does water <em>get through?</em></h1>
-<p>The engine automatically builds real V10 solid/void geometries, sends water through their connected pores at a fixed pressure difference, verifies mass conservation, and ranks viable structures against an open reference. No parameters to enter. The same 3D pressure network is shown on two 2D canvases.</p>
+<p>The engine automatically imports the <b>actual selected voxel mask</b> from the original V0–V13 V10 stage, solves water transport at its exact resolution against an equally sized open reference, then explores V10 geometry variations. Pressure fields occupy two connected 2D canvases. No parameters to enter.</p>
 <div class="critical">RESEARCH MODEL — This is a steady, laminar <b>pore-network hydraulic approximation</b>, not a certified CFD calculation. Its throat radius is assumed, not measured. Results cannot establish an engineering permeability without validation.</div></section>
+<div class="flow-ticker" id="originalV10" aria-live="polite">CHECKING FOR A REAL V10 SELECTED MASK · NO USER CONFIGURATION</div>
 <div class="flow-ticker" id="frontProgress" aria-live="polite">SETTING UP OPEN WATER CHANNEL → PRESSURE → MASS BALANCE → NEXT DESIGN</div>
 <section class="workspace"><div class="viewpanel"><div class="paneltop"><span>01 / CURRENT MEMBRANE · PRESSURE AND FLOW</span><strong id="focusLabel">STARTING</strong></div>
 <div class="plot"><canvas id="mainCanvas" role="img" aria-label="Computed hydraulic pressure and flow on selected membrane slice"></canvas><div class="plot-top">BLACK = V10 SOLID · BLUE LOW P → ORANGE HIGH P<br><span>WHITE = IN-PLANE FLOW · AMBER • +Z · CYAN ○ −Z</span></div><div id="sliceMeta" class="plot-corner">1 Pa inlet → 0 Pa outlet</div></div><div class="panelbottom"><span>OBSERVED NUMERICAL FIELD</span><span class="focus" id="chosen">OPEN VOID REFERENCE</span></div></div>
@@ -30,10 +31,10 @@ body{background:#06141b} .shell{max-width:1360px} .mast{min-height:64px} .intro{
 <section class="evidence"><h2>Automatic membrane discovery · pressure loss</h2>
 <p id="progress" aria-live="polite">Comparing an open reference with V10 membrane structures. Designs must contain 25–75% solid and pass 20% of the reference flow at the same pressure.</p>
 <div class="ranked" id="ranking"><div class="head"><span>GEOMETRY</span><span>FLOW / OPEN</span><span>SOLID</span><span>REQUIRED ΔP</span></div></div>
-<p id="flowEvidence">Every pressure field and flux belongs to a specific geometry. Failed designs are not discoveries.</p></section>
+<p id="flowEvidence">Every field belongs to a specific mask. The original selected V10 mask is compared only with its SAME-RESOLUTION open reference. The autonomous follow-up sweep uses a smaller grid; its absolute flow rates are not directly comparable with the native-grid result.</p></section>
 <section class="logic"><div><div class="eyebrow">AUTO-LOADED PHYSICAL GEARS</div><h2>Geometry → connectivity → pressure → mass conservation → selection.</h2>
 <div class="flow-ticker">SET CONDITIONS: WATER · 20°C · µ = 0.001002 Pa·s · ΔP = 1 Pa · CELL PITCH = 1 mm · ASSUMED THROAT RADIUS = 0.25 mm.</div>
 <p>Required volume flow is automatically set to 20% of the empty reference. Among structures that meet that flow and contain 25–75% solid, lower pressure loss at the target flow is better. Nothing is called an improvement over the unobstructed reference.</p>
 </div><div class="disclosure"><strong>What is solved — and what is not</strong><p>Every void voxel is connected to adjacent void voxels by assumed equal cylindrical throats. Hagen–Poiseuille conductance defines each bond; nodal mass conservation yields the pressure field. The model enforces impermeable solids and calculates water moving between adjacent XY sheets. No visual particles are invented.</p><p>Neglected: detailed pore geometry, actual throat-size distribution, inertia, entrance losses, turbulence, solid chemistry, temperature evolution, and Navier–Stokes velocity profiles. Numerical error is checked, but the physical model remains a simplified approximation. This is **not** validated permeability or real-world optimization.</p></div></section>
 <footer><span>ABOVEBOUND · V10 GEOMETRY EXPORTED INTO NETWORK</span><span>MODEL ONLY · NO ENGINEERING CERTIFICATION</span></footer>
-</main><script type="module" src="/membrane-ui.mjs?v=pressure-gears-20261015-r5"></script></body></html>
+</main><script type="module" src="/membrane-ui.mjs?v=original-v10-selection-r6"></script></body></html>

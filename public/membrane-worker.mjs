@@ -2,11 +2,13 @@
  * not a transient closed-cavity heat model and not 3D CFD. */
 import {buildV10Mask,V10_CANDIDATES} from './v10-membrane-masks.mjs';
 import {HYDRAULICS,solvePoreNetwork,assessMembrane,hydraulicEvidence} from './v10-pressure-network.mjs';
+import {decodeV10PressureSelection} from './v10-pressure-handoff.mjs';
 const n=13,layers=9;
 const seedConfigs=V10_CANDIDATES.map(x=>({...x}));
 const name=c=>c===null?'Open void reference':`${c.tpms} · f=${c.frequency.toFixed(2)} · threshold=${c.threshold.toFixed(2)}`;
 const send=x=>postMessage(x);
 let generation=0,paused=false,ended=false,seen=new Set(),queue=[],ranking=[],reference=null,focus=null,best=null,serial=0,initialCount=0;
+let originalV10=null;
 function makeShape(config){
   const mask=config?buildV10Mask({n,layers,...config}).mask:new Uint8Array(n*n*layers);
   const result=solvePoreNetwork(mask,n,layers);
@@ -40,10 +42,36 @@ function pushMutations(){
 }
 async function explore(g){
  try{
+  if(originalV10){
+   // Evaluate exactly what V10 selected, including voxel defects and roughness.
+   // The matched open reference uses the same n³ cells (separate from 13x13x9 sweep).
+   const {mask,n:actualN,layers:actualLayers,receipt}=originalV10;
+   send({type:'source-progress',message:'ORIGINAL V10 '+actualN+'³ geometry received · testing same-grid open reference'});
+   await new Promise(ok=>setTimeout(ok,0));
+   if(g!==generation)return;
+   const open=solvePoreNetwork(new Uint8Array(mask.length),actualN,actualLayers);
+   if(!open.converged||open.flowM3S<=0)throw Error('Original V10 matched open reference did not converge');
+   const flow=solvePoreNetwork(mask,actualN,actualLayers);
+   const assessment=assessMembrane(flow,open);
+   const relativeOpen=flow.flowM3S/open.flowM3S;
+   const required=open.flowM3S*HYDRAULICS.targetOpenFraction;
+   const pressureAtTargetPa=flow.flowM3S>0?required*HYDRAULICS.pressureDifferencePa/flow.flowM3S:null;
+   const source={source:'V10MeshEngine.getSolidMask',checksum:receipt.checksum,
+     config:receipt.config,resolution:actualN,reason:receipt.reason,
+     valid:assessment.valid,meetsTarget:assessment.meetsTarget,flowM3S:flow.flowM3S,
+     relativeOpen,pressureAtTargetPa,solidFraction:flow.solidFraction,
+     converged:flow.converged,imbalanceM3S:flow.imbalanceM3S,
+     assessment:assessment.status,verdict:assessment.reason};
+   send({type:'source-evidence',source,current:hydraulicEvidence(flow)});
+   await new Promise(ok=>setTimeout(ok,0));
+   if(g!==generation)return;
+  }
   const ref=makeShape(null);if(!ref.result.converged||ref.result.flowM3S<=0)throw Error('Open-reference pressure network failed its analytic gate');
   reference=ref.result;focus=ref;
   ranking.push(concise(ref));send({type:'progress',done:1,total:7,stage:'REFERENCE VERIFIED',ranking:ranking.slice(),current:hydraulicEvidence(ref.result),focus:concise(ref)});
-  queue=seedConfigs.slice();queue.forEach(c=>seen.add(JSON.stringify(c)));initialCount=queue.length;
+  queue=originalV10?[originalV10.receipt.config,...seedConfigs]:seedConfigs.slice();
+  queue=queue.filter(c=>{const key=JSON.stringify(c);if(seen.has(key))return false;seen.add(key);return true;});
+  initialCount=queue.length;
   let done=0,mutated=false;
   while(queue.length){
    if(g!==generation)return;
@@ -72,7 +100,10 @@ async function explore(g){
 function start(){paused=false;if(ended){return;}if(!generation){generation++;explore(generation);}}
 function reset(){generation++;paused=false;ended=false;ranking=[];reference=null;focus=null;best=null;seen.clear();queue=[];send({type:'starting'});explore(generation);}
 globalThis.onmessage=({data})=>{
- switch(data?.type){case 'start':start();break;case 'pause':paused=true;send({type:'paused'});break;case 'resume':paused=false;send({type:'resumed'});break;case 'reset':reset();break;
+ switch(data?.type){case 'source-v10':
+  try{originalV10=data.receipt?decodeV10PressureSelection(data.receipt):null;}
+  catch(error){originalV10=null;send({type:'source-error',message:String(error)});}
+  break;case 'start':start();break;case 'pause':paused=true;send({type:'paused'});break;case 'resume':paused=false;send({type:'resumed'});break;case 'reset':reset();break;
  case 'snapshot':send({type:'progress',done:ranking.length,ranking:ranking.slice(),current:focus?hydraulicEvidence(focus.result):null,focus:focus?concise(focus):null,winner:best?concise(best):null});break;}
 };
 send({type:'ready',description:'V10 pressure-driven pore-network optimizer, mass-conserving, finite-campaign'});
