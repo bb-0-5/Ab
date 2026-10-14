@@ -5,7 +5,15 @@ import {V9LatticeEngine} from '../src/simulations/v9_lattice';
 import {V10MeshEngine} from '../src/simulations/v10_mesh';
 import {V12HouseEngine} from '../src/simulations/v12_house';
 import {V13MaterialEngine} from '../src/simulations/v13_material';
+import {
+  rememberFailedGeometryTrial,getFailedGeometryTrials,
+} from '../src/lib/sim_artifact_handoffs';
 
+const memory=new Map<string,string>();
+Object.assign(globalThis,{localStorage:{
+  getItem:(k:string)=>memory.get(k)||null,
+  setItem:(k:string,v:string)=>{memory.set(k,v);},
+}});
 const scene=new THREE.Scene();
 const v9=new V9LatticeEngine(scene);
 const v10=new V10MeshEngine(scene);
@@ -36,6 +44,18 @@ try {
   const unchanged=v10.recoverBlockedChannels(v9.compositeField!,'y','thermal-material-A');
   assert.equal(unchanged.evaluated,0,'Do not waste time retesting working geometry');
   assert.ok(v10.recoveryHistory.length<=3);
+  for(let attempt=0;attempt<30;attempt++)
+    rememberFailedGeometryTrial({
+      context:'thermal',v9ReceiptId:'v9-'+attempt,
+      latticeSeed:attempt,axis:'y',tested:48,
+      reason:'Exhausted geometry search',modelOnly:true,
+    });
+  assert.equal(getFailedGeometryTrials().length,16,
+    'Unworkable hypotheses must be retained but bounded on mobile');
+  assert.throws(()=>rememberFailedGeometryTrial({
+    context:'thermal',v9ReceiptId:'v9-bad',latticeSeed:3,
+    axis:'y',tested:0,reason:'Invalid',modelOnly:true,
+  }),/Invalid failed-geometry evidence/);
 
   // V12 request must originate in the real live house model, not a user knob.
   for(let i=0;i<103;i++)v12.update('thermal',{},'cooling');
