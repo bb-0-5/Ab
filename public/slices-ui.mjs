@@ -1,15 +1,16 @@
 const $=s=>document.getElementById(s);
 const main=$('mainCanvas'),stack=$('stackCanvas'),a=main.getContext('2d',{alpha:false}),b=stack.getContext('2d',{alpha:false});
-const worker=new Worker('/slice-worker.mjs?build=gears20261014b',{type:'module'});
-let latest=null,paused=false,manualFocus=null,boxes=[],lastRender=0;
+const worker=new Worker('/slice-worker.mjs',{type:'module'});
+let latest=null,paused=false,manualFocus=null,boxes=[],lastRender=0,fieldMode='cross';
 const clamp=(x,lo,hi)=>Math.max(lo,Math.min(hi,x));
 const lerp=(a,b,t)=>a+(b-a)*t;
 const colors=[[10,48,85],[18,91,152],[29,160,174],[90,212,159],[248,206,108],[251,101,64]];
 function rgb(v){const x=clamp(v,0,1)*5,j=Math.min(4,Math.floor(x)),r=x-j;return `rgb(${colors[j].map((q,i)=>Math.round(lerp(q,colors[j+1][i],r))).join(',')})`}
+function crossColor(w,max){const t=clamp(w/Math.max(max,.0001),-1,1);return t>=0?`rgb(${Math.round(27+218*t)},${Math.round(39+111*t)},${Math.round(46+27*t)})`:`rgb(${Math.round(27+18*(-t))},${Math.round(39+138*(-t))},${Math.round(46+195*(-t))})`}
 function fit(c){const d=Math.min(2,window.devicePixelRatio||1),r=c.getBoundingClientRect(),w=Math.max(10,Math.round(r.width*d)),h=Math.max(10,Math.round(r.height*d));if(c.width!==w||c.height!==h){c.width=w;c.height=h}return {w,h}}
-function drawSlice(ctx,data,n,x,y,s,arrows=false){
+function drawSlice(ctx,data,n,x,y,s,arrows=false,perpendicular=false,peakW=0){
  const cell=s/n;for(let iy=0;iy<n;iy++)for(let ix=0;ix<n;ix++){
-   const t=data.temperature[iy*n+ix];ctx.fillStyle=rgb(t);ctx.fillRect(x+ix*cell,y+(n-iy-1)*cell,cell+.5,cell+.5);
+   const q=iy*n+ix,t=data.temperature[q];ctx.fillStyle=perpendicular?crossColor(data.w?.[q]||0,peakW):rgb(t);ctx.fillRect(x+ix*cell,y+(n-iy-1)*cell,cell+.5,cell+.5);
  }
  ctx.strokeStyle='#dbf3e94d';ctx.lineWidth=1;ctx.strokeRect(x+.5,y+.5,s-1,s-1);
  if(!arrows)return;
@@ -22,19 +23,31 @@ function drawSlice(ctx,data,n,x,y,s,arrows=false){
   ctx.beginPath();ctx.moveTo(px-Math.cos(angle)*len*.38,py-Math.sin(angle)*len*.38);ctx.lineTo(tx,ty);ctx.stroke();
   ctx.beginPath();ctx.moveTo(tx,ty);ctx.lineTo(tx-Math.cos(angle-.53)*len*.38,ty-Math.sin(angle-.53)*len*.38);ctx.lineTo(tx-Math.cos(angle+.53)*len*.38,ty-Math.sin(angle+.53)*len*.38);ctx.fill();
  }
+ // Actual pressure-projected face-normal Z velocities, shown in the plane.
+ // Solid small dot: towards +Z. Hollow ring: towards -Z. No glyph for no flow.
+ for(let gy=1;gy<count;gy++)for(let gx=1;gx<count;gx++){
+   const ix=Math.min(n-1,Math.floor(gx*n/count)),iy=Math.min(n-1,Math.floor(gy*n/count));
+   const w=data.w?.[iy*n+ix]||0;
+   if(Math.abs(w)<Math.max(.002,peakW*.06))continue;
+   const r=clamp(2+4*Math.abs(w)/Math.max(peakW,.001),2,6)*s/380;
+   const px=x+gx*s/count,py=y+(1-gy/count)*s;
+   ctx.beginPath();ctx.arc(px,py,r,0,Math.PI*2);
+   ctx.strokeStyle=w>0?'#ffe2c0':'#91f7fc';ctx.fillStyle=w>0?'#ffe2c0':'#91f7fc';ctx.lineWidth=Math.max(1,s/400);
+   if(w>0)ctx.fill();else ctx.stroke();
+ }
 }
 function mainCanvas(){const {w,h}=fit(main),ctx=a;ctx.fillStyle='#08171e';ctx.fillRect(0,0,w,h);
  if(!latest)return;const n=latest.n,actual=manualFocus??latest.evidence.focus;
  const slice=latest.slices[actual];const s=Math.min(w*.78,h*.86);const x=(w-s)/2,y=(h-s)/2;
- drawSlice(ctx,slice,n,x,y,s,true);
- const delta=(actual-latest.evidence.focus)/(latest.layers-1);
+ drawSlice(ctx,slice,n,x,y,s,true,fieldMode==='cross',latest.evidence.peakW);
+ const delta=(actual-latest.evidence.focus)/latest.layers;
  ctx.fillStyle='#a3d5ca';ctx.font=`${Math.max(11,Math.round(w/52))}px ui-monospace,monospace`;
- ctx.fillText(`z = ${(actual/(latest.layers-1)).toFixed(2)}   Δfocus = ${delta.toFixed(2)}`,Math.max(10,x),Math.min(h-12,y+s+24));
+ ctx.fillText(`z = ${((actual+.5)/latest.layers).toFixed(2)}   Δfocus = ${delta.toFixed(2)}`,Math.max(10,x),Math.min(h-12,y+s+24));
  $('focusLabel').textContent=`SLICE ${actual+1}/${latest.layers} ${manualFocus===null?'· AUTO':'· INSPECT'}`;
- $('sliceMeta').textContent=`Z = ${(actual/(latest.layers-1)).toFixed(2)} · PHYSICAL GRID ${n}²`;
+ $('sliceMeta').textContent=`Z = ${((actual+.5)/latest.layers).toFixed(2)} · w OUT-OF-PLANE ${latest.evidence.peakW.toFixed(3)} · GRID ${n}²`; 
 }
 function miniTile(ctx,slice,n,x,y,s){const cell=s/n;for(let iy=0;iy<n;iy++)for(let ix=0;ix<n;ix++){
- ctx.fillStyle=rgb(slice.temperature[iy*n+ix]);ctx.fillRect(x+ix*cell,y+(n-iy-1)*cell,cell+.8,cell+.8);
+ ctx.fillStyle=crossColor(slice.w?.[iy*n+ix]||0,latest.evidence.peakW);ctx.fillRect(x+ix*cell,y+(n-iy-1)*cell,cell+.8,cell+.8);
 }}
 function stackCanvas(){const {w,h}=fit(stack),ctx=b;ctx.fillStyle='#08171e';ctx.fillRect(0,0,w,h);boxes=[];if(!latest)return;
  const {layers,n,evidence}=latest,focus=evidence.focus,inspected=manualFocus??focus;
@@ -58,19 +71,19 @@ function stackCanvas(){const {w,h}=fit(stack),ctx=b;ctx.fillStyle='#08171e';ctx.
   ctx.fillStyle='#d6f5e9';ctx.font=`${Math.max(9,Math.min(12,tile*.115))}px ui-monospace,monospace`;ctx.fillText(`d ${info.distance} · ${Math.round(info.score/maxScore*100)}%`,x+3,y+tile-6);
   boxes.push({x,y,s:tile,k});
  }
- $('stackMeta').textContent=`${layers} COUPLED PLANES · ΔZ ${(1/(layers-1)).toFixed(2)}`;
+ $('stackMeta').textContent=`${layers} COUPLED PLANES · ΔZ ${(1/layers).toFixed(3)} · COLOURS = W`; 
 }
 function updateNotes(){if(!latest)return;const e=latest.evidence;
  $('time').textContent=`t = ${latest.time.toFixed(2)}`;
- $('speed').textContent=`RMS FLOW = ${e.kineticRms.toFixed(3)}`;
- $('divergence').textContent=`∇xy·u < ${e.divergenceMax.toExponential(1)}`;
- $('fieldLegend').textContent=`${latest.step} STEPS · ν ${latest.model.nu}`;
+ $('speed').textContent=`3D FLOW RMS ${e.kineticRms.toFixed(3)} · PEAK |W| ${e.peakW.toFixed(3)}`;
+ $('divergence').textContent=`3D ∇·u ${e.divergenceMax.toExponential(1)} · ${e.pressureSweeps} PRESSURE SWEEPS`;
+ $('fieldLegend').textContent=fieldMode==='cross'?`STEP ${latest.step} · +Z AMBER • · −Z CYAN ○`:`STEP ${latest.step} · HEAT: BLUE → ORANGE`;
  const html=$('gears');html.replaceChildren();
- const status=[{type:'observed',text:'ALWAYS ENGAGED: Solve XY circulation ↔ project streamfunction ↔ update heat ↔ enforce walls.'},
- {type:'observed',text:'NEIGHBOUR EXCHANGE: Layer k receives heat and viscous shear from k−1 and k+1, weighted by physical Δz².'},
+ const status=[{type:'observed',text:'3D GEAR TRAIN: X/Y/Z momentum → global pressure correction → conservation → 3D heat advection.'},
+ {type:'observed',text:'CROSS-PLANE EXCHANGE: perpendicular W crosses between XY layers with no-flux at the two end walls.'},
  ...e.signals].slice(0,7);
  for(const item of status){const node=document.createElement('div');node.className='gear'+(item.type==='limit'?' limit':'')+(item.type==='warning'?' warn':'');node.textContent=item.text;html.append(node);}
- $('status').textContent=paused?'PAUSED · WORKER IDLE':'LIVE · WEB WORKER';
+ $('status').textContent=paused?'PAUSED · WORKER IDLE':e.projectionConverged?'LIVE · 3D PRESSURE PROJECTED':'LIVE · REFINING PRESSURE';
 }
 function paint(time){if(time-lastRender>44){mainCanvas();stackCanvas();lastRender=time}requestAnimationFrame(paint)}
 worker.onmessage=ev=>{
@@ -83,5 +96,6 @@ worker.onerror=err=>{$('status').textContent=`WORKER ERROR: ${err.message}`;paus
 $('run').onclick=()=>{paused=!paused;worker.postMessage({type:paused?'pause':'start'});$('run').textContent=paused?'▶ RESUME':'Ⅱ PAUSE';updateNotes()};
 $('seed').onclick=()=>{manualFocus=null;worker.postMessage({type:'reset'});$('auto').textContent='◎ AUTO FOCUS'};
 $('auto').onclick=()=>{manualFocus=null;$('auto').textContent='◎ AUTO FOCUS';mainCanvas()};
+$('view').onclick=()=>{fieldMode=fieldMode==='cross'?'heat':'cross';$('view').textContent=fieldMode==='cross'?'◉ VIEW TEMPERATURE':'◉ VIEW CROSS-FLOW';$('fieldLegend').textContent=fieldMode==='cross'?'W > 0: AMBER • · W < 0: CYAN ○':'TEMPERATURE: COOL → HOT';};
 stack.addEventListener('pointerdown',event=>{const r=stack.getBoundingClientRect(),sx=stack.width/r.width,sy=stack.height/r.height,x=(event.clientX-r.left)*sx,y=(event.clientY-r.top)*sy;for(const b of boxes)if(x>=b.x&&x<b.x+b.s&&y>=b.y&&y<b.y+b.s){manualFocus=b.k;$('auto').textContent='↻ RESTORE AUTO FOCUS';break}});
 requestAnimationFrame(paint);
