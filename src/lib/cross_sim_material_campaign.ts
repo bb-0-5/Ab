@@ -57,7 +57,7 @@ export type TrialRecord={
   thermalPriority:number;
   modeledTargetDeficit:number;
   relativeReduction:number;
-  medium:'still_air';
+  medium:'still_air'|'still_water';
   model:'harmonic_face_steady_conduction_only';
  };
  v6:{flow:number;resistance:number;efficiency:number;pathCount:number;
