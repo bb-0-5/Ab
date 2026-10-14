@@ -322,6 +322,14 @@ const SimulationView = ({
   const previousVisibleVersionRef = useRef<SimVersion>(activeVersion);
   const [webGlError, setWebGlError] = useState<string | null>(null);
   const [handoffStatus,setHandoffStatus] = useState('Generating first artifact');
+  const [liveTrace,setLiveTrace]=useState({
+    stage:'v0' as string,
+    metric:'0 harmonic samples',
+    detail:'Preparing the original 14-stage simulation chain',
+    frames:0,
+    completed:[] as string[],
+    activeReady:false,
+  });
   const [campaignStatus,setCampaignStatus] = useState('Awaiting a V12-derived material need');
   const pendingMaterialTrialRef=useRef<TrialPending|null>(null);
   const stageReceiptsRef = useRef(new Map<string,StageReceipt>());
@@ -472,7 +480,9 @@ const SimulationView = ({
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-    camera.position.z = 5;
+    // V0 spans a 20×20 harmonic field. z=5 only showed its center,
+    // making the first stage look like an unintelligible crop.
+    camera.position.z = activeVersionRef.current==='v0'?27:10;
     cameraRef.current = camera;
 
     let renderer: THREE.WebGLRenderer | null = null;
@@ -661,6 +671,7 @@ const SimulationView = ({
     if (v10Ref.current) {
       v10Ref.current.surfacePoints.visible = upstreamMaterial || activeVersion === 'v10';
       v10Ref.current.channelLines.visible = upstreamMaterial || activeVersion === 'v10';
+      v10Ref.current.setShowThroughPath(activeVersion==='v10');
     }
     if (v11Ref.current) {
       v11Ref.current.shellLines.visible = upstreamMaterial || activeVersion === 'v11';
@@ -864,10 +875,19 @@ const SimulationView = ({
         }
       }
 
-      // V9/V10/V11: Material pipeline (update visuals)
-      if (v9Ref.current) v9Ref.current.update();
-      if (v10Ref.current) v10Ref.current.update();
-      if (v11Ref.current) v11Ref.current.update();
+      // Update the active 3D engine frequently but DO NOT regenerate large
+      // invisible geometry buffers on every frame. Original numeric fields
+      // remain resident. Redrawing all engines 30×/s made mobile tours
+      // take minutes and left V9/V10 innovations effectively unseen.
+      if (v9Ref.current && (
+          currentVersion==='v9'||simulationFrame%15===0
+        ))v9Ref.current.update();
+      if (v10Ref.current && (
+          currentVersion==='v10'||simulationFrame%15===0
+        ))v10Ref.current.update();
+      if (v11Ref.current && (
+          currentVersion==='v11'||simulationFrame%15===0
+        ))v11Ref.current.update();
 
       // V1: Swarm — explores through V9 lattice + V10 mesh material
       if (v1Ref.current) {
@@ -1039,7 +1059,12 @@ const SimulationView = ({
       if (v8Ref.current) {
         const activeZeros = (window as any).riemannActiveZeros || 15;
         const showCriticalLine = (window as any).riemannShowCriticalLine !== false;
-        v8Ref.current.update(opt, mem, tMode, activeZeros, showCriticalLine, compLevel);
+        // V8's expensive prime/zeta field is independent of building flow.
+        // Refresh hidden V8 once per 45 frames, visible V8 every 3 frames;
+        // the actual experiment still runs before its own artifact gate.
+        if((currentVersion==='v8'&&simulationFrame%3===0)
+          ||simulationFrame%45===0)
+          v8Ref.current.update(opt, mem, tMode, activeZeros, showCriticalLine, compLevel);
         (window as any).riemannSubprimes = v8Ref.current.subprimeDiscoveries;
         (window as any).riemannV8Engine = v8Ref.current;
       }
@@ -1410,7 +1435,7 @@ const SimulationView = ({
         const stable = currentVersion === 'v13'
           ? Boolean(v13Ref.current?.getLatestComposite())
           : Boolean(engine?.isStable());
-        if(mayAdvanceStage(currentVersion,stageFrameRef.current,stable,150)){
+        if(mayAdvanceStage(currentVersion,stageFrameRef.current,stable,90)){
           let output:StageObservation|null=null;
           let restartDiscovery=false;
           switch(currentVersion){
@@ -1634,6 +1659,86 @@ const SimulationView = ({
         }
       }
 
+      // Evidence-based LIVE stage readout: update from actual original Sims,
+      // not elapsed animation counters or invented percentages. Keep this
+      // relatively infrequent so mobile CPU time stays on the solvers.
+      if(simulationFrame%45===0){
+        const c=v10Ref.current?.getConnectivity();
+        const v6m=v6Ref.current?.getMetrics();
+        const v12m=v12Ref.current?.getMetrics();
+        const chemistry=v13Ref.current?.getLatestComposite();
+        let metric='',detail='';
+        switch(currentVersion){
+          case 'v0':
+            metric=(v0Ref.current?.nodes.length||0)+' harmonic nodes';
+            detail='Prime/odd field · phase '+(v0Ref.current?.phase||0).toFixed(2)+' rad';
+            break;
+          case 'v1':
+            metric=(v1Ref.current?.nodes.length||0)+' moving particles';
+            detail='Best field fitness '+(v1Ref.current?.gbestFitness||0).toFixed(2);
+            break;
+          case 'v2':
+            metric=(v2Ref.current?.nodes.length||0)+' orthogonal particles';
+            detail='Clusters '+(v2Ref.current?.getClusterCount()||0);
+            break;
+          case 'v3':case 'v4':{
+            const engine=currentVersion==='v3'?v3Ref.current:v4Ref.current;
+            metric=(engine?.getMSTEdges().length||0)+' verified route edges';
+            detail='Shortest network '+(engine?.getMSTLength()||0).toFixed(2)+' units';
+            break;
+          }
+          case 'v5':
+            metric=(v5Ref.current?.getBoundaryPlanes().length||0)+' physical partitions';
+            detail=(v5Ref.current?.getLoops().length||0)+' detected loops';
+            break;
+          case 'v6':
+            metric=(v6m?.pathCount||0)+' simulated flow paths';
+            detail='Modeled efficiency '+((v6m?.efficiency||0)*100).toFixed(1)+'%';
+            break;
+          case 'v7':
+            metric=((v7Ref.current?.acceptedTrials||0)+(v7Ref.current?.rejectedTrials||0))+' tested revisions';
+            detail='Accepted '+(v7Ref.current?.acceptedTrials||0)+
+              ' · rejected '+(v7Ref.current?.rejectedTrials||0);
+            break;
+          case 'v8':
+            metric=(v8Ref.current?.getPrimeSpectrum().gaps.length||0)+' prime gaps';
+            detail='Mathematical probe — not a physical-material claim';
+            break;
+          case 'v9':
+            metric=(v9Ref.current?.cells.filter(x=>x.occupied).length||0)+' lattice sites';
+            detail='Constituents '+(v9Ref.current?.primaryElement||'?')+' / '+
+              (v9Ref.current?.secondaryElement||'?');
+            break;
+          case 'v10':
+            metric=(c?.spanning.y?'OPEN THROUGH-CHANNEL':'NO THROUGH-CHANNEL');
+            detail='Solid '+(c?Math.round(c.solidCount/(c.voidCount+c.solidCount)*100):0)+
+              '% · route '+(v10Ref.current?.throughPath.length||0)+
+              ' voxels · gold = proved path';
+            break;
+          case 'v11':
+            metric=(v11Ref.current?.getPorts().length||0)+' hardware ports';
+            detail=(v11Ref.current?.getBoundaryNodes().length||0)+' boundary points';
+            break;
+          case 'v12':
+            metric='HVAC '+(v12m?.hvacLoadKW||'0')+' kW';
+            detail=(v12m?.roomTemps.length||0)+' thermal zones · iteration '+(v12m?.iteration||0);
+            break;
+          case 'v13':
+            metric=chemistry?chemistry.elements.map(x=>x.element.sym).join(' + '):'No proposed chemistry yet';
+            detail=(chemistry?.properties.meltingPoint||0).toFixed(0)+
+              ' K heuristic melting screen, not verified';
+            break;
+        }
+        const completed=SIMULATION_STAGES.filter(v=>stageReceiptsRef.current.has(v));
+        setLiveTrace({stage:currentVersion,metric,detail,frames:stageFrameRef.current,
+          completed,activeReady:completed.some(s=>s===currentVersion)});
+        (window as any).aboveBoundLiveTrace={
+          stage:currentVersion,metric,detail,completed,
+          frames:stageFrameRef.current,
+          handoff:stageReceiptsRef.current.get(currentVersion)?.id||null,
+          v10PathLength:v10Ref.current?.throughPath.length||0,
+        };
+      }
       controls?.update();
       renderer?.render(scene, camera);
     };
@@ -1789,8 +1894,14 @@ const SimulationView = ({
       cameraRef.current?.position.set(6,13,20);
       orbitRef.current?.target.set(6,0,5);
       orbitRef.current?.update();
-    }else if(prior==='v12'){
-      cameraRef.current?.position.set(0,0,5);
+    }else if(prior!==activeVersion){
+      // Each original engine has different world-space dimensions.
+      // Only reframe on stage change, so user orbit/zoom remains usable.
+      const distance=activeVersion==='v0'?27:
+        (activeVersion==='v1'||activeVersion==='v2')?13:
+        activeVersion==='v9'||activeVersion==='v10'?8:
+        activeVersion==='v13'?10:11;
+      cameraRef.current?.position.set(0,0,distance);
       orbitRef.current?.target.set(0,0,0);
       orbitRef.current?.update();
     }
@@ -1873,6 +1984,7 @@ const SimulationView = ({
     if (v10Ref.current) {
       v10Ref.current.surfacePoints.visible = showMaterial || activeVersion === 'v10';
       v10Ref.current.channelLines.visible = showMaterial || activeVersion === 'v10';
+      v10Ref.current.setShowThroughPath(activeVersion==='v10');
     }
     if (v11Ref.current) {
       v11Ref.current.shellLines.visible = showMaterial || activeVersion === 'v11';
@@ -1905,16 +2017,47 @@ const SimulationView = ({
 
   return (
     <div ref={containerRef} className="w-full h-full rounded-xl overflow-hidden bg-black/40 border border-white/10 relative">
-      <div className="absolute top-2 left-2 z-20 max-w-[90%] pointer-events-none bg-black/80 border border-cyan-500/20 rounded-lg px-3 py-1.5">
-        <div className="text-[9px] font-semibold text-cyan-300">
-          {indexOfStage(activeVersion)<9?'V0–V8 DISCOVERY':'V9–V13 CONSTRUCTION'}
+      <div
+        className="absolute bottom-1 sm:bottom-3 left-1 sm:left-3 right-1 sm:right-3 z-20 pointer-events-none bg-[#041019]/95 border border-cyan-400/45 rounded-lg px-2.5 sm:px-3 py-2 shadow-xl"
+        role="status" aria-label="Live simulation progress and measured stage outputs"
+      >
+        <div className="flex items-center justify-between gap-3 min-w-0">
+          <span className="text-[11px] sm:text-xs text-white font-bold tracking-wide">
+            {activeVersion.toUpperCase()} · {indexOfStage(activeVersion)+1}/14
+            <span className="ml-2 font-medium text-cyan-300">
+              {indexOfStage(activeVersion)<9?'DISCOVERY':'CONSTRUCTION'}
+            </span>
+          </span>
+          <strong className="text-[11px] sm:text-xs text-amber-200 font-mono truncate">
+            {liveTrace.metric}
+          </strong>
         </div>
-        <div className="text-[9px] font-mono text-gray-200 break-words">
-          {handoffStatus}
+        <div className="mt-1.5 flex gap-1" aria-label="Fourteen-stage numerical tour">
+          {SIMULATION_STAGES.map((stage,i)=>(
+            <div
+              key={stage}
+              title={stage.toUpperCase()+
+                (liveTrace.completed.includes(stage)?' completed with artifact':
+                 activeVersion===stage?' currently evaluating':' awaiting experiment')}
+              className={'flex-1 h-2 rounded-sm border '+
+                (activeVersion===stage?'bg-amber-300 border-amber-100':
+                 liveTrace.completed.includes(stage)?'bg-emerald-400 border-emerald-600':
+                 i<9?'bg-cyan-950 border-cyan-800':'bg-slate-700 border-slate-500')}
+            />
+          ))}
         </div>
-        <div className="text-[9px] font-mono text-emerald-300/90 break-words mt-1">
+        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-2 text-[10px] sm:text-[11px] font-mono leading-tight">
+          <span className="text-slate-100">{liveTrace.detail}</span>
+          <span className="text-cyan-200">
+            {liveTrace.completed.length} artifacts · {liveTrace.frames} frames in stage
+          </span>
+        </div>
+        <p className="hidden sm:block text-[10px] mt-1 text-emerald-200/90 truncate" title={campaignStatus}>
           {campaignStatus}
-        </div>
+        </p>
+        <p className="text-[10px] mt-1 text-amber-100/90 truncate" title={handoffStatus}>
+          {handoffStatus}
+        </p>
       </div>
       {webGlError && (
         <div className="absolute inset-0 z-10 bg-[#050505]">
@@ -9052,7 +9195,7 @@ function App() {
         <div className={activeTab === 'house' ? 'lg:col-span-12 space-y-6' : 'lg:col-span-8 space-y-6'}>
           <div
             className={activeTab === 'sim'
-              ? 'relative aspect-video lg:aspect-auto lg:h-[600px]'
+              ? 'relative h-[440px] sm:h-[520px] lg:h-[600px]'
               : 'fixed left-[-10000px] top-0 w-[320px] h-[180px] pointer-events-none opacity-0'}
             aria-hidden={activeTab !== 'sim'}
           >
