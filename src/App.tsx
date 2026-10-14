@@ -43,6 +43,8 @@ import {
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SIMULATION_STAGES,mayAdvanceStage,indexOfStage } from './lib/sim_sequence';
+import {captureRenderArtifact,STAGE_GUIDES,type RenderArtifact} from './lib/render_artifact';
+import {HexfieldArtifactInspector} from './components/HexfieldArtifactInspector';
 import {
   qualifyStage,seedFromDiscovery,rememberStageReceipt,
   rememberFailedGeometryTrial,type StageReceipt,
@@ -289,6 +291,7 @@ const SimulationView = ({
   activeVersion, 
   setActiveVersion, 
   onStatsUpdate,
+  onVisualEvidence,
   currentChainIndex,
   setCurrentChainIndex,
   simulationChain,
@@ -304,6 +307,10 @@ const SimulationView = ({
   activeVersion: SimVersion; 
   setActiveVersion: (v: SimVersion) => void; 
   onStatsUpdate?: (stats: any) => void;
+  onVisualEvidence:(ev:{
+    stage:string;metric:string;detail:string;handoff:string;
+    completed:string[];artifact:RenderArtifact|null;
+  })=>void;
   currentChainIndex: number;
   setCurrentChainIndex: (i: number) => void;
   simulationChain: SimVersion[];
@@ -322,6 +329,11 @@ const SimulationView = ({
   const previousVisibleVersionRef = useRef<SimVersion>(activeVersion);
   const [webGlError, setWebGlError] = useState<string | null>(null);
   const [handoffStatus,setHandoffStatus] = useState('Generating first artifact');
+  const handoffStatusRef=useRef('Generating first artifact');
+  const reportHandoffStatus=(message:string)=>{
+    handoffStatusRef.current=message;
+    setHandoffStatus(message);
+  };
   const [liveTrace,setLiveTrace]=useState({
     stage:'v0' as string,
     metric:'0 harmonic samples',
@@ -333,6 +345,7 @@ const SimulationView = ({
   const [campaignStatus,setCampaignStatus] = useState('Awaiting a V12-derived material need');
   const pendingMaterialTrialRef=useRef<TrialPending|null>(null);
   const stageReceiptsRef = useRef(new Map<string,StageReceipt>());
+  const frozenRenderArtifactsRef=useRef(new Map<string,RenderArtifact>());
   const handoffContextRef = useRef('');
   const lastConstructionTrialRef = useRef<{discovery:string;seed:number;modelOnly:true}|null>(null);
   
@@ -711,6 +724,7 @@ const SimulationView = ({
         // previous tour cannot silently satisfy the current dependency chain.
         if(currentVersion==='v0'){
           stageReceiptsRef.current.clear();
+          frozenRenderArtifactsRef.current.clear();
           lastConstructionTrialRef.current=null;
         }
         // V8's completed discovery is an INPUT to constructing a new V9
@@ -1410,6 +1424,7 @@ const SimulationView = ({
         if(context!==handoffContextRef.current){
           handoffContextRef.current=context;
           stageReceiptsRef.current.clear();
+          frozenRenderArtifactsRef.current.clear();
           lastConstructionTrialRef.current=null;
           // An altered goal is a new experiment. Never use outputs created
           // under the previous goal to skip any of its prerequisite stages.
@@ -1554,7 +1569,7 @@ const SimulationView = ({
                     v9Ref.current?.compositeField||undefined,
                     axis,JSON.stringify([context,stageReceiptsRef.current.get('v9')?.id]),
                   );
-                  setHandoffStatus('V10 '+result.reason+
+                  reportHandoffStatus('V10 '+result.reason+
                     ' · tested '+result.evaluated+' real voxel candidates');
                   conn=e.getConnectivity();
                   if(result.exhausted&&!result.recovered){
@@ -1575,7 +1590,7 @@ const SimulationView = ({
                     stageFrameRef.current=0;
                     restartDiscovery=true;
                     setCurrentChainIndex(0);
-                    setHandoffStatus(
+                    reportHandoffStatus(
                       'V10 failed: 3 geometry rounds checked; revisiting discovery for a new V9 lattice',
                     );
                   }
@@ -1655,9 +1670,14 @@ const SimulationView = ({
           );
           if(decision.ok&&decision.receipt){
             stageReceiptsRef.current.set(currentVersion,decision.receipt);
+            const frozen=captureRenderArtifact(currentVersion,{
+              v5:v5Ref.current,v9:v9Ref.current,
+              v10:v10Ref.current,v13:v13Ref.current,
+            },decision.receipt.id);
+            if(frozen)frozenRenderArtifactsRef.current.set(currentVersion,frozen);
             rememberStageReceipt(decision.receipt);
             (window as any).simConstructionReceipt=decision.receipt;
-            setHandoffStatus(
+            reportHandoffStatus(
               currentVersion==='v6'&&v6Ref.current?.getMetrics().pathCount===0
                 ?'V6 blockage measured (zero flow) → V7 must examine failure'
                 :'Created '+decision.receipt.id+' · model only',
@@ -1666,10 +1686,10 @@ const SimulationView = ({
             stageFrameRef.current=0;
             setCurrentChainIndex(nextIndex);
           }else if(stageFrameRef.current%60===0){
-            setHandoffStatus(decision.reason);
+            handoffStatusRef.current=decision.reason;setHandoffStatus(decision.reason);
           }
         }else if(stageFrameRef.current%120===0){
-          setHandoffStatus(
+          reportHandoffStatus(
             currentVersion.toUpperCase()+': simulating until output is ready',
           );
         }
@@ -1750,6 +1770,17 @@ const SimulationView = ({
         const completed=SIMULATION_STAGES.filter(v=>stageReceiptsRef.current.has(v));
         setLiveTrace({stage:currentVersion,metric,detail,frames:stageFrameRef.current,
           completed,activeReady:completed.some(s=>s===currentVersion)});
+        const existing=stageReceiptsRef.current.get(currentVersion);
+        const snapshot=existing
+          ?frozenRenderArtifactsRef.current.get(currentVersion)||null
+          :captureRenderArtifact(currentVersion,{
+            v5:v5Ref.current,v9:v9Ref.current,
+            v10:v10Ref.current,v13:v13Ref.current,
+          });
+        onVisualEvidence({
+          stage:currentVersion,metric,detail,handoff:handoffStatusRef.current,
+          completed,artifact:snapshot,
+        });
         (window as any).aboveBoundLiveTrace={
           stage:currentVersion,metric,detail,completed,
           frames:stageFrameRef.current,
@@ -8747,6 +8778,12 @@ function App() {
   const [activeOptimizer, setActiveOptimizer] = useState<OptimizerType>(initialSimState.opt);
   const [thermalMode, setThermalMode] = useState<ThermalMode>(initialSimState.mode);
   const [activeVersion, setActiveVersion] = useState<SimVersion>(initialSimState.version);
+  const [visualEvidence,setVisualEvidence]=useState<{
+    stage:string;metric:string;detail:string;handoff:string;
+    completed:string[];artifact:RenderArtifact|null;
+  }>({stage:initialSimState.version,metric:'Preparing simulation',
+     detail:'Reading numerical models',handoff:'No recorded artifact',
+     completed:[],artifact:null});
   const [currentChainIndex, setCurrentChainIndex] = useState(initialSimState.chainIdx);
   const [compressionLevel, setCompressionLevel] = useState(1);
   const [discoveries, setDiscoveries] = useState<any[]>([]);
@@ -9223,6 +9260,7 @@ function App() {
                 activeVersion={activeVersion}
                 setActiveVersion={(v) => { setAutoTransition(false); setActiveVersion(v); }}
                 onStatsUpdate={setSimStats}
+                onVisualEvidence={setVisualEvidence}
                 currentChainIndex={currentChainIndex}
                 setCurrentChainIndex={setCurrentChainIndex}
                 simulationChain={simulationChain}
@@ -9239,10 +9277,18 @@ function App() {
               {/* Task Description Overlay */}
               <div className="absolute top-20 left-4 md:top-6 md:left-6 pointer-events-none z-10">
                 <div className="bg-black/80 backdrop-blur-md border border-white/10 p-4 rounded-xl max-w-xs shadow-2xl">
-                  <div className="text-[8px] font-black text-cyan-500 uppercase tracking-widest mb-1">Current Task</div>
-                  <div className="text-xs font-bold text-white uppercase tracking-tight mb-2">
-                    {activeTaskDescription}
+                  <div className="text-[9px] font-bold text-cyan-300 uppercase tracking-widest mb-1">
+                    Current experiment · {activeVersion.toUpperCase()}
                   </div>
+                  <div className="text-sm font-bold text-white mb-1">
+                    {STAGE_GUIDES[activeVersion]?.name||activeTaskDescription}
+                  </div>
+                  <p className="text-[11px] text-slate-200 leading-snug">
+                    {STAGE_GUIDES[activeVersion]?.action}
+                  </p>
+                  <p className="text-[10px] text-amber-200 mt-1">
+                    Watch: {STAGE_GUIDES[activeVersion]?.watch}
+                  </p>
                   <div className="flex items-center gap-2">
                     <div className="h-1 flex-1 bg-white/5 rounded-full overflow-hidden">
                       <motion.div 
@@ -9517,6 +9563,19 @@ function App() {
                 </>
               )}
             </div>
+          {activeTab === 'sim' && (
+            <HexfieldArtifactInspector
+              stage={activeVersion}
+              metric={visualEvidence.stage===activeVersion
+                ?visualEvidence.metric:'Switching simulation…'}
+              detail={visualEvidence.stage===activeVersion
+                ?visualEvidence.detail:'Waiting for live evidence'}
+              handoff={visualEvidence.handoff}
+              completed={visualEvidence.completed}
+              artifact={visualEvidence.stage===activeVersion
+                ?visualEvidence.artifact:null}
+            />
+          )}
           {activeTab !== 'sim' && (activeTab === 'trajectory' ? (
             <IntelligenceTrajectory 
               log={discoveryLog} 

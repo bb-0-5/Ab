@@ -26,7 +26,7 @@
     "test:weather": "tsx scripts/hourly-weather-smoke.ts",
     "test:site-weather": "tsx scripts/site-weather-parity-smoke.ts",
     "site-context:import": "tsx scripts/import-site-context.ts",
-    "test:all": "npm run lint && npm run test:sims && npm run test:browser-house && npm run test:v12-memory && npm run test:v13-needs && npm run test:v7-feedback && npm run test:full-sim-sequence && npm run test:chain-trace && npm run test:handoffs && npm run test:recovery-needs && npm run test:material-campaign && npm run test:coupled-conduction && npm run test:v10-connected && npm run test:material-pipeline && npm run test:material-recipes && npm run test:sim-checkpoint && npm run test:optimizer && npm run test:site && npm run test:existing-home && npm run test:hvac-cycle && npm run test:adaptive-wall && npm run test:height-airflow && npm run test:airflow-network && npm run test:whole-house && npm run test:coupled-site && npm run test:one-page && npm run test:physics-validation && npm run test:site-context && npm run test:weather && npm run test:site-weather && npm run test:shared-site-model && npm run test:panel-coupling && npm run test:evidence-sources && npm run test:local && npm run test:campaign && npm run test:rf-export && npm run test:autonomy && npm run test:discovery-graph && npm run test:warmstart && npm run test:discoveries && npm run test:fabrication && npm run test:worker && npm run build",
+    "test:all": "npm run lint && npm run test:sims && npm run test:browser-house && npm run test:v12-memory && npm run test:v13-needs && npm run test:v7-feedback && npm run test:full-sim-sequence && npm run test:chain-trace && npm run test:hexfield-artifacts && npm run test:handoffs && npm run test:recovery-needs && npm run test:material-campaign && npm run test:coupled-conduction && npm run test:v10-connected && npm run test:material-pipeline && npm run test:material-recipes && npm run test:sim-checkpoint && npm run test:optimizer && npm run test:site && npm run test:existing-home && npm run test:hvac-cycle && npm run test:adaptive-wall && npm run test:height-airflow && npm run test:airflow-network && npm run test:whole-house && npm run test:coupled-site && npm run test:one-page && npm run test:physics-validation && npm run test:site-context && npm run test:weather && npm run test:site-weather && npm run test:shared-site-model && npm run test:panel-coupling && npm run test:evidence-sources && npm run test:local && npm run test:campaign && npm run test:rf-export && npm run test:autonomy && npm run test:discovery-graph && npm run test:warmstart && npm run test:discoveries && npm run test:fabrication && npm run test:worker && npm run build",
     "test:shared-site-model": "tsx scripts/shared-site-model-smoke.ts",
     "test:panel-coupling": "tsx scripts/panel-coupling-smoke.ts",
     "test:evidence-sources": "tsx scripts/evidence-sources-smoke.ts",
@@ -53,7 +53,8 @@
     "test:recovery-needs": "tsx scripts/sim-recovery-material-needs-smoke.ts",
     "test:material-campaign": "tsx scripts/cross-sim-material-campaign-smoke.ts",
     "test:coupled-conduction": "tsx scripts/coupled-conduction-smoke.ts",
-    "test:chain-trace": "tsx scripts/simulation-chain-trace.ts"
+    "test:chain-trace": "tsx scripts/simulation-chain-trace.ts",
+    "test:hexfield-artifacts": "tsx scripts/hexfield-artifact-visual-smoke.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
