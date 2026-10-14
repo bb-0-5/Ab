@@ -38,7 +38,7 @@ function showMode(mode){state.mode=mode;state.time=0;state.depth=.5;$('slice').v
  setText('axisLabel',mode==='cube'?'X–Y PLANE':'T² PERIODIC DOMAIN');
  setText('methodInfo',mode==='cube'?'3-D Boussinesq · Ra 20,000':'Taylor–Green vortex · T²');
  setText('geometryInfo',mode==='cube'?'Impermeable insulating baffle':'Edges wrap periodically');
- setText('flowNote',mode==='cube'?'3D MODEL VELOCITY SLICE':'EXACT ANALYTICAL VELOCITY');
+ setText('flowNote',mode==='cube'?'ARROWS = WATER VELOCITY · DOTS = TRACERS':'ARROWS = VELOCITY · DOTS = TRACERS');
  setText('lowLegend',mode==='cube'?'COOL':'NEGATIVE VORTICITY');
  setText('highLegend',mode==='cube'?'HOT':'POSITIVE VORTICITY');
  setText('modeHelp',mode==='cube'
@@ -94,9 +94,11 @@ function drawGrid(view){const {x,y,size}=view;const n=state.mode==='cube'?state.
  for(let gy=0;gy<count;gy++)for(let gx=0;gx<count;gx++){
   const px=(gx+.5)/count,py=(gy+.5)/count,q=vector(px,py);if(q.solid)continue;
   const speed=Math.hypot(q.vx,q.vy);if(speed<.006)continue;
-  const len=clamp(speed*(state.mode==='cube'?130:18)*size/500,3,size/count*.44);
+  const relative=speed/(state.mode==='cube'?.14:.9);
+  const len=clamp(relative*size/count*.62,size/count*.18,size/count*.72);
+  const head=Math.max(3,Math.min(5,size/100));
   const a=Math.atan2(-q.vy,q.vx),sx=x+px*size,sy=y+(1-py)*size;
-  const dx=Math.cos(a)*len,dy=Math.sin(a)*len;ctx.strokeStyle='rgba(232,255,248,.70)';ctx.fillStyle='rgba(232,255,248,.70)';ctx.beginPath();ctx.moveTo(sx-dx*.35,sy-dy*.35);ctx.lineTo(sx+dx*.65,sy+dy*.65);ctx.stroke();ctx.beginPath();ctx.moveTo(sx+dx*.65,sy+dy*.65);ctx.lineTo(sx+dx*.65-Math.cos(a-.65)*3.4,sy+dy*.65-Math.sin(a-.65)*3.4);ctx.lineTo(sx+dx*.65-Math.cos(a+.65)*3.4,sy+dy*.65-Math.sin(a+.65)*3.4);ctx.fill();
+  const dx=Math.cos(a)*len,dy=Math.sin(a)*len;ctx.strokeStyle='rgba(240,255,251,.9)';ctx.fillStyle='rgba(240,255,251,.9)';ctx.beginPath();ctx.moveTo(sx-dx*.35,sy-dy*.35);ctx.lineTo(sx+dx*.65,sy+dy*.65);ctx.stroke();ctx.beginPath();ctx.moveTo(sx+dx*.65,sy+dy*.65);ctx.lineTo(sx+dx*.65-Math.cos(a-.65)*head,sy+dy*.65-Math.sin(a-.65)*head);ctx.lineTo(sx+dx*.65-Math.cos(a+.65)*head,sy+dy*.65-Math.sin(a+.65)*head);ctx.fill();
  }
  ctx.strokeStyle='rgba(195,239,230,.68)';ctx.lineWidth=Math.max(1,canvas.width/650);ctx.strokeRect(x+.5,y+.5,size-1,size-1);
 }
