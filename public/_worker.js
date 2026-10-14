@@ -1,5 +1,7 @@
-// Cloudflare Pages advanced-mode worker. Deliberately return HTTP 404
-// for every URL, including /, old routes, and old asset paths.
-// The original application source is retained in GitHub but not served.
-const page="<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex,nofollow,noarchive\"><title>404 — Not Found</title><style>*{box-sizing:border-box}html,body{height:100%;margin:0}body{display:grid;place-items:center;background:#101010;color:#ededed;font:16px system-ui,-apple-system,sans-serif}main{text-align:center;padding:24px}h1{font-size:72px;letter-spacing:-3px;margin:0 0 4px}p{color:#999;margin:0}</style></head><body><main><h1>404</h1><p>Not Found</p></main></body></html>";
-export default {async fetch(){return new Response(page,{status:404,headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store, max-age=0','x-robots-tag':'noindex, nofollow, noarchive'}})}};
+// Cloudflare Pages advanced-mode worker. Serve original V0–V13 assets
+// and the independent local-first fluid research laboratory. No remote solver.
+export default {
+  async fetch(request, env) {
+    return env.ASSETS.fetch(request);
+  },
+};
