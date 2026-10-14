@@ -83,8 +83,8 @@ export class V0CompressionEngine {
     // for ~1,257 numerical frames (~42 seconds at 30 FPS), although the
     // harmonic lattice had already produced usable intensity observations.
     // An artifact-ready field, not elapsed animation turns, starts V1;
-    // the separate tour dwell gate still gives V0 at least 150 frames.
-    return this.phase >= 1.5 && this.nodes.length > 0
+    // the separate tour dwell gate still gives V0 a visible evidence-collection interval.
+    return this.phase >= 0.9 && this.nodes.length > 0
       && this.nodes.some(n=>Number.isFinite(n.intensity)
         && Math.abs(n.intensity)>1e-5);
   }
