@@ -1718,7 +1718,7 @@ const SimulationView = ({
         }
         const completed=SIMULATION_STAGES.filter(v=>stageReceiptsRef.current.has(v));
         setLiveTrace({stage:currentVersion,metric,detail,frames:stageFrameRef.current,
-          completed,activeReady:completed.includes(currentVersion)});
+          completed,activeReady:completed.some(s=>s===currentVersion)});
         (window as any).aboveBoundLiveTrace={
           stage:currentVersion,metric,detail,completed,
           frames:stageFrameRef.current,
