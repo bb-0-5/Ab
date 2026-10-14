@@ -138,6 +138,7 @@ export class V5Engine {
       `e:${v3Edges.length}:${v4Edges.length}`,
     ].join('|');
     if (signature === this._captureSignature) return;
+    const wasCaptured=this._captured;
     this._captureSignature = signature;
     this._optimizer = optimizer;
 
@@ -173,7 +174,11 @@ export class V5Engine {
     this._buildAllGeometry();
 
     this._captured = true;
-    this._framesSinceCapture = 0;
+    // Inputs evolve every frame. Resetting readiness after EVERY valid
+    // recapture made the route/membrane stage permanently unstable. This
+    // counts consecutive frames of *usable* measured geometry instead of
+    // requiring search optimizers to stop moving altogether.
+    if(!wasCaptured)this._framesSinceCapture=0;
   }
 
   // ── LEGACY LOOP DETECTION (for V6/V7 backward compat) ──
@@ -739,7 +744,10 @@ export class V5Engine {
     }
   }
 
-  isStable() { return this._captured && this._framesSinceCapture > 5; }
+  isStable() {
+    return this._captured && this._framesSinceCapture>5
+      &&this.boundaryPlanes.some(p=>Number.isFinite(p.area)&&p.area>0);
+  }
 
   // ── V6/V7 INTERFACE ──
 
