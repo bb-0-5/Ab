@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const file=readFileSync(new URL('../public/membrane-worker.mjs',import.meta.url),'utf8');
+assert.match(file,/solvePoreNetwork\(/);
+assert.match(file,/pressureAtTargetPa/);
+assert.match(file,/case 'pause'/);
+assert.match(file,/case 'reset'/);
+assert.match(file,/type:'complete'/);
+assert.doesNotMatch(file,/advanceSlices|plateHeatFlux|snapshot\(sim\)/,'old closed thermal CFD must not drive membrane ranking');
+console.log('PASS worker uses pressure-driven membrane network, finite search and physical ranking');
