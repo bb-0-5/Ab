@@ -90,7 +90,7 @@ showOriginal(originalV10?
  'NO CURRENT ORIGINAL V10 MASK · screening generated configurations (run Original V0–V13 to export it)');
 function show(status){$('status').textContent=status;}
 function renderUpdate(msg){
- if(msg.current){current=msg.current;inspected=null;dye=null;}
+ if(msg.current){current=msg.current;inspected=null;dye=msg.transport||null;}
  if(msg.ranking){ranking=msg.ranking;table();}
  if('winner' in msg)winner=msg.winner;
  const r=msg.focus;
