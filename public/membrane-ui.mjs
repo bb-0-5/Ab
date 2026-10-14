@@ -2,24 +2,35 @@
 import {readSelectedV10PressureGeometry,storePressureFeedback} from './v10-pressure-handoff.mjs';
 const $=id=>document.getElementById(id);
 const main=$('mainCanvas'),stack=$('stackCanvas'),ctx=main.getContext('2d'),ctx2=stack.getContext('2d');
-const worker=new Worker('/membrane-worker.mjs?v=constraint-steering-r7',{type:'module'});
+const worker=new Worker('/membrane-worker.mjs?v=membrane-chronology-r8',{type:'module'});
 const originalV10=readSelectedV10PressureGeometry();
 let current=null,ranking=[],winner=null,last=null,inspected=null,paused=false,complete=false;
-let display='pressure',frames=0,layout=[];
+let display='dye',frames=0,layout=[],dye=null;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const fmt=(x,digits=2)=>Number.isFinite(x)?x.toFixed(digits):'—';
 function fit(canvas){const rect=canvas.getBoundingClientRect(),d=Math.min(2,window.devicePixelRatio||1);const w=Math.max(1,Math.round(rect.width*d)),h=Math.max(1,Math.round(rect.height*d));if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}return{w,h};}
 function palette(t){t=clamp(t,0,1);const stops=[[12,46,83],[24,109,155],[36,175,184],[145,222,184],[248,206,104],[252,114,61]];const a=Math.min(4,Math.floor(t*5)),f=t*5-a;const c=stops[a].map((q,i)=>Math.round(q*(1-f)+stops[a+1][i]*f));return `rgb(${c.join(',')})`;}
+function dyeColor(c){const t=clamp(c,0,1);return `rgb(${Math.round(11+172*t)},${Math.round(46+209*t)},${Math.round(71+135*t)})`;}
 function cell(n,i,j,k){return (k*n+j)*n+i;}
 function maxFlux(dat){let max=0;for(const a of [dat.fluxX,dat.fluxY,dat.fluxZ])for(const q of a)max=Math.max(max,Math.abs(q));return max;}
 function renderPlane(c,dat,k,x,y,s,details=false){
  const n=dat.n,cellSize=s/n,fmax=maxFlux(dat);
  for(let j=0;j<n;j++)for(let i=0;i<n;i++){
   const q=cell(n,i,j,k),px=x+i*cellSize,py=y+(n-1-j)*cellSize;
-  c.fillStyle=dat.solid[q]?'#061016':!dat.active[q]?'#29323c':display==='pressure'?palette(dat.pressure[q]):palette(Math.abs(dat.fluxY[q])/Math.max(fmax,1e-25));
+  // Actual material boundaries: copper = SOLID, dark blue = water,
+  // slate = disconnected void; dye travels only in connected water.
+  c.fillStyle=dat.solid[q]?'#b88c5e':!dat.active[q]?'#344758':
+   display==='dye'?dyeColor(dye?.concentration?.[q]||0):
+   display==='pressure'?palette(dat.pressure[q]):palette(Math.abs(dat.fluxY[q])/Math.max(fmax,1e-25));
   c.fillRect(px,py,cellSize+0.3,cellSize+0.3);
+  if(dat.solid[q]&&cellSize>5&&(i===0||j===0||i===n-1||j===n-1||
+    !dat.solid[q-1]||!dat.solid[q+1]||!dat.solid[q-n]||!dat.solid[q+n])){
+   c.strokeStyle='#ffe5ad';c.lineWidth=Math.max(.7,cellSize/25);
+   c.strokeRect(px+.3,py+.3,Math.max(0,cellSize-.5),Math.max(0,cellSize-.5));
+  }
  }
  if(!details){c.strokeStyle='#a9eada77';c.lineWidth=1;c.strokeRect(x,y,s,s);return;}
+ if(display==='dye')return;
  const step=Math.max(1,Math.ceil(n/11));
  for(let j=0;j<n;j+=step)for(let i=0;i<n;i+=step){
   const q=cell(n,i,j,k);if(!dat.active[q])continue;
@@ -49,7 +60,7 @@ function paint(){
  const size=Math.min(w*.83,h*.83),x=(w-size)/2,y=(h-size)/2;
  renderPlane(ctx,current,selected,x,y,size,true);
  ctx.font=`${Math.max(12,Math.min(17,w*.027))}px ui-monospace,monospace`;
- ctx.fillStyle='#d3f5ea';ctx.textAlign='left';ctx.fillText(`z = ${selected+1}/${current.layers} · PRESSURE ${display==='pressure'?'FIELD':'FLOW'} `,Math.max(6,x),Math.min(h-8,y+size+25));
+ ctx.fillStyle='#d3f5ea';ctx.textAlign='left';ctx.fillText(`z = ${selected+1}/${current.layers} · ${display==='dye'?'DYE / TIME':display==='pressure'?'PRESSURE':'FLOW'} `,Math.max(6,x),Math.min(h-8,y+size+25));
  const gap=Math.min(16,sw*.02),cols=3,rows=Math.ceil(current.layers/cols),tile=Math.min((sw-44-gap*2)/cols,(sh-60-gap*(rows-1))/rows);
  const left=(sw-cols*tile-2*gap)/2,top=(sh-rows*tile-gap*(rows-1))/2;
  layout=[];
@@ -65,9 +76,9 @@ function paint(){
 }
 function table(){const root=$('ranking');root.replaceChildren();
  const head=document.createElement('div');head.className='head';
- for(const label of ['GEOMETRY','FLOW / OPEN','SOLID','REQUIRED ΔP']){const item=document.createElement('span');item.textContent=label;head.append(item)}root.append(head);
+ for(const label of ['GEOMETRY','FLOW / OPEN','SOLID','REQUIRED ΔP','DYE ARRIVAL']){const item=document.createElement('span');item.textContent=label;head.append(item)}root.append(head);
  for(const r of ranking){const row=document.createElement('div');row.className=r.config&&winner?.name===r.name?'winner':'';
- const texts=[r.name,r.converged?`${fmt((r.relativeOpen||0)*100,1)}%`:'SOLVER FAILED',`${fmt(r.solidFraction*100,0)}%`,r.pressureAtTargetPa===null?'BLOCKED':`${fmt(r.pressureAtTargetPa,3)} Pa`];
+ const texts=[r.name,r.converged?`${fmt((r.relativeOpen||0)*100,1)}%`:'SOLVER FAILED',`${fmt(r.solidFraction*100,0)}%`,r.pressureAtTargetPa===null?'BLOCKED':`${fmt(r.pressureAtTargetPa,3)} Pa`,r.breakthroughTimeSec===null||r.breakthroughTimeSec===undefined?'NOT REACHED':`${fmt(r.breakthroughTimeSec,1)} s`];
  for(const [i,t]of texts.entries()){const el=document.createElement('span');el.textContent=t;if(i===0)el.title=r.reason;row.append(el)}root.append(row);}
 }
 function showOriginal(status){
@@ -79,7 +90,7 @@ showOriginal(originalV10?
  'NO CURRENT ORIGINAL V10 MASK · screening generated configurations (run Original V0–V13 to export it)');
 function show(status){$('status').textContent=status;}
 function renderUpdate(msg){
- if(msg.current){current=msg.current;inspected=null;}
+ if(msg.current){current=msg.current;inspected=null;dye=null;}
  if(msg.ranking){ranking=msg.ranking;table();}
  if('winner' in msg)winner=msg.winner;
  const r=msg.focus;
@@ -101,6 +112,15 @@ worker.onmessage=e=>{
   // Transfer locally stored original V10 geometry before launching the solver.
   worker.postMessage({type:'source-v10',receipt:originalV10?.receipt||null});
   worker.postMessage({type:'start'});show('RUNNING · LOCAL PRESSURE SOLVER');
+  }else if(data.type==='dye-step'){
+  dye=data.transport||null;
+  if(dye){
+   $('time').textContent=`DYE t=${fmt(dye.timeSec,1)} s · STEP ${dye.step}`;
+   $('status').textContent='CHRONOLOGICAL DYE TRANSPORT · COMPUTED';
+   $('frontProgress').textContent=`${data.label||'MEMBRANE'} · INLET DYE → ACTUAL 3D PORES → OUTLET · ${dye.step} CONSERVATIVE STEPS · t=${fmt(dye.timeSec,1)} s · OUTLET ${fmt(dye.outletFraction*100,1)}% · ${dye.breakthroughTimeSec===null?'NOT ARRIVED YET':'FIRST 1% ARRIVAL '+fmt(dye.breakthroughTimeSec,1)+' s'}`;
+   $('dyeStats').textContent=`DYE MASS BALANCE ${dye.injectedM3>0?fmt(100*dye.balanceM3/dye.injectedM3,6):'0.000000'}% · STEPWISE MODEL · PRESSURE HELD STEADY`;
+   paint();
+  }
  }else if(data.type==='source-progress'){showOriginal(data.message);
  }else if(data.type==='source-evidence'){
   const x=data.source;
@@ -132,7 +152,7 @@ $('run').onclick=()=>{if(complete){worker.postMessage({type:'reset'});complete=f
  paused=!paused;worker.postMessage({type:paused?'pause':'resume'});$('run').textContent=paused?'▶ CONTINUE':'Ⅱ PAUSE';};
 $('seed').onclick=()=>{worker.postMessage({type:'reset'});paused=false;complete=false;$('run').textContent='Ⅱ PAUSE';};
 $('auto').onclick=()=>{inspected=null;paint();};
-$('view').onclick=()=>{display=display==='pressure'?'flow':'pressure';$('view').textContent=display==='pressure'?'◉ SHOW SPEED':'◉ SHOW PRESSURE';paint();};
+$('view').onclick=()=>{display=display==='dye'?'pressure':display==='pressure'?'flow':'dye';$('view').textContent=display==='dye'?'◉ SHOW PRESSURE':display==='pressure'?'◉ SHOW FLOW':'◉ SHOW DYE';paint();};
 stack.addEventListener('pointerdown',e=>{const box=stack.getBoundingClientRect(),x=(e.clientX-box.left)*stack.width/box.width,y=(e.clientY-box.top)*stack.height/box.height;
  const hit=layout.find(r=>x>=r.x&&x<=r.x+r.s&&y>=r.y&&y<=r.y+r.s);if(hit){inspected=hit.k;paint();}});
 new ResizeObserver(()=>paint()).observe(main);
