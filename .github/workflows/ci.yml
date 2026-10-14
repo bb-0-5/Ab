@@ -50,5 +50,9 @@ jobs:
       - name: Verify primary experience route and original V0–V13 access
         run: node scripts/home-routing-smoke.mjs
 
-      - name: Verify live V10 field streaming and adaptive screening
+      - name: Verify pressure-driven membrane physics against analytic tube flow
+        run: node scripts/pressure-network-smoke.mjs
+      - name: Verify bounded autonomous pressure-driven membrane campaign
         run: node scripts/membrane-visibility-smoke.mjs
+      - name: Verify membrane worker avoids legacy sealed-cavity ranking
+        run: node scripts/membrane-worker-smoke.mjs
