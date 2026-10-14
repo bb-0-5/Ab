@@ -23,7 +23,6 @@ export interface V1Node {
   pbestFitness: number;       // Best fitness ever found
   path: THREE.Vector3[];
   color: THREE.Color;
-  magneticSusceptibility: number;
 }
 
 export interface Stabilization {
@@ -52,7 +51,7 @@ export interface MaterialField {
 export class V1Engine {
   nodes: V1Node[] = [];
   maxNodes: number = 80;
-  pathLength: number = 40;
+  pathLength: number = 12;
   scene: THREE.Scene;
   points: THREE.Points;
   lines: THREE.LineSegments;
@@ -97,7 +96,7 @@ export class V1Engine {
     const lineMaterial = new THREE.LineBasicMaterial({
       vertexColors: true,
       transparent: true,
-      opacity: 0.3
+      opacity: 0.16
     });
     this.lines = new THREE.LineSegments(lineGeometry, lineMaterial);
     this.scene.add(this.lines);
@@ -311,8 +310,7 @@ export class V1Engine {
         fitness,
         pbestFitness: fitness,
         path: [],
-        color: this.getCMYColor(i, 0),
-        magneticSusceptibility: Math.random()
+        color: this.getCMYColor(i, 0)
       });
 
       if (fitness > this.gbestFitness) {
@@ -326,6 +324,7 @@ export class V1Engine {
     return this._stableFrames >= this._requiredStableFrames;
   }
 
+  /** PSO velocity-square convergence proxy, NOT physical kinetic energy. */
   getKineticEnergy(): number {
     let ke = 0;
     for (const node of this.nodes) ke += node.velocity.lengthSq();
@@ -563,8 +562,7 @@ export class V1Engine {
       pbest: new THREE.Vector3(...s.p),
       fitness: s.f || 0, pbestFitness: s.f || 0,
       path: [],
-      color: new THREE.Color(s.c),
-      magneticSusceptibility: Math.random()
+      color: new THREE.Color(s.c)
     }));
   }
 
