@@ -25,6 +25,8 @@ jobs:
         run: node scripts/v10-membrane-smoke.mjs
       - name: Check CFD masks match V10MeshEngine
         run: npx tsx scripts/v10-membrane-parity-smoke.ts
+      - name: Reject false-positive membrane discoveries
+        run: node scripts/discovery-gates-smoke.mjs
       - name: Verify restored V0–V13 frontend and static bundle
         run: |
           test -f dist/index.html
