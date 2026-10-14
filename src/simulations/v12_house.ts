@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type {V13MaterialRequirement} from './v13_material';
 import {
   optimizeRoomLifecycle as runRoomLifecycleOptimization,
   type RoomLifecycleDesign,
@@ -2970,6 +2971,49 @@ export class V12HouseEngine {
   // ═══════════════════════════════════════════════════════════════
   // PUBLIC API
   // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Produce a constituent-material request from the actual house model.
+   * Choose the worst current wall U-value, then use its strongest thermal
+   * resistance layer as a same-thickness reference (k in W/(m·K)).
+   * This is a SCREENING target, not a chemical recipe, a whole-wall U-value
+   * equivalence, or permission to substitute an untested material.
+   */
+  getMaterialRequirement():V13MaterialRequirement|null{
+    if(!this._stable||!this._rooms.length)return null;
+    const rooms=this._rooms.map(room=>({room,wall:WALL_LIBRARY[room.wallType]}))
+      .filter((x):x is {room:RoomDef;wall:WallAssembly}=>Boolean(x.wall))
+      .sort((a,b)=>b.wall.totalU-a.wall.totalU);
+    const selected=rooms[0];
+    if(!selected)return null;
+    const layers=selected.wall.layers.filter(l=>
+      Number.isFinite(l.conductivity)&&l.conductivity>0
+      &&Number.isFinite(l.thickness)&&l.thickness>0);
+    if(!layers.length)return null;
+    const bottleneck=[...layers].sort((a,b)=>
+      b.thickness/b.conductivity-a.thickness/a.conductivity)[0];
+    const climate=CLIMATE_DATA[this._climate];
+    if(!climate)return null;
+    const temperatures=[
+      climate.winterDesign,climate.summerDesign,this._outsideTemp,
+      selected.room.targetTemp,
+    ].filter(Number.isFinite);
+    const minTemperatureK=Math.min(...temperatures)+273.15;
+    const maxTemperatureK=Math.max(...temperatures)+273.15;
+    if(minTemperatureK<0||maxTemperatureK>20_000)return null;
+    return {
+      id:'v12:wall-constituent',source:'v12',medium:'air',
+      minTemperatureK,maxTemperatureK,
+      purpose:'thermal_survival',
+      // This k is for the reference layer only; a V10 porous assembly
+      // can have a different effective conductivity from bulk chemistry.
+      maxThermalConductivityWmK:bottleneck.conductivity,
+      basis:'V12 modeled worst-U room '+selected.room.id+
+        ', wall '+selected.room.wallType+
+        ', reference layer '+bottleneck.material+
+        ' at '+bottleneck.thickness.toFixed(3)+'m; constituent-only screen',
+    };
+  }
 
   getRooms(): RoomDef[] { return this._rooms; }
   getEskyZones(): EskyZone[] { return this._eskyZones; }
