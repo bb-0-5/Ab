@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { CompositeField } from './v9_lattice';
-import {screenVoxelChannels,type VoxelChannelEvidence} from '../lib/voxel_connectivity';
+import {screenVoxelChannels,traceVoxelThroughPath,type VoxelChannelEvidence} from '../lib/voxel_connectivity';
 import {screenVoxelHeatConduction,type VoxelConductionScreen} from '../lib/voxel_heat_conduction';
 
 /**
@@ -94,7 +94,11 @@ function evaluateTPMS(type: TPMSType, x: number, y: number, z: number, freq: num
 export class V10MeshEngine {
   scene: THREE.Scene;
   surfacePoints: THREE.Points;     // Visualize the iso-surface
-  channelLines: THREE.LineSegments; // Visualize channel paths
+  channelLines: THREE.LineSegments; // Visualize candidate channel edges
+  /** A proved six-connected y-through route, highlighted separately. */
+  throughPath:number[]=[];
+  throughPathLine:THREE.Line;
+  travelingMarker:THREE.Points;
 
   config: MeshConfig = {
     tpms: 'gyroid',
@@ -144,7 +148,7 @@ export class V10MeshEngine {
 
     const ptGeo = new THREE.BufferGeometry();
     const ptMat = new THREE.PointsMaterial({
-      size: 0.04, vertexColors: true, transparent: true, opacity: 0.5,
+      size: 0.075, vertexColors: true, transparent: true, opacity: 0.9,
       blending: THREE.AdditiveBlending
     });
     this.surfacePoints = new THREE.Points(ptGeo, ptMat);
@@ -152,11 +156,26 @@ export class V10MeshEngine {
 
     const lineGeo = new THREE.BufferGeometry();
     const lineMat = new THREE.LineBasicMaterial({
-      color: 0x00ff88, transparent: true, opacity: 0.2,
+      color: 0x00b9c9, transparent: true, opacity: 0.36,
       blending: THREE.AdditiveBlending
     });
     this.channelLines = new THREE.LineSegments(lineGeo, lineMat);
     this.scene.add(this.channelLines);
+    this.throughPathLine=new THREE.Line(
+      new THREE.BufferGeometry(),
+      new THREE.LineBasicMaterial({color:0xffd166,transparent:true,opacity:.98}),
+    );
+    this.throughPathLine.frustumCulled=false;
+    this.scene.add(this.throughPathLine);
+    this.travelingMarker=new THREE.Points(
+      new THREE.BufferGeometry(),
+      new THREE.PointsMaterial({
+        color:0xfff3ad,size:.2,sizeAttenuation:true,
+        transparent:true,opacity:1,
+      }),
+    );
+    this.travelingMarker.frustumCulled=false;
+    this.scene.add(this.travelingMarker);
   }
 
   /** Configure for an optimizer type */
@@ -242,6 +261,21 @@ export class V10MeshEngine {
     }
     const connection=screenVoxelChannels(this.solidMask,res);
     this.connectivity=connection;
+    this.throughPath=traceVoxelThroughPath(this.solidMask,res,'y');
+    const route=new Float32Array(this.throughPath.length*3);
+    for(let p=0;p<this.throughPath.length;p++){
+      const idx=this.throughPath[p];
+      const x=Math.floor(idx/(res*res));
+      const y=Math.floor((idx%(res*res))/res),z=idx%res;
+      route[p*3]=x*step-bounds;
+      route[p*3+1]=y*step-bounds;
+      route[p*3+2]=z*step-bounds;
+    }
+    this.throughPathLine.geometry.setAttribute(
+      'position',new THREE.BufferAttribute(route,3),
+    );
+    this.throughPathLine.geometry.computeBoundingSphere();
+    this.throughPathLine.visible=this.throughPath.length>1;
     // Exact geometric connectivity replaces the former unrelated
     // freq²×porosity "channel count" and assumed tortuosity.
     const shortest=Object.values(connection.shortestPathTortuosity)
@@ -511,6 +545,16 @@ export class V10MeshEngine {
     this._frameCount++;
 
     if (!this._built) this.buildMesh();
+    if(this.throughPath.length>0){
+      const path=this.throughPathLine.geometry.getAttribute('position');
+      const i=Math.floor(this._frameCount/4)%this.throughPath.length;
+      const xyz=new Float32Array([
+        path.getX(i),path.getY(i),path.getZ(i),
+      ]);
+      this.travelingMarker.geometry.setAttribute(
+        'position',new THREE.BufferAttribute(xyz,3),
+      );
+    }
 
     // Visualize the iso-surface points and void channel lines
     if (this.solidMask) {
@@ -578,6 +622,12 @@ export class V10MeshEngine {
   dispose() {
     this.scene.remove(this.surfacePoints);
     this.scene.remove(this.channelLines);
+    this.scene.remove(this.throughPathLine);
+    this.scene.remove(this.travelingMarker);
+    this.throughPathLine.geometry.dispose();
+    (this.throughPathLine.material as THREE.Material).dispose();
+    this.travelingMarker.geometry.dispose();
+    (this.travelingMarker.material as THREE.Material).dispose();
     this.surfacePoints.geometry.dispose();
     (this.surfacePoints.material as THREE.Material).dispose();
     this.channelLines.geometry.dispose();
