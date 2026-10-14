@@ -18,7 +18,7 @@ export type VoxelConductionScreen={
  iterations:number;
  maxUpdate:number;
  converged:boolean;
- medium:'still_air';
+ medium:'still_air'|'still_water';
  model:'harmonic_face_steady_conduction_only';
 };
 const harmonic=(a:number,b:number)=>2*a*b/(a+b);
@@ -28,13 +28,16 @@ export function screenVoxelHeatConduction(
  res:number,
  axis:HeatAxis='y',
  maxIterations=120,
+ poreMedium:'air'|'water'='air',
 ):VoxelConductionScreen{
  if(!Number.isInteger(res)||res<2||res>32||mask.length!==res**3
   ||solidK.length!==res**3||!['x','y','z'].includes(axis)
   ||!Number.isSafeInteger(maxIterations)||maxIterations<1
   ||maxIterations>500)
   throw new RangeError('Invalid conduction voxel grid or solver budget');
- const n=mask.length,rs=res*res,gasK=.026;
+ // 20–25°C approximate values, stationary fluid ONLY. Flow/convection
+ // are deliberately excluded and separately screened geometrically.
+ const n=mask.length,rs=res*res,gasK=poreMedium==='water'?.60:.026;
  const k=new Float32Array(n);
  let solids=0,meanK=0;
  for(let i=0;i<n;i++){
@@ -104,7 +107,7 @@ export function screenVoxelHeatConduction(
   solidFraction:solids/n,voidFraction:(n-solids)/n,
   axis,iterations:iteration,maxUpdate,
   converged:maxUpdate<1e-5,
-  medium:'still_air',
+  medium:poreMedium==='water'?'still_water':'still_air',
   model:'harmonic_face_steady_conduction_only',
  };
 }

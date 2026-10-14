@@ -51,6 +51,9 @@ import {
   type StageObservation,
 } from './lib/sim_artifact_handoffs';
 import {screenMaterialPipeline,type MaterialPipelineEvidence} from './lib/material_pipeline_evidence';
+import {screenReferenceMaterial,rankTransportSweep,buildSelectedTransportDesign,
+ SOLID_OPTIONS,type TransportGoal,type ScreenedDesign,type SweepProgress,
+} from './lib/auto_transport_sweep';
 import {
   selectElementTrial,recordModeledTrial,saveMaterialTrial,readMaterialTrials,
   type TrialPending,
@@ -310,6 +313,7 @@ const SimulationView = ({
   onVisualEvidence:(ev:{
     stage:string;metric:string;detail:string;handoff:string;
     completed:string[];artifact:RenderArtifact|null;
+    transport:SweepProgress|null;
   })=>void;
   currentChainIndex: number;
   setCurrentChainIndex: (i: number) => void;
@@ -343,6 +347,10 @@ const SimulationView = ({
     activeReady:false,
   });
   const [campaignStatus,setCampaignStatus] = useState('Awaiting a V12-derived material need');
+  const transportSweepRef=useRef<{
+    context:string;next:number;results:ScreenedDesign[];
+    complete:boolean;applied:boolean;
+  }>({context:'',next:0,results:[],complete:false,applied:false});
   const pendingMaterialTrialRef=useRef<TrialPending|null>(null);
   const stageReceiptsRef = useRef(new Map<string,StageReceipt>());
   const frozenRenderArtifactsRef=useRef(new Map<string,RenderArtifact>());
@@ -429,6 +437,9 @@ const SimulationView = ({
 
   useEffect(() => {
     activeOptimizerRef.current = activeOptimizer;
+    transportSweepRef.current={
+      context:'',next:0,results:[],complete:false,applied:false,
+    };
     // When optimizer type changes, rebuild entire material pipeline
     if (v9Ref.current && v10Ref.current && v11Ref.current) {
       v9Ref.current.configure(activeOptimizer);
@@ -604,7 +615,7 @@ const SimulationView = ({
       v0Ref.current.lines.visible = activeVersion === 'v0';
     }
     
-    const isFundamental = activeVersion === 'v1' || activeVersion === 'v2';
+    const isFundamental = false; // Physical transport uses only PSO optimizers, not number-theory nodes.
     if (fundamental1Ref.current) {
       fundamental1Ref.current.group.visible = isFundamental;
     }
@@ -616,14 +627,14 @@ const SimulationView = ({
     }
 
     // V1+V2 are BOTH visible when either is active (overlaid 90° views)
-    const showSwarm = activeVersion === 'v1' || activeVersion === 'v2';
+    const showSwarm = activeVersion;
     if (v1Ref.current) {
-      v1Ref.current.points.visible = showSwarm;
-      v1Ref.current.lines.visible = showSwarm;
+      v1Ref.current.points.visible = showSwarm === 'v1';
+      v1Ref.current.lines.visible = showSwarm === 'v1';
     }
     if (v2Ref.current) {
-      v2Ref.current.points.visible = showSwarm;
-      v2Ref.current.lines.visible = showSwarm;
+      v2Ref.current.points.visible = showSwarm === 'v2';
+      v2Ref.current.lines.visible = showSwarm === 'v2';
     }
     // V3+V4 both visible when either is active (overlaid MST networks)
     const showMSTInit = activeVersion === 'v3' || activeVersion === 'v4';
@@ -903,6 +914,54 @@ const SimulationView = ({
           currentVersion==='v11'||simulationFrame%15===0
         ))v11Ref.current.update();
 
+      // Autonomous reference screening: one identified material per ~16
+      // frames, against actual V10 TPMS solid masks, air/water pores and
+      // independent thermal/electrical property references. PSO search agents
+      // are not literal electrons, water parcels or gas molecules.
+      if((opt==='thermal'||opt==='electrical')
+        &&v9Ref.current&&v10Ref.current
+        &&v1Ref.current&&v2Ref.current){
+        const state=transportSweepRef.current,context=JSON.stringify([opt,tMode]);
+        if(state.context!==context){
+          state.context=context;state.next=0;state.results=[];
+          state.complete=false;state.applied=false;
+        }
+        if(!state.complete&&simulationFrame%16===6){
+          try{
+            const batch=screenReferenceMaterial(
+              v9Ref.current,v10Ref.current,opt as TransportGoal,
+              state.next,20261014,
+            );
+            state.results.push(...batch);state.next++;
+            state.complete=state.next>=SOLID_OPTIONS;
+            const outcome=rankTransportSweep(
+              state.results,opt as TransportGoal,state.complete,
+            );
+            (window as any).aboveBoundTransportSweep=outcome;
+            if(state.complete&&outcome.best&&!state.applied){
+              buildSelectedTransportDesign(
+                v9Ref.current,v10Ref.current,outcome.best,20261014,
+              );
+              const material=v9Ref.current.getMaterialForV1();
+              if(material){
+                v1Ref.current.setMaterial({
+                  ...material,geometry:'custom',
+                  customField:v10Ref.current.getFitnessField()
+                    ||material.customField,
+                });
+                v2Ref.current.setMaterialRef(v1Ref.current);
+                v2Ref.current.gbestFitness=-Infinity;
+                for(const node of v2Ref.current.nodes)
+                  node.pbestFitness=-Infinity;
+              }
+              state.applied=true;
+            }
+          }catch(error){
+            console.warn('[Transport] Candidate screen failed:',error);
+            state.next++;state.complete=state.next>=SOLID_OPTIONS;
+          }
+        }
+      }
       // V1: Swarm — explores through V9 lattice + V10 mesh material
       if (v1Ref.current) {
         v1Ref.current.update(opt, mem, tMode, compLevel);
@@ -917,7 +976,7 @@ const SimulationView = ({
 
       // V3: Routes within hardware boundaries (V11) + V1 settled discoveries
       if (v3Ref.current) {
-        if (v1Ref.current && v1Ref.current.isStable() && v1Ref.current.settledPositions.length > 0) {
+        if (v1Ref.current && v1Ref.current.frameCount>=90) {
           // Merge V1 discoveries with V11 hardware boundary nodes
           const v1Settled = v1Ref.current.getSettledNodes();
           const hwNodes = v11Ref.current?.getBoundaryNodes() || [];
@@ -933,7 +992,7 @@ const SimulationView = ({
 
       // V4: Routes within hardware boundaries (V11) + V2 settled discoveries
       if (v4Ref.current) {
-        if (v2Ref.current && v2Ref.current.isStable() && v2Ref.current.settledPositions.length > 0) {
+        if (v2Ref.current && v2Ref.current.frameCount>=90) {
           const v2Settled = v2Ref.current.getSettledNodes();
           const hwNodes = v11Ref.current?.getBoundaryNodes() || [];
           const merged = [...v2Settled, ...hwNodes.slice(0, Math.max(10, 40 - v2Settled.length))];
@@ -1449,7 +1508,14 @@ const SimulationView = ({
           currentVersion === 'v12' ? v12Ref.current : null;
         const stable = currentVersion === 'v13'
           ? Boolean(v13Ref.current?.getLatestComposite())
-          : Boolean(engine?.isStable());
+          : currentVersion==='v1'
+            ?Boolean(v1Ref.current&&v1Ref.current.frameCount>=90
+              &&Number.isFinite(v1Ref.current.gbestFitness)
+              &&transportSweepRef.current.complete)
+          : currentVersion==='v2'
+            ?Boolean(v2Ref.current&&v2Ref.current.frameCount>=90
+              &&Number.isFinite(v2Ref.current.gbestFitness))
+          :Boolean(engine?.isStable());
         if(mayAdvanceStage(currentVersion,stageFrameRef.current,stable,90)){
           let output:StageObservation|null=null;
           let restartDiscovery=false;
@@ -1710,12 +1776,16 @@ const SimulationView = ({
             detail='Prime/odd field · phase '+(v0Ref.current?.phase||0).toFixed(2)+' rad';
             break;
           case 'v1':
-            metric=(v1Ref.current?.nodes.length||0)+' moving particles';
-            detail='Best field fitness '+(v1Ref.current?.gbestFitness||0).toFixed(2);
+            metric=(v1Ref.current?.nodes.length||0)+' SEARCH PROBES · NOT MOLECULES';
+            detail='Dimensionless PSO fitness '+
+              (v1Ref.current?.gbestFitness||0).toFixed(2)+
+              ' · optimization, not electron or fluid motion';
             break;
           case 'v2':
-            metric=(v2Ref.current?.nodes.length||0)+' orthogonal particles';
-            detail='Clusters '+(v2Ref.current?.getClusterCount()||0);
+            metric=(v2Ref.current?.nodes.length||0)+' ORTHOGONAL SEARCH PROBES';
+            detail='Different plane, cluster count '+
+              (v2Ref.current?.getClusterCount()||0)+
+              ' · not physical particles';
             break;
           case 'v3':case 'v4':{
             const engine=currentVersion==='v3'?v3Ref.current:v4Ref.current;
@@ -1780,6 +1850,11 @@ const SimulationView = ({
         onVisualEvidence({
           stage:currentVersion,metric,detail,handoff:handoffStatusRef.current,
           completed,artifact:snapshot,
+          transport:opt==='thermal'||opt==='electrical'
+            ?rankTransportSweep(
+              transportSweepRef.current.results,opt as TransportGoal,
+              transportSweepRef.current.complete,
+            ):null,
         });
         (window as any).aboveBoundLiveTrace={
           stage:currentVersion,metric,detail,completed,
@@ -1955,7 +2030,7 @@ const SimulationView = ({
       orbitRef.current?.update();
     }
     previousVisibleVersionRef.current=activeVersion;
-    const isFundamental = activeVersion === 'v1' || activeVersion === 'v2';
+    const isFundamental = false; // Physical transport uses only PSO optimizers, not number-theory nodes.
 
     if (v0Ref.current) {
       v0Ref.current.points.visible = activeVersion === 'v0';
@@ -1966,14 +2041,14 @@ const SimulationView = ({
     if (membraneLinesRef.current) membraneLinesRef.current.visible = isFundamental;
 
     // V1+V2 both visible when either is active (overlaid orthogonal views)
-    const showSwarm = activeVersion === 'v1' || activeVersion === 'v2';
+    const showSwarm = activeVersion;
     if (v1Ref.current?.points) {
-      v1Ref.current.points.visible = showSwarm;
-      v1Ref.current.lines.visible = showSwarm;
+      v1Ref.current.points.visible = showSwarm === 'v1';
+      v1Ref.current.lines.visible = showSwarm === 'v1';
     }
     if (v2Ref.current?.points) {
-      v2Ref.current.points.visible = showSwarm;
-      v2Ref.current.lines.visible = showSwarm;
+      v2Ref.current.points.visible = showSwarm === 'v2';
+      v2Ref.current.lines.visible = showSwarm === 'v2';
     }
     // V3+V4 both visible when either is active (overlaid MST networks)
     const showMST = activeVersion === 'v3' || activeVersion === 'v4';
@@ -8781,9 +8856,10 @@ function App() {
   const [visualEvidence,setVisualEvidence]=useState<{
     stage:string;metric:string;detail:string;handoff:string;
     completed:string[];artifact:RenderArtifact|null;
+    transport:SweepProgress|null;
   }>({stage:initialSimState.version,metric:'Preparing simulation',
      detail:'Reading numerical models',handoff:'No recorded artifact',
-     completed:[],artifact:null});
+     completed:[],artifact:null,transport:null});
   const [currentChainIndex, setCurrentChainIndex] = useState(initialSimState.chainIdx);
   const [compressionLevel, setCompressionLevel] = useState(1);
   const [discoveries, setDiscoveries] = useState<any[]>([]);
@@ -9250,10 +9326,13 @@ function App() {
         <div className={activeTab === 'house' ? 'lg:col-span-12 space-y-6' : 'lg:col-span-8 space-y-6'}>
           <div
             className={activeTab === 'sim'
-              ? 'relative h-[440px] sm:h-[520px] lg:h-[600px]'
+              ? 'relative'
               : 'fixed left-[-10000px] top-0 w-[320px] h-[180px] pointer-events-none opacity-0'}
             aria-hidden={activeTab !== 'sim'}
           >
+            <div className={activeTab==='sim'
+              ?'relative h-[440px] sm:h-[520px] lg:h-[600px]'
+              :'h-full'}>
               <SimulationView
                 activeOptimizer={activeOptimizer}
                 thermalMode={thermalMode}
@@ -9271,11 +9350,12 @@ function App() {
                 isSimulating={isSimulating}
                 activeModule={activeTab}
               />
+            </div>
               {activeTab === 'sim' && (
                 <>
               
               {/* Task Description Overlay */}
-              <div className="absolute top-20 left-4 md:top-6 md:left-6 pointer-events-none z-10">
+              <div className="hidden md:block absolute top-20 left-4 md:top-6 md:left-6 pointer-events-none z-10">
                 <div className="bg-black/80 backdrop-blur-md border border-white/10 p-4 rounded-xl max-w-xs shadow-2xl">
                   <div className="text-[9px] font-bold text-cyan-300 uppercase tracking-widest mb-1">
                     Current experiment · {activeVersion.toUpperCase()}
@@ -9574,6 +9654,7 @@ function App() {
               completed={visualEvidence.completed}
               artifact={visualEvidence.stage===activeVersion
                 ?visualEvidence.artifact:null}
+              transport={visualEvidence.transport}
             />
           )}
           {activeTab !== 'sim' && (activeTab === 'trajectory' ? (

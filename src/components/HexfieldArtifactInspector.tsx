@@ -1,4 +1,5 @@
 import React,{useEffect,useRef} from 'react';
+import type {SweepProgress} from '../lib/auto_transport_sweep';
 import * as THREE from 'three';
 import {
  STAGE_GUIDES,type RenderArtifact,
@@ -200,10 +201,11 @@ function drawArtifact(canvas:HTMLCanvasElement,artifact:RenderArtifact){
  }
 }
 export function HexfieldArtifactInspector({
- stage,metric,detail,handoff,completed,artifact,
+ stage,metric,detail,handoff,completed,artifact,transport,
 }:{
  stage:string;metric:string;detail:string;handoff:string;
  completed:string[];artifact:RenderArtifact|null;
+ transport:SweepProgress|null;
 }){
  const guide=STAGE_GUIDES[stage]||STAGE_GUIDES.v0;
  const canvasRef=useRef<HTMLCanvasElement>(null);
@@ -246,6 +248,72 @@ export function HexfieldArtifactInspector({
   <p className="mt-2 text-[13px] font-semibold text-white">
    Watch for: <span className="font-normal text-slate-200">{guide.watch}</span>
   </p>
+  {(stage==='v1'||stage==='v2')&&(
+   <div className="mt-3 rounded-lg border-2 border-amber-400/60 bg-amber-300/10 p-3">
+    <p className="font-bold text-[14px] text-amber-100">
+     THESE DOTS ARE NOT ELECTRONS, AIR OR WATER
+    </p>
+    <p className="mt-1 text-[13px] text-white/90 leading-relaxed">
+     Each dot is a particle-swarm optimisation (PSO) search agent tracking
+     a candidate location in a 3D geometry score field. Its acceleration
+     comes from computer-search rules, not Newtonian or Lorentz forces.
+     The two swarms start biased toward perpendicular planes, which explains
+     the flat-looking sheet and the trajectories converging into clusters.
+     Their score is dimensionless, not heat, charge, pressure or velocity.
+    </p>
+    <p className="mt-1 text-[12px] text-amber-100">
+     Actual air/water properties and metal conductivity are tested separately
+     on the V9 material voxels and V10 solid/void geometry.
+    </p>
+   </div>
+  )}
+  {transport&&(
+   <div className="mt-3 rounded-lg border border-emerald-400/40 bg-emerald-400/5 p-3" aria-label="Automatic material and flow sweep">
+    <div className="flex flex-wrap gap-2 items-baseline justify-between">
+     <strong className="text-emerald-200 text-[13px]">
+       AUTO-SWEEP · materials + pores + cooling fluids
+     </strong>
+     <span className="font-mono text-[12px] text-white">
+       {transport.evaluated} of 40 modeled cases ·
+       {transport.complete?' selected':' comparing'}
+     </span>
+    </div>
+    <p className="text-[12px] text-white mt-1">
+      {transport.best
+        ?'Current air-cooled candidate: '+transport.best.candidateLabel+
+          ' · '+transport.best.structure+' solid lattice · '+
+          transport.best.tpms+' pores'
+        :'Testing reference metals and lattice geometries; no selected design yet.'}
+    </p>
+    {transport.airBest&&
+      <p className="mt-1 text-[12px] text-sky-200">
+       AIR (20°C): modeled effective k ≈
+       {' '+transport.airBest.modeledEffectiveThermalKWmK.toPrecision(3)}
+       {' W/(m·K)'} · Y void route
+       {transport.airBest.fluidSpansY?' OPEN':' BLOCKED'} ·
+       {transport.airBest.candidate}
+      </p>}
+    {transport.waterBest&&
+      <p className="mt-1 text-[12px] text-blue-200">
+       WATER (20°C): modeled effective k ≈
+       {' '+transport.waterBest.modeledEffectiveThermalKWmK.toPrecision(3)}
+       {' W/(m·K)'} · Y void route
+       {transport.waterBest.fluidSpansY?' OPEN':' BLOCKED'} ·
+       {transport.waterBest.candidate}
+      </p>}
+    {transport.goal==='electrical'&&transport.best&&
+      <p className="mt-1 text-[12px] text-yellow-100">
+       Solid X conductor: approximate σ
+       {' '+(transport.best.estimatedSolidPathSigmaSm||0).toExponential(2)}
+       {' S/m'} · not AC impedance or electrons in motion
+      </p>}
+    <p className="mt-2 text-[11px] text-slate-300">
+      Material properties are room-temperature references. Air/water heat
+      results assume stationary fluid; void routing is six-connected geometry,
+      not pressure drop, actual flow, convection, corrosion or manufacturing proof.
+    </p>
+   </div>
+  )}
   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 items-start">
    <div className="rounded-md border border-white/10 bg-black/25 p-3 min-w-0">
     <div className="text-[10px] uppercase font-bold tracking-widest text-sky-300 mb-1">
@@ -281,11 +349,17 @@ export function HexfieldArtifactInspector({
        {artifact.id} · MODEL ONLY · frozen drawing of a bounded source snapshot
       </p>
     </>:<div className="min-h-[135px] rounded border border-dashed border-white/20 flex flex-col items-center justify-center text-center p-4">
-       <strong className="text-sm text-slate-100">No constructed solid in this stage</strong>
+       <strong className="text-sm text-slate-100">
+        {stage==='v1'||stage==='v2'
+          ?'SEARCH ALGORITHM · no molecular object to render'
+          :'No constructed solid in this stage'}
+       </strong>
        <span className="text-[12px] text-slate-300 mt-1">
         {['v5','v9','v10','v13','elements'].includes(stage)
-          ?'Waiting for the real model geometry. No decorative object substituted.'
-          :'This stage calculates evidence. A Platonic object appears for V5, V9, V10 and V13.'}
+          ?'Waiting for real model geometry. No decorative object substituted.'
+          :stage==='v1'||stage==='v2'
+            ?'The raw canvas above shows optimisation probes. Materials and fluids are evaluated by a separate physical-property screen.'
+            :'This stage calculates evidence. A Platonic object appears for V5, V9, V10 and V13.'}
        </span>
      </div>}
    </div>
