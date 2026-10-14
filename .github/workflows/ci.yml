@@ -20,7 +20,14 @@ jobs:
       - name: Verify restored V0–V13 frontend and static bundle
         run: |
           test -f dist/index.html
-          test -n "$(find dist/assets -type f -name '*.js' -print -quit)"
+          # The product is deliberately offline until explicitly reinstated.
+          # A 404-only bundle should not be forced to contain JS assets.
+          if grep -q '<title>404' dist/index.html; then
+            test -f dist/_worker.js
+            grep -q 'status:404' dist/_worker.js
+          else
+            test -n "$(find dist/assets -type f -name '*.js' -print -quit)"
+          fi
           grep -q "import App from './App.tsx'" src/main.tsx
           test -f src/simulations/v0_compression.ts
           test -f src/simulations/v7.ts
