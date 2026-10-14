@@ -196,6 +196,7 @@ try {
         v13.getRequirementScreenings().map(p=>[p.requirement.id,p.status])])},
   };
   let last:StageReceipt|null=null;const blockers:string[]=[];
+  const achieved=new Map<string,StageReceipt>();
   for(const stage of SIMULATION_STAGES){
     const observation=observations[stage];
     const decision=qualifyStage(stage,observation,last,'["thermal","cooling",1]');
@@ -205,10 +206,32 @@ try {
       'result='+decision.reason);
     if(!decision.ok)blockers.push(stage+': '+decision.reason);
     last=decision.receipt;
+    if(last)achieved.set(stage,last);
   }
   assert.equal(v0.isStable(),true,
     'V0 harmonic field should qualify after 95 numeric updates, not after 42 seconds');
   assert.deepEqual(blockers,[],'The original V0–V13 chain must have no unqualified artifacts');
+  // Genuine browser condition: V6 stabilized with zero paths, but had
+  // already evaluated valid physical boundaries. Its negative finding
+  // must be transferred to V7 instead of deadlocking the tour.
+  const noFlow=new V6Engine(scene);
+  try{
+    noFlow.captureChain([],[],[],[],[],[],'thermal','cooling');
+    noFlow.captureBoundaryPlanes(v5.getBoundaryPlanes());
+    for(let n=0;n<20;n++)noFlow.update('thermal','cooling',1);
+    assert.equal(noFlow.getMetrics().pathCount,0);
+    const negative=qualifyStage('v6',{
+      quantity:noFlow.boundaryPlanes.length+noFlow.getResistanceField().length,
+      signal:noFlow.getMetrics().efficiency,
+      support:noFlow.boundaryPlanes.length+noFlow.getResistanceField().length,
+      signature:JSON.stringify(['no_connected_flow',0,0,
+        noFlow.boundaryPlanes.length]),
+    },achieved.get('v5')||null,'["thermal","cooling",1]');
+    assert.equal(negative.ok,true,
+      'A real zero-through-path report is diagnostic evidence V7 must receive');
+    assert.match(readFileSync('src/App.tsx','utf8'),/no_connected_flow/,
+      'Production gate must carry the observed failure state, not a fake success');
+  }finally{noFlow.dispose();}
   console.log('Full original V0–V13 artifact tour trace passed.');
 
 } finally {
