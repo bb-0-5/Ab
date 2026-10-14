@@ -46,3 +46,6 @@ jobs:
           test -f dist/torus-v3.html
           test -f dist/slice-worker.mjs
 
+
+      - name: Verify primary experience route and original V0–V13 access
+        run: node scripts/home-routing-smoke.mjs
