@@ -480,7 +480,9 @@ const SimulationView = ({
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-    camera.position.z = 5;
+    // V0 spans a 20×20 harmonic field. z=5 only showed its center,
+    // making the first stage look like an unintelligible crop.
+    camera.position.z = activeVersionRef.current==='v0'?27:10;
     cameraRef.current = camera;
 
     let renderer: THREE.WebGLRenderer | null = null;
@@ -1881,8 +1883,14 @@ const SimulationView = ({
       cameraRef.current?.position.set(6,13,20);
       orbitRef.current?.target.set(6,0,5);
       orbitRef.current?.update();
-    }else if(prior==='v12'){
-      cameraRef.current?.position.set(0,0,5);
+    }else if(prior!==activeVersion){
+      // Each original engine has different world-space dimensions.
+      // Only reframe on stage change, so user orbit/zoom remains usable.
+      const distance=activeVersion==='v0'?27:
+        (activeVersion==='v1'||activeVersion==='v2')?13:
+        activeVersion==='v9'||activeVersion==='v10'?8:
+        activeVersion==='v13'?10:11;
+      cameraRef.current?.position.set(0,0,distance);
       orbitRef.current?.target.set(0,0,0);
       orbitRef.current?.update();
     }
@@ -9179,7 +9187,7 @@ function App() {
         <div className={activeTab === 'house' ? 'lg:col-span-12 space-y-6' : 'lg:col-span-8 space-y-6'}>
           <div
             className={activeTab === 'sim'
-              ? 'relative aspect-video lg:aspect-auto lg:h-[600px]'
+              ? 'relative h-[440px] sm:h-[520px] lg:h-[600px]'
               : 'fixed left-[-10000px] top-0 w-[320px] h-[180px] pointer-events-none opacity-0'}
             aria-hidden={activeTab !== 'sim'}
           >
