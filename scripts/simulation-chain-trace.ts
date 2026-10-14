@@ -28,7 +28,7 @@ try {
   const v0 = new V0CompressionEngine(scene);
   disposables.push(v0);
   v0.setCompressionLevel(4);
-  for (let i = 0; i < 1300; i++) v0.update('thermal', {});
+  for (let i = 0; i < 155; i++) v0.update('thermal', {});
   finite(v0.saveState().phase, 'V0 did not advance its compression field');
 
   const fundamental = new FundamentalEngine(scene, new THREE.Euler(), new THREE.Color(0x00ffff));
@@ -196,7 +196,7 @@ try {
     last=decision.receipt;
   }
   assert.equal(v0.isStable(),true,
-    'V0 needs 1257 numeric updates (~42 sec at 30fps), not the 150-frame dwell');
+    'V0 harmonic field should be ready around the 150-frame visible dwell, not after 42 seconds');
   assert.deepEqual(blockers,[],'The original V0–V13 chain must have no unqualified artifacts');
   console.log('Full original V0–V13 artifact tour trace passed.');
 
