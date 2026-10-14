@@ -43,7 +43,7 @@ import {
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SIMULATION_STAGES,mayAdvanceStage,indexOfStage } from './lib/sim_sequence';
-import {captureRenderArtifact,type RenderArtifact} from './lib/render_artifact';
+import {captureRenderArtifact,STAGE_GUIDES,type RenderArtifact} from './lib/render_artifact';
 import {HexfieldArtifactInspector} from './components/HexfieldArtifactInspector';
 import {
   qualifyStage,seedFromDiscovery,rememberStageReceipt,
@@ -1686,7 +1686,7 @@ const SimulationView = ({
             stageFrameRef.current=0;
             setCurrentChainIndex(nextIndex);
           }else if(stageFrameRef.current%60===0){
-            reportHandoffStatus(decision.reason);
+            handoffStatusRef.current=decision.reason;setHandoffStatus(decision.reason);
           }
         }else if(stageFrameRef.current%120===0){
           reportHandoffStatus(
@@ -9277,10 +9277,18 @@ function App() {
               {/* Task Description Overlay */}
               <div className="absolute top-20 left-4 md:top-6 md:left-6 pointer-events-none z-10">
                 <div className="bg-black/80 backdrop-blur-md border border-white/10 p-4 rounded-xl max-w-xs shadow-2xl">
-                  <div className="text-[8px] font-black text-cyan-500 uppercase tracking-widest mb-1">Current Task</div>
-                  <div className="text-xs font-bold text-white uppercase tracking-tight mb-2">
-                    {activeTaskDescription}
+                  <div className="text-[9px] font-bold text-cyan-300 uppercase tracking-widest mb-1">
+                    Current experiment · {activeVersion.toUpperCase()}
                   </div>
+                  <div className="text-sm font-bold text-white mb-1">
+                    {STAGE_GUIDES[activeVersion]?.name||activeTaskDescription}
+                  </div>
+                  <p className="text-[11px] text-slate-200 leading-snug">
+                    {STAGE_GUIDES[activeVersion]?.action}
+                  </p>
+                  <p className="text-[10px] text-amber-200 mt-1">
+                    Watch: {STAGE_GUIDES[activeVersion]?.watch}
+                  </p>
                   <div className="flex items-center gap-2">
                     <div className="h-1 flex-1 bg-white/5 rounded-full overflow-hidden">
                       <motion.div 
