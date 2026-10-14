@@ -2,7 +2,7 @@
 import {readSelectedV10PressureGeometry,storePressureFeedback} from './v10-pressure-handoff.mjs';
 const $=id=>document.getElementById(id);
 const main=$('mainCanvas'),stack=$('stackCanvas'),ctx=main.getContext('2d'),ctx2=stack.getContext('2d');
-const worker=new Worker('/membrane-worker.mjs?v=original-v10-selection-r6',{type:'module'});
+const worker=new Worker('/membrane-worker.mjs?v=constraint-steering-r7',{type:'module'});
 const originalV10=readSelectedV10PressureGeometry();
 let current=null,ranking=[],winner=null,last=null,inspected=null,paused=false,complete=false;
 let display='pressure',frames=0,layout=[];
@@ -89,7 +89,7 @@ function renderUpdate(msg){
   $('time').textContent=`SOLID ${fmt(r.solidFraction*100,0)}% · ${r.assessment}`;
   $('flowEvidence').textContent=r.reason;
  }
- $('progress').textContent=msg.message||`${msg.stage||'SCREENING'} · ${msg.done||0}/${msg.total||'?'} tested · actual pressure solved and stored`;
+ $('progress').textContent=msg.message||`${msg.stage||'SCREENING'} · ${msg.done||0}/${msg.total||'?'} tested · ${msg.reason||'Pressure solved, constraints checked'}.`;
  $('frontProgress').textContent=$('progress').textContent;
  const status=msg.type==='complete'?'SEARCH FINISHED':msg.type==='progress'?'SOLVING PHYSICAL CONSTRAINTS':'COMPUTING';
  show(status);
