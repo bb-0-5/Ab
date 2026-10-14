@@ -8282,9 +8282,10 @@ const ElementsView = () => {
                       className="rounded-lg border border-white/10 bg-black/30 p-3 text-xs">
                       <div className="flex flex-wrap justify-between gap-2">
                         <span className="font-bold text-white">{screen.requirement.source.toUpperCase()} → V13</span>
-                        <span className={screen.status==='estimated_melt_failure'?'text-amber-300':'text-cyan-300'}>
+                        <span className={screen.status==='estimated_melt_failure'||screen.status==='estimated_transport_failure'?'text-amber-300':'text-cyan-300'}>
                           {screen.status==='awaiting_composite'?'BUILD A MATERIAL TO SCREEN':
                            screen.status==='estimated_melt_failure'?'MODEL FAILS MELT SCREEN':
+                           screen.status==='estimated_transport_failure'?'MODEL FAILS CONDUCTIVITY SCREEN':
                            'PROVISIONAL MODEL SCREEN — UNVERIFIED'}
                         </span>
                       </div>
@@ -8294,6 +8295,10 @@ const ElementsView = () => {
                         {Math.round(screen.requirement.maxTemperatureK)} K
                         {screen.estimatedMeltingPointK!==null
                          ?` · predicted bulk melting point ${Math.round(screen.estimatedMeltingPointK)} K`:''}
+                        {screen.requirement.maxThermalConductivityWmK!==undefined
+                         ?` · target constituent k ≤ ${screen.requirement.maxThermalConductivityWmK.toPrecision(3)} W/(m·K)`:''}
+                        {screen.estimatedThermalConductivityWmK!==null
+                         ?` · estimated bulk k ${screen.estimatedThermalConductivityWmK.toPrecision(3)} W/(m·K)`:''}
                       </p>
                       <p className="mt-1 text-slate-400">{screen.requirement.basis}</p>
                       <p className="mt-1 text-amber-200/80">{screen.missingEvidence}</p>
@@ -8301,7 +8306,7 @@ const ElementsView = () => {
                   ))}
                 </div>
               ) : (
-                <p className="mt-2 text-xs text-slate-400">Awaiting an actual V6 thermal field. The requirements appear automatically while the original simulations run.</p>
+                <p className="mt-2 text-xs text-slate-400">Awaiting V6 thermal-field or V12 wall-material needs. Requirements appear automatically as the simulations run.</p>
               )}
             </div>
 
