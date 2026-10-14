@@ -43,6 +43,10 @@ import {
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SIMULATION_STAGES,mayAdvanceStage,indexOfStage } from './lib/sim_sequence';
+import {
+  qualifyStage,seedFromDiscovery,rememberStageReceipt,type StageReceipt,
+  type StageObservation,
+} from './lib/sim_artifact_handoffs';
 import {screenMaterialPipeline,type MaterialPipelineEvidence} from './lib/material_pipeline_evidence';
 import {loadMaterialRecipes,rememberMaterialRecipe} from './lib/material_recipe_archive';
 import {
@@ -312,6 +316,10 @@ const SimulationView = ({
   const orbitRef = useRef<OrbitControls | null>(null);
   const previousVisibleVersionRef = useRef<SimVersion>(activeVersion);
   const [webGlError, setWebGlError] = useState<string | null>(null);
+  const [handoffStatus,setHandoffStatus] = useState('Generating first artifact');
+  const stageReceiptsRef = useRef(new Map<string,StageReceipt>());
+  const handoffContextRef = useRef('');
+  const lastConstructionTrialRef = useRef<{discovery:string;seed:number;modelOnly:true}|null>(null);
   
   const v0Ref = useRef<V0CompressionEngine | null>(null);
   const fundamental1Ref = useRef<FundamentalEngine | null>(null);
@@ -681,6 +689,72 @@ const SimulationView = ({
       if (lastStageRef.current !== currentVersion) {
         lastStageRef.current = currentVersion;
         stageFrameRef.current = 0;
+        // A new tour must earn its own V0–V8 artifacts; saved scores and a
+        // previous tour cannot silently satisfy the current dependency chain.
+        if(currentVersion==='v0'){
+          stageReceiptsRef.current.clear();
+          lastConstructionTrialRef.current=null;
+        }
+        // V8's completed discovery is an INPUT to constructing a new V9
+        // lattice hypothesis, not merely a reason to show the V9 animation.
+        // Change vacancy/placement seed only. NEVER invent conductivity,
+        // density, phase stability or chemical yields from a V7/V8 score.
+        if(currentVersion==='v9'){
+          const discovery=stageReceiptsRef.current.get('v8');
+          const lattice=v9Ref.current,mesh=v10Ref.current;
+          const v1=v1Ref.current,v2=v2Ref.current;
+          if(discovery&&lattice&&mesh&&v1&&v2){
+            try{
+              const nextSeed=seedFromDiscovery(discovery,lattice.seed);
+              lattice.setSeed(nextSeed);
+              lattice.buildLattice();
+              mesh.optimizeConnectedChannels(
+                lattice.compositeField||undefined,
+                activeOptimizerRef.current==='electrical'?'x':'y',
+              );
+              const material=lattice.getMaterialForV1();
+              if(material){
+                v1.setMaterial({
+                  ...material,geometry:'custom',
+                  customField:mesh.getFitnessField()||material.customField,
+                });
+                v2.setMaterialRef(v1);
+                lastConstructionTrialRef.current={
+                  discovery:discovery.id,seed:nextSeed,modelOnly:true,
+                };
+              }
+            }catch(error){
+              console.warn('[V9] Unable to construct from discovery',error);
+            }
+          }
+        }
+        // A V13 outcome must be a real modeled composite hypothesis, not the
+        // default carbon shell display. Preserve an existing user recipe.
+        if(currentVersion==='v13'&&v13Ref.current
+          &&!v13Ref.current.getLatestComposite()){
+          try{
+            const recipes=[
+              [{z:14,fraction:.467},{z:8,fraction:.533}], // SiO2 constituents
+              [{z:13,fraction:.529},{z:8,fraction:.471}], // Al2O3 constituents
+              [{z:22,fraction:.599},{z:8,fraction:.401}], // TiO2 constituents
+            ];
+            const needs=v13Ref.current.getRequirementScreenings();
+            const requiredK=needs.reduce((max,row)=>
+              Math.max(max,row.requirement.maxTemperatureK),0);
+            let bestRecipe=recipes[0],bestMargin=-Infinity;
+            for(const recipe of recipes){
+              const trial=v13Ref.current.buildComposite(recipe);
+              const margin=trial.properties.meltingPoint-requiredK;
+              if(Number.isFinite(margin)&&margin>bestMargin){
+                bestMargin=margin;bestRecipe=recipe;
+              }
+            }
+            v13Ref.current.buildComposite(bestRecipe);
+            // Property rankings above are HEURISTIC, not measured yields.
+          }catch(error){
+            console.warn('[V13] Could not construct a chemistry hypothesis',error);
+          }
+        }
       }
       stageFrameRef.current++;
       const opt = activeOptimizerRef.current;
@@ -1143,11 +1217,23 @@ const SimulationView = ({
         }
       }
 
-      // Auto-transition through EVERY real original stage, V0–V13.
-      // 150 numeric frames (~5s) prevent built/instant-stable engines from
-      // flashing past before the viewer can identify what is running.
+      // Automatic progression now requires an actual artifact from EVERY
+      // stage. V0–V8 produce a linked discovery chain; V9–V13 create and
+      // screen construction outputs. Engine stability alone cannot advance.
       if ((window as any).autoTransitionEnabled) {
         const goal = OPTIMIZATION_GOALS[opt];
+        const context=JSON.stringify([opt,tMode,compLevel]);
+        if(context!==handoffContextRef.current){
+          handoffContextRef.current=context;
+          stageReceiptsRef.current.clear();
+          lastConstructionTrialRef.current=null;
+          // An altered goal is a new experiment. Never use outputs created
+          // under the previous goal to skip any of its prerequisite stages.
+          if(currentVersion!=='v0'){
+            stageFrameRef.current=0;
+            setCurrentChainIndex(0);
+          }
+        }
         const engine =
           currentVersion === 'v0' ? v0Ref.current :
           currentVersion === 'v1' ? fundamental1Ref.current :
@@ -1163,14 +1249,162 @@ const SimulationView = ({
           currentVersion === 'v11' ? v11Ref.current :
           currentVersion === 'v12' ? v12Ref.current : null;
         const stable = currentVersion === 'v13'
-          ? Boolean(v13Ref.current?.getActiveElement())
+          ? Boolean(v13Ref.current?.getLatestComposite())
           : Boolean(engine?.isStable());
-        if (mayAdvanceStage(currentVersion,stageFrameRef.current,stable,150)) {
-          const nextIndex=(currentIndex+1)%goal.tasks.length;
-          // Force synchronization even before the React effect for next
-          // stage installs, preventing multiple advances from one frame.
-          stageFrameRef.current=0;
-          setCurrentChainIndex(nextIndex);
+        if(mayAdvanceStage(currentVersion,stageFrameRef.current,stable,150)){
+          let output:StageObservation|null=null;
+          switch(currentVersion){
+            case 'v0': {
+              const e=v0Ref.current;
+              if(e)output={quantity:e.nodes.length,signal:e.phase,
+                support:e.compressionFieldLevel,
+                signature:JSON.stringify([e.compressionFieldLevel,e.primes.length,e.oddHarmonics.length])};
+              break;
+            }
+            case 'v1': {
+              const e=v1Ref.current;
+              if(e)output={quantity:e.nodes.length,signal:e.gbestFitness,
+                support:e.frameCount,signature:JSON.stringify([
+                  e.getAnalysis().avgFitness,e.getLatestStabilization()?.frame||0,
+                ])};
+              break;
+            }
+            case 'v2': {
+              const e=v2Ref.current;
+              if(e)output={quantity:e.nodes.length,signal:e.gbestFitness,
+                support:e.frameCount,signature:JSON.stringify([
+                  e.getLatestStabilization()?.frame||0,e.getClusterCount(),
+                ])};
+              break;
+            }
+            case 'v3': {
+              const e=v3Ref.current;
+              if(e)output={quantity:e.getMSTEdges().length,signal:e.getMSTLength(),
+                support:e.getNodes().length,signature:JSON.stringify([
+                  e.getNodes().length,e.neighborK,e.getEdges().length,
+                ])};
+              break;
+            }
+            case 'v4': {
+              const e=v4Ref.current;
+              if(e)output={quantity:e.getMSTEdges().length,signal:e.getMSTLength(),
+                support:e.getNodes().length,signature:JSON.stringify([
+                  e.getNodes().length,e.neighborK,e.getEdges().length,
+                ])};
+              break;
+            }
+            case 'v5': {
+              const e=v5Ref.current;
+              if(e)output={quantity:e.getBoundaryPlanes().length,
+                signal:e.getBoundaryPlanes().reduce((a,p)=>a+p.area,0),
+                support:e.getLoops().length,signature:JSON.stringify([
+                  e.getBoundaryPlanes().length,e.getLoops().length,
+                  e.getBoundaryPlanes().slice(0,6).map(p=>p.role),
+                ])};
+              break;
+            }
+            case 'v6': {
+              const e=v6Ref.current,m=e?.getMetrics();
+              if(e&&m)output={quantity:m.pathCount,signal:m.efficiency,
+                support:e.getFlowPaths().length,signature:JSON.stringify([
+                  m.totalFlow,m.avgResistance,m.bottleneckCount,m.pathCount,
+                ])};
+              break;
+            }
+            case 'v7': {
+              const e=v7Ref.current;
+              if(e)output={quantity:e.getSnapshots().length,signal:e.getBestScore(),
+                support:e.acceptedTrials+e.rejectedTrials,
+                signature:JSON.stringify([e.acceptedTrials,e.rejectedTrials,
+                  e.bestParams.map(p=>[p.name,p.value])])};
+              break;
+            }
+            case 'v8': {
+              const a=v8Ref.current?.getAnalysis();
+              const spectrum=v8Ref.current?.getPrimeSpectrum();
+              if(a&&spectrum)output={quantity:a.spiralPoints,
+                signal:a.windingNumber,support:spectrum.gaps.length,
+                signature:JSON.stringify([
+                  a.fractalDimension,a.discoveryCount,spectrum.gaps.slice(0,10),
+                ])};
+              break;
+            }
+            case 'v9': {
+              const e=v9Ref.current,mat=e?.getMaterialForV1();
+              if(e&&mat&&lastConstructionTrialRef.current?.discovery===
+                 stageReceiptsRef.current.get('v8')?.id)
+                output={quantity:e.cells.filter(c=>c.occupied).length,
+                  signal:mat.density,support:e.compositeField?.fitnessField.length||0,
+                  signature:JSON.stringify([
+                    e.seed,e.structure,e.primaryElement,e.secondaryElement,
+                    mat.conductivity,mat.dielectricConstant,
+                  ])};
+              break;
+            }
+            case 'v10': {
+              const e=v10Ref.current,conn=e?.getConnectivity();
+              const axis=opt==='electrical'?'x':'y';
+              if(e&&conn&&e.lastSearch)output={quantity:conn.voidCount,
+                signal:conn.spanning[axis]?1:0,support:e.lastSearch.evaluated,
+                signature:JSON.stringify([
+                  e.config,e.lastSearch.bestScore,conn.componentCount,
+                  conn.shortestPathTortuosity[axis],
+                ])};
+              break;
+            }
+            case 'v11': {
+              const e=v11Ref.current;
+              if(e)output={quantity:e.getBoundaryNodes().length,
+                signal:e.getPorts().length,support:e.getPorts().length,
+                signature:JSON.stringify([
+                  e.spec.shape,e.spec.dimensions,
+                  e.getPorts().map(p=>p.type),
+                ])};
+              break;
+            }
+            case 'v12': {
+              const m=v12Ref.current?.getMetrics();
+              if(m)output={quantity:m.roomTemps.length,signal:m.hvacLoadW,
+                support:m.iteration,signature:JSON.stringify([
+                  m.iteration,m.roomTemps.map(r=>[r.name,r.actual,r.target]),
+                ])};
+              break;
+            }
+            case 'v13': {
+              const e=v13Ref.current,c=e?.getLatestComposite();
+              if(c&&e)output={quantity:c.elements.length,
+                signal:c.properties.meltingPoint,
+                support:c.topology3D.vertices.length,
+                signature:JSON.stringify([
+                  c.elements.map(part=>[part.element.z,part.fraction]),
+                  e.getRequirementScreenings().map(s=>[
+                    s.requirement.id,s.status,
+                  ]),
+                ])};
+              break;
+            }
+          }
+          const index=indexOfStage(currentVersion);
+          const predecessor=index>0
+            ?stageReceiptsRef.current.get(SIMULATION_STAGES[index-1])||null:null;
+          const decision=qualifyStage(
+            SIMULATION_STAGES[index],output,predecessor,context,
+          );
+          if(decision.ok&&decision.receipt){
+            stageReceiptsRef.current.set(currentVersion,decision.receipt);
+            rememberStageReceipt(decision.receipt);
+            (window as any).simConstructionReceipt=decision.receipt;
+            setHandoffStatus('Created '+decision.receipt.id+' · model only');
+            const nextIndex=(currentIndex+1)%goal.tasks.length;
+            stageFrameRef.current=0;
+            setCurrentChainIndex(nextIndex);
+          }else if(stageFrameRef.current%60===0){
+            setHandoffStatus(decision.reason);
+          }
+        }else if(stageFrameRef.current%120===0){
+          setHandoffStatus(
+            currentVersion.toUpperCase()+': simulating until output is ready',
+          );
         }
       }
 
@@ -1445,6 +1679,14 @@ const SimulationView = ({
 
   return (
     <div ref={containerRef} className="w-full h-full rounded-xl overflow-hidden bg-black/40 border border-white/10 relative">
+      <div className="absolute top-2 left-2 z-20 max-w-[90%] pointer-events-none bg-black/80 border border-cyan-500/20 rounded-lg px-3 py-1.5">
+        <div className="text-[9px] font-semibold text-cyan-300">
+          {indexOfStage(activeVersion)<9?'V0–V8 DISCOVERY':'V9–V13 CONSTRUCTION'}
+        </div>
+        <div className="text-[9px] font-mono text-gray-200 break-words">
+          {handoffStatus}
+        </div>
+      </div>
       {webGlError && (
         <div className="absolute inset-0 z-10 bg-[#050505]">
           <SoftwareSimulationFallback />
