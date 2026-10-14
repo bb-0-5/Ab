@@ -25,7 +25,7 @@ export interface V2Node {
 export class V2Engine {
   nodes: V2Node[] = [];
   maxNodes: number = 80;
-  pathLength: number = 40;
+  pathLength: number = 12;
   scene: THREE.Scene;
   points: THREE.Points;
   lines: THREE.LineSegments;
@@ -73,7 +73,7 @@ export class V2Engine {
     const lineMaterial = new THREE.LineBasicMaterial({
       vertexColors: true,
       transparent: true,
-      opacity: 0.3
+      opacity: 0.16
     });
     this.lines = new THREE.LineSegments(lineGeometry, lineMaterial);
     this.scene.add(this.lines);
