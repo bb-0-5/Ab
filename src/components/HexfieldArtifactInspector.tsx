@@ -1,5 +1,6 @@
 import React,{useEffect,useRef} from 'react';
 import type {SweepProgress} from '../lib/auto_transport_sweep';
+import type {NetworkFlowResult} from '../lib/steady_transport_network';
 import * as THREE from 'three';
 import {
  STAGE_GUIDES,type RenderArtifact,
@@ -200,6 +201,60 @@ function drawArtifact(canvas:HTMLCanvasElement,artifact:RenderArtifact){
   label('NOT A MOLECULAR STRUCTURE',12,height-10,'#e8ce99');
  }
 }
+/** A factual potential profile from the resistor network, not a decorative
+ * particle animation. Pressure is normalized by a specified 1 Pa drop and
+ * voltage by a 1 mV drop over the assumed 1mm-pitch voxel design. */
+function TransportPotentialPlot({
+ result,title,
+}:{result:NetworkFlowResult;title:string}){
+ const rows=result.pressureSamples;
+ const points=rows.map(s=>[
+   18+s.position*272,
+   96-Math.max(0,Math.min(1,s.fraction))*75,
+ ].join(',')).join(' ');
+ const fluid=result.mode==='hydraulic';
+ return <div className="rounded-lg border border-white/15 bg-[#09161c] p-2.5 min-w-0">
+   <div className="flex justify-between items-baseline gap-2">
+    <strong className="text-white text-[12px]">{title}</strong>
+    <span className="text-cyan-200 text-[11px] font-mono">
+     {fluid?'1 Pa pressure':'1 mV voltage'}
+    </span>
+   </div>
+   <svg viewBox="0 0 310 126" role="img"
+    aria-label={fluid?
+     'Pressure field falls along the actual Y pore network':
+     'Electrical voltage field falls along actual X solid connections'}
+    className="w-full h-[126px] my-1">
+     <path d="M18 10 V102 H301" fill="none" stroke="#55717a" strokeWidth="1.5"/>
+     {[.25,.5,.75].map(y=><path key={y}
+      d={'M18 '+(96-y*75)+' H301'}
+      fill="none" stroke="#28434d" strokeDasharray="3 5"/>)}
+     <polyline points={points} fill="none"
+      stroke={fluid?'#53d4ec':'#fbd070'} strokeWidth="3"
+      strokeLinejoin="round" strokeLinecap="round"/>
+     <path d="M265 110 H296 M289 104 L297 110 L289 116"
+      fill="none" stroke={fluid?'#53d4ec':'#fbd070'}
+      strokeWidth="2"/>
+     <text x="18" y="12" fill="#d5e9f0" fontSize="11">1.0</text>
+     <text x="18" y="97" fill="#b4ced9" fontSize="11">0</text>
+     <text x="18" y="122" fill="#b4ced9" fontSize="10">INLET</text>
+     <text x="245" y="122" fill="#b4ced9" fontSize="10">OUTLET →</text>
+   </svg>
+   <div className="text-[11px] text-slate-300">
+    {fluid?
+     <>Modeled Q = <b className="text-cyan-100">
+       {result.resolvedFlux.toExponential(2)} m³/s
+      </b> · Re ≈ {result.reynoldsEstimate?.toPrecision(2)||'?'}
+      {' · '}{result.laminarAssumption?'low-Re assumption':'outside low-Re range'}</>
+     :<>Modeled effective σ = <b className="text-amber-100">
+       {result.effectiveConductivity?.toExponential(2)||'0'} S/m
+      </b> · I = {result.resolvedFlux.toExponential(2)} A
+      (idealized applied 1 mV)</>
+    }
+    {' · '}{result.converged?'converged':'bounded residual, not converged'}
+   </div>
+  </div>;
+}
 export function HexfieldArtifactInspector({
  stage,metric,detail,handoff,completed,artifact,transport,
 }:{
@@ -274,8 +329,9 @@ export function HexfieldArtifactInspector({
        AUTO-SWEEP · materials + pores + cooling fluids
      </strong>
      <span className="font-mono text-[12px] text-white">
-       {transport.evaluated} of 40 modeled cases ·
-       {transport.complete?' selected':' comparing'}
+       {transport.evaluated} of 40 geometry/material prescreens
+       {' · '}{transport.verifiedCount}/{transport.targetVerificationCount}
+       {' pressure/current solves'}
      </span>
     </div>
     <p className="text-[12px] text-white mt-1">
@@ -307,10 +363,32 @@ export function HexfieldArtifactInspector({
        {' '+(transport.best.estimatedSolidPathSigmaSm||0).toExponential(2)}
        {' S/m'} · not AC impedance or electrons in motion
       </p>}
+    {transport.best?.verified&&<>
+      <p className="mt-2 text-[12px] font-semibold text-emerald-200">
+       FLOW + ELECTRICAL CONDUCTION ACTUALLY SOLVED ON THE 3D V10 MASK
+      </p>
+      <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <TransportPotentialPlot
+          result={transport.best.verified.hydraulic}
+          title={(transport.best.fluid==='air'?'Air':'Water')+
+            ' · Y-direction pore pressure'}/>
+        {transport.best.verified.electric&&
+        <TransportPotentialPlot
+          result={transport.best.verified.electric}
+          title="DC · X-direction solid voltage"/>}
+      </div>
+      <p className="mt-2 text-[11px] text-slate-300">
+       Curves come from the actual six-neighbour pressure and voltage fields.
+       The shapes are conditional on assumed 1 mm voxels, 0.22 mm pore
+       throats, 1 Pa pump pressure and 1 mV applied potential.
+      </p>
+    </>}
     <p className="mt-2 text-[11px] text-slate-300">
-      Material properties are room-temperature references. Air/water heat
-      results assume stationary fluid; void routing is six-connected geometry,
-      not pressure drop, actual flow, convection, corrosion or manufacturing proof.
+      The fluid network uses a simplified low-Re Poiseuille resistor model,
+      not CFD, turbulence or measured pump flow. Electrical conduction uses
+      a DC Ohmic network, not a simulation of electrons or AC impedance.
+      Material data are approximate room-temperature references; the
+      geometry is a hypothetical manufactured object, not lab validation.
     </p>
    </div>
   )}
