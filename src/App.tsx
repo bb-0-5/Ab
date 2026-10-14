@@ -875,10 +875,19 @@ const SimulationView = ({
         }
       }
 
-      // V9/V10/V11: Material pipeline (update visuals)
-      if (v9Ref.current) v9Ref.current.update();
-      if (v10Ref.current) v10Ref.current.update();
-      if (v11Ref.current) v11Ref.current.update();
+      // Update the active 3D engine frequently but DO NOT regenerate large
+      // invisible geometry buffers on every frame. Original numeric fields
+      // remain resident. Redrawing all engines 30×/s made mobile tours
+      // take minutes and left V9/V10 innovations effectively unseen.
+      if (v9Ref.current && (
+          currentVersion==='v9'||simulationFrame%15===0
+        ))v9Ref.current.update();
+      if (v10Ref.current && (
+          currentVersion==='v10'||simulationFrame%15===0
+        ))v10Ref.current.update();
+      if (v11Ref.current && (
+          currentVersion==='v11'||simulationFrame%15===0
+        ))v11Ref.current.update();
 
       // V1: Swarm — explores through V9 lattice + V10 mesh material
       if (v1Ref.current) {
@@ -1050,7 +1059,12 @@ const SimulationView = ({
       if (v8Ref.current) {
         const activeZeros = (window as any).riemannActiveZeros || 15;
         const showCriticalLine = (window as any).riemannShowCriticalLine !== false;
-        v8Ref.current.update(opt, mem, tMode, activeZeros, showCriticalLine, compLevel);
+        // V8's expensive prime/zeta field is independent of building flow.
+        // Refresh hidden V8 once per 45 frames, visible V8 every 3 frames;
+        // the actual experiment still runs before its own artifact gate.
+        if((currentVersion==='v8'&&simulationFrame%3===0)
+          ||simulationFrame%45===0)
+          v8Ref.current.update(opt, mem, tMode, activeZeros, showCriticalLine, compLevel);
         (window as any).riemannSubprimes = v8Ref.current.subprimeDiscoveries;
         (window as any).riemannV8Engine = v8Ref.current;
       }
@@ -1421,7 +1435,7 @@ const SimulationView = ({
         const stable = currentVersion === 'v13'
           ? Boolean(v13Ref.current?.getLatestComposite())
           : Boolean(engine?.isStable());
-        if(mayAdvanceStage(currentVersion,stageFrameRef.current,stable,150)){
+        if(mayAdvanceStage(currentVersion,stageFrameRef.current,stable,90)){
           let output:StageObservation|null=null;
           let restartDiscovery=false;
           switch(currentVersion){
