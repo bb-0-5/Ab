@@ -8,7 +8,7 @@ const n=13,layers=9;
 const seedConfigs=V10_CANDIDATES.map(x=>({...x}));
 const name=c=>c===null?'Open void reference':`${c.tpms} · f=${c.frequency.toFixed(2)} · threshold=${c.threshold.toFixed(2)}`;
 const send=x=>postMessage(x);
-let generation=0,paused=false,ended=false,seen=new Set(),queue=[],ranking=[],reference=null,focus=null,best=null,serial=0,initialCount=0;
+let generation=0,paused=false,ended=false,seen=new Set(),queue=[],ranking=[],reference=null,focus=null,best=null,serial=0,initialCount=0,plannedCount=0;
 let originalV10=null;
 function makeShape(config){
   const mask=config?buildV10Mask({n,layers,...config}).mask:new Uint8Array(n*n*layers);
@@ -32,6 +32,7 @@ function current(){
 const reasons=new Map();
 function pushMutations(){
  const planned=planV10FollowUps(ranking,seen,12);
+ plannedCount=planned.length;
  for(const trial of planned){
   const key=JSON.stringify(trial.config);
   seen.add(key);
@@ -83,7 +84,7 @@ async function explore(g){
    if(trial.assessment.meetsTarget&&(!best||trial.result.flowM3S>best.result.flowM3S))best=trial;
    // Display each actual pressure solution for a moment, while retaining best separately.
    focus=trial;
-   send({type:'progress',done:done+1,total:mutated?1+initialCount+12:1+initialCount,
+   send({type:'progress',done:done+1,total:mutated?1+initialCount+plannedCount:1+initialCount,
      stage:mutated?'CONSTRAINT-DRIVEN TEST':'SCREENING V10 MASKS',reason:inference,ranking:ranking.slice(),current:hydraulicEvidence(trial.result),focus:small,
      winner:best?concise(best):null});
    await new Promise(ok=>setTimeout(ok,45));
@@ -100,7 +101,7 @@ async function explore(g){
  }catch(error){ended=true;send({type:'error',message:String(error)})}
 }
 function start(){paused=false;if(ended){return;}if(!generation){generation++;explore(generation);}}
-function reset(){generation++;paused=false;ended=false;ranking=[];reference=null;focus=null;best=null;seen.clear();reasons.clear();queue=[];send({type:'starting'});explore(generation);}
+function reset(){generation++;paused=false;ended=false;ranking=[];reference=null;focus=null;best=null;seen.clear();reasons.clear();queue=[];plannedCount=0;send({type:'starting'});explore(generation);}
 globalThis.onmessage=({data})=>{
  switch(data?.type){case 'source-v10':
   try{originalV10=data.receipt?decodeV10PressureSelection(data.receipt):null;}
