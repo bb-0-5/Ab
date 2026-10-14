@@ -65,3 +65,6 @@ jobs:
 
       - name: Verify pressure evidence drives bounded follow-up geometry experiments
         run: node scripts/v10-inference-planner-smoke.mjs
+
+      - name: Verify conservative chronological dye and geometry-dependent arrival
+        run: node scripts/v10-dye-transport-smoke.mjs
