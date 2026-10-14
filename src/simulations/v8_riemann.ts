@@ -855,7 +855,14 @@ export class V8Engine {
   }
 
   isStable() {
-    return this.time > 5;
+    // The original elapsed-time gate needed >500 expensive updates, which
+    // stalled a CPU-budgeted mobile tour even after the mathematical probes
+    // and prime spectrum already existed. Completion must mean a real
+    // generated mathematical artifact, not five artificial time units.
+    return this._spiralBuilt && this._wavesBuilt
+      && this.searchIterations >= 3
+      && this.spiralPoints.length > 100
+      && Number.isFinite(this.windingNumber);
   }
 
   // ═══════════════════════════════════════════════════════════
