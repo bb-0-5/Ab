@@ -671,10 +671,7 @@ const SimulationView = ({
     if (v10Ref.current) {
       v10Ref.current.surfacePoints.visible = upstreamMaterial || activeVersion === 'v10';
       v10Ref.current.channelLines.visible = upstreamMaterial || activeVersion === 'v10';
-      v10Ref.current.throughPathLine.visible =
-        activeVersion==='v10'&&v10Ref.current.throughPath.length>1;
-      v10Ref.current.travelingMarker.visible =
-        activeVersion==='v10'&&v10Ref.current.throughPath.length>1;
+      v10Ref.current.setShowThroughPath(activeVersion==='v10');
     }
     if (v11Ref.current) {
       v11Ref.current.shellLines.visible = upstreamMaterial || activeVersion === 'v11';
@@ -1973,10 +1970,7 @@ const SimulationView = ({
     if (v10Ref.current) {
       v10Ref.current.surfacePoints.visible = showMaterial || activeVersion === 'v10';
       v10Ref.current.channelLines.visible = showMaterial || activeVersion === 'v10';
-      v10Ref.current.throughPathLine.visible =
-        activeVersion==='v10'&&v10Ref.current.throughPath.length>1;
-      v10Ref.current.travelingMarker.visible =
-        activeVersion==='v10'&&v10Ref.current.throughPath.length>1;
+      v10Ref.current.setShowThroughPath(activeVersion==='v10');
     }
     if (v11Ref.current) {
       v11Ref.current.shellLines.visible = showMaterial || activeVersion === 'v11';
