@@ -10,7 +10,7 @@ const env={ASSETS:{async fetch(req) {
 const run=(path)=>worker.fetch(new Request('https://abovebound.org'+path),env);
 const home=await run('/');
 assert.equal(home.status,302,'homepage redirects to the latest lab');
-assert.match(home.headers.get('Location'),/\/membrane\.html\?release=v10-membrane-home-20261015-r2/);
+assert.match(home.headers.get('Location'),/\/membrane\.html\?release=v10-membrane-home-20261015-r3/);
 assert.match(home.headers.get('Cache-Control'),/no-store/);
 assert.equal((await run('/index.html')).status,302,'index.html also redirects');
 const legacy=await run('/simulator.html');

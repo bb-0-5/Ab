@@ -2,7 +2,7 @@
 // The latest membrane/3D-flow laboratory is the PRIMARY site experience.
 // Preserve the original V0–V13 application at /simulator.html.
 // In particular, do not simply redirect /simulator.html to / (it would loop).
-const RELEASE = 'v10-membrane-home-20261015-r2';
+const RELEASE = 'v10-membrane-home-20261015-r3';
 function noCache(response) {
   const headers=new Headers(response.headers);
   headers.set('Cache-Control','no-store, max-age=0, must-revalidate');

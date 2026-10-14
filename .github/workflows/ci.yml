@@ -49,3 +49,6 @@ jobs:
 
       - name: Verify primary experience route and original V0–V13 access
         run: node scripts/home-routing-smoke.mjs
+
+      - name: Verify live V10 field streaming and adaptive screening
+        run: node scripts/membrane-visibility-smoke.mjs
