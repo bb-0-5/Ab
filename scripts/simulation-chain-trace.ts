@@ -28,7 +28,7 @@ try {
   const v0 = new V0CompressionEngine(scene);
   disposables.push(v0);
   v0.setCompressionLevel(4);
-  for (let i = 0; i < 155; i++) v0.update('thermal', {});
+  for (let i = 0; i < 95; i++) v0.update('thermal', {});
   finite(v0.saveState().phase, 'V0 did not advance its compression field');
 
   const fundamental = new FundamentalEngine(scene, new THREE.Euler(), new THREE.Color(0x00ffff));
@@ -111,6 +111,7 @@ try {
   disposables.push(v10);
   v10.configure('thermal');
   v10.buildMesh();
+  v10.optimizeConnectedChannels(v9.compositeField||undefined,'y');
   v10.update();
   check(v10.isStable(), 'V10 mesh was not built');
   finite(v10.getMetrics().porosity, 'V10 porosity is invalid');
@@ -141,7 +142,13 @@ try {
   check(v13.getActiveElement()?.element.z === 6, 'V13 did not activate carbon');
   check(v13.getMetrics().topologyVertices > 0, 'V13 composite topology is empty');
 
-  // Follow the SAME receipt contract as the actual sequential React tour.
+  const source=readFileSync('src/App.tsx','utf8');
+  assert.match(source,/v8Ref\.current\.update\(opt, mem, tMode/);
+  assert.match(source,/mayAdvanceStage\(currentVersion,stageFrameRef\.current,stable,90\)/,
+    'No stage should be forced to simulate 150 visible frames on a slow phone');
+  assert.match(source,/h-\[440px\]/,
+    'The primary 3D viewport must remain legible at 390px mobile width');
+    // Follow the SAME receipt contract as the actual sequential React tour.
   const observations:Record<string,StageObservation>={
     v0:{quantity:v0.nodes.length,signal:v0.phase,support:v0.compressionFieldLevel,
       signature:JSON.stringify([v0.compressionFieldLevel,v0.primes.length,v0.oddHarmonics.length])},
@@ -196,7 +203,7 @@ try {
     last=decision.receipt;
   }
   assert.equal(v0.isStable(),true,
-    'V0 harmonic field should be ready around the 150-frame visible dwell, not after 42 seconds');
+    'V0 harmonic field should qualify after 95 numeric updates, not after 42 seconds');
   assert.deepEqual(blockers,[],'The original V0–V13 chain must have no unqualified artifacts');
   console.log('Full original V0–V13 artifact tour trace passed.');
 
