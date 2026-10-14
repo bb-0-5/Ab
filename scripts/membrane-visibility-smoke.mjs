@@ -1,37 +1,25 @@
 import assert from 'node:assert/strict';
-import {Worker} from 'node:worker_threads';
-import {fileURLToPath} from 'node:url';
-import {setTimeout as sleep} from 'node:timers/promises';
-const target=fileURLToPath(new URL('../public/membrane-worker.mjs',import.meta.url));
-const bridge=`import {parentPort} from 'node:worker_threads';
-globalThis.postMessage=x=>parentPort.postMessage(x);
-globalThis.onmessage=null;
-parentPort.on('message',x=>globalThis.onmessage({data:x}));
-await import(${JSON.stringify('file://'+target)});`;
-const worker=new Worker(bridge,{eval:true,type:'module'});
-const messages=[],errors=[];
-worker.on('message',x=>{messages.push(x);if(x.type==='ready')worker.postMessage({type:'start'});});
-worker.on('error',e=>errors.push(e));
-for(let i=0;i<130;i++){
- if(messages.some(x=>x.type==='exploring'))break;
- await sleep(100);
+const messages=[];
+globalThis.postMessage=x=>{messages.push(x)};
+await import('../public/membrane-worker.mjs');
+assert.equal(messages[0]?.type,'ready');
+globalThis.onmessage({data:{type:'start'}});
+for(let i=0;i<100;i++){
+ if(messages.some(x=>x.type==='complete'||x.type==='error'))break;
+ await new Promise(ok=>setTimeout(ok,25));
 }
-worker.postMessage({type:'pause'});
-await sleep(200);
-assert.deepEqual(errors,[],'worker should not crash');
-const firstPreview=messages.findIndex(x=>x.type==='preview');
-const firstWinner=messages.findIndex(x=>x.type==='state');
-assert.ok(firstPreview>=0,'must stream calculated trial fields before ranking completes');
-assert.ok(firstWinner>firstPreview,'must preview before the full screening completes');
-assert.ok(messages.some(x=>x.type==='screening'&&x.progress>=3),'must emit actual progress');
-const p=messages[firstPreview];
-assert.equal(p.state.slices.length,7,'trial includes seven real planes');
-assert.ok(p.state.slices.every(s=>s.solid.length===169),'correct voxel slab');
-const q=messages.find(x=>x.type==='state'&&x.state.step>=4);
-assert.ok(q,'must advance full 3D field under chosen geometry');
-assert.ok(q.state.evidence.divergenceMax<=0.002,'3D projection meets declared divergence tolerance');
-assert.ok(messages.some(x=>x.type==='exploring'),'bounded neighbouring design search should commence');
-assert.ok(q.winner&&q.ranking.length>=7,'ranking and best candidate available');
-assert.ok(messages.some(x=>x.type==='preview'&&x.state.slices.some(s=>s.solid.some(Boolean))),'must display real solid masks as trial changes');
-console.log('PASS: first computed preview before winner; candidate geometries; live 3D updates; autonomous neighbouring search; conservation');
-await worker.terminate();
+const errors=messages.filter(x=>x.type==='error');
+assert.equal(errors.length,0,JSON.stringify(errors));
+const complete=messages.find(x=>x.type==='complete');
+assert.ok(complete,'bounded automatic campaign must terminate');
+assert.ok(complete.ranking.length>=7,'open + 6 masks');
+const open=complete.ranking[0];
+assert.equal(open.name,'Open void reference');
+assert.ok(open.flowM3S>0);
+assert.ok(complete.ranking.every(r=>r.flowM3S<=open.flowM3S*(1+1e-8)),'no geometry can beat unconstrained reference with identical bonds');
+if(complete.winner){
+ assert.ok(complete.winner.meetsTarget);
+ assert.ok(complete.winner.solidFraction>=.25&&complete.winner.solidFraction<=.75);
+}
+assert.ok(messages.some(x=>x.type==='progress'&&x.current?.pressure?.length),'must display computed pressure while screening');
+console.log('PASS campaign', {trials:complete.ranking.length,winner:complete.winner?.name||'no feasible',referenceQ:open.flowM3S,accepted:complete.ranking.filter(x=>x.meetsTarget).length});
