@@ -8,3 +8,5 @@
 .torus-orbit-hint{position:absolute;left:50%;top:16px;bottom:auto;transform:translateX(-50%);white-space:nowrap;pointer-events:none;padding:8px 13px;border:1px solid #527c81;background:#091b22c7;color:#e3fffa;font-size:10px;font-weight:700;letter-spacing:.11em;text-align:center}
 .torus-orbit-hint[hidden],.torus-views[hidden]{display:none!important}
 @media(max-width:620px){.torus-orbit-hint{display:none}.torus-views{margin-top:11px}.corner.bottom-left{bottom:15px}.corner.bottom-right{bottom:15px;font-size:7px}}
+
+.gear-lab-link{display:inline-flex;color:#091f22;background:#8fe5ca;border:1px solid #c4ffe9;padding:10px 15px;letter-spacing:1px;font-size:11px;font-weight:900;text-decoration:none;margin:0 0 24px;max-width:100%}.gear-lab-link:hover{background:#bbffe7}

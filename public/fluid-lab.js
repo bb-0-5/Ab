@@ -1,5 +1,5 @@
 import { taylorGreen, periodic, decodeCavity, cubeCell } from '/fluid-physics.mjs';
-import { renderPeriodicTorus } from '/torus-visual.mjs';
+import { renderPeriodicTorus } from '/torus-visual.mjs?build=gears20261014b';
 const $ = id => document.getElementById(id);
 const canvas = $('field'), ctx = canvas.getContext('2d',{alpha:false});
 const modes = {cube:'cube',torus:'torus'};
@@ -150,5 +150,5 @@ $('displayHeat').addEventListener('click',()=>{state.display='heat';$('displayHe
 $('displaySpeed').addEventListener('click',()=>{state.display='speed';$('displayHeat').classList.remove('active');$('displaySpeed').classList.add('active')});
 $('play').addEventListener('click',()=>{state.playing=!state.playing;setText('playText',state.playing?'PAUSE FLOW TRACERS':'RESUME FLOW TRACERS');setText('playIcon',state.playing?'Ⅱ':'▷')});
 $('reset').addEventListener('click',()=>{state.time=0;initParticles();if(state.mode==='torus')$('slice').value=0;updateSlider();updateStats()});
-showMode(new URLSearchParams(window.location.search).get('mode')==='torus'?'torus':'cube');requestAnimationFrame(render);
+showMode(new URLSearchParams(window.location.search).get('mode')==='torus'||window.location.pathname.endsWith('/torus-v3.html')?'torus':'cube');requestAnimationFrame(render);
 fetch('/fluid-fields.json',{cache:'no-store'}).then(response=>{if(!response.ok)throw Error('HTTP '+response.status);return response.json()}).then(raw=>{state.field=decodeCavity(raw);initParticles();updateStats();renderRanking();}).catch(error=>{setText('statusInfo','Field unavailable');setText('modeHelp','The 3D field could not be loaded ('+error.message+'). The exact periodic benchmark remains available.');setText('solverLabel','ARCHIVED FIELD UNAVAILABLE');});
