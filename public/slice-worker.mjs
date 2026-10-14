@@ -1,4 +1,4 @@
-import {createSliceEngine,advanceSlices,snapshot} from './slice-engine.mjs';
+import {createSliceEngine,advanceSlices,snapshot} from './slice-engine.mjs?v=perpendicular-3d-20261014-v2';
 let engine=createSliceEngine(),running=false,timer=null,seed=0,blocked=false;
 function tick(){if(!running||blocked)return;blocked=true;
   try{advanceSlices(engine,4);postMessage({type:'state',state:snapshot(engine)});}catch(e){running=false;clearInterval(timer);timer=null;postMessage({type:'error',message:String(e)})}finally{blocked=false}}

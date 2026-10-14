@@ -1,6 +1,6 @@
 const $=s=>document.getElementById(s);
 const main=$('mainCanvas'),stack=$('stackCanvas'),a=main.getContext('2d',{alpha:false}),b=stack.getContext('2d',{alpha:false});
-const worker=new Worker('/slice-worker.mjs',{type:'module'});
+const worker=new Worker('/slice-worker.mjs?v=perpendicular-3d-20261014-v2',{type:'module'});
 let latest=null,paused=false,manualFocus=null,boxes=[],lastRender=0,fieldMode='cross';
 const clamp=(x,lo,hi)=>Math.max(lo,Math.min(hi,x));
 const lerp=(a,b,t)=>a+(b-a)*t;
