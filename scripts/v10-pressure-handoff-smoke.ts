@@ -18,7 +18,7 @@ const at=(x:number,y:number,z:number)=>(z*n+y)*n+x;
 assert.equal(decoded.mask[at(6,4,2)],1,'V10 X-major → hydraulic Z-major must be exact');
 assert.equal(decoded.mask[at(1,2,3)],1);
 assert.equal(decoded.mask.reduce((a:number,b:number)=>a+b,0),2);
-assert.throws(()=>decodeV10PressureSelection({...r,maskHex:'0'+r.maskHex.slice(1)}),/checksum/i);
+assert.throws(()=>decodeV10PressureSelection({...r,maskHex:'f'+r.maskHex.slice(1)}),/checksum/i);
 assert.throws(()=>decodeV10PressureSelection(r,r.timestamp+8*86400e3),/stale/i);
 const m=new Map<string,string>();
 const storage={getItem:(k:string)=>m.get(k)||null,setItem:(k:string,v:string)=>{m.set(k,v)}};
