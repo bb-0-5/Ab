@@ -97,8 +97,15 @@ export class V10MeshEngine {
   channelLines: THREE.LineSegments; // Visualize candidate channel edges
   /** A proved six-connected y-through route, highlighted separately. */
   throughPath:number[]=[];
+  private showThroughPath=false;
   throughPathLine:THREE.Line;
   travelingMarker:THREE.Points;
+  setShowThroughPath(visible:boolean):void{
+    this.showThroughPath=visible;
+    const ready=visible&&this.throughPath.length>1;
+    this.throughPathLine.visible=ready;
+    this.travelingMarker.visible=ready;
+  }
 
   config: MeshConfig = {
     tpms: 'gyroid',
@@ -176,6 +183,7 @@ export class V10MeshEngine {
     );
     this.travelingMarker.frustumCulled=false;
     this.scene.add(this.travelingMarker);
+    this.setShowThroughPath(false);
   }
 
   /** Configure for an optimizer type */
@@ -275,7 +283,7 @@ export class V10MeshEngine {
       'position',new THREE.BufferAttribute(route,3),
     );
     this.throughPathLine.geometry.computeBoundingSphere();
-    this.throughPathLine.visible=this.throughPath.length>1;
+    this.setShowThroughPath(this.showThroughPath);
     // Exact geometric connectivity replaces the former unrelated
     // freq²×porosity "channel count" and assumed tortuosity.
     const shortest=Object.values(connection.shortestPathTortuosity)
