@@ -1,7 +1,9 @@
 const $=s=>document.getElementById(s);
 const main=$('mainCanvas'),stack=$('stackCanvas'),a=main.getContext('2d',{alpha:false}),b=stack.getContext('2d',{alpha:false});
-const worker=new Worker('/membrane-worker.mjs?v=v10-cfd-20261015-r1',{type:'module'});
-let latest=null,paused=false,manualFocus=null,boxes=[],lastRender=0,fieldMode='cross',selected=null,ranking=[];
+const worker=new Worker('/membrane-worker.mjs?v=visible-20261015-r3',{type:'module'});
+let latest=null,paused=false,manualFocus=null,boxes=[],lastRender=0,fieldMode='cross',selected=null,ranking=[],displayPhase='STARTING';
+const frontProgress=$('frontProgress');
+new MutationObserver(()=>{frontProgress.textContent=$('progress').textContent;}).observe($('progress'),{childList:true,subtree:true,characterData:true});
 const clamp=(x,lo,hi)=>Math.max(lo,Math.min(hi,x));
 const lerp=(a,b,t)=>a+(b-a)*t;
 const colors=[[10,48,85],[18,91,152],[29,160,174],[90,212,159],[248,206,108],[251,101,64]];
@@ -16,9 +18,9 @@ function drawSlice(ctx,data,n,x,y,s,arrows=false,perpendicular=false,peakW=0){
  if(!arrows)return;
  const count=10;for(let gy=1;gy<count;gy++)for(let gx=1;gx<count;gx++){
   const ix=Math.min(n-1,Math.floor(gx*n/count)),iy=Math.min(n-1,Math.floor(gy*n/count));const q=iy*n+ix;
-  if(data.solid?.[q])continue;const u=data.u[q],v=data.v[q],speed=Math.hypot(u,v);if(speed<.004)continue;
+  if(data.solid?.[q])continue;const u=data.u[q],v=data.v[q],speed=Math.hypot(u,v);if(speed<.001)continue;
   const px=x+gx*s/count,py=y+(1-gy/count)*s,angle=Math.atan2(-v,u);
-  const len=clamp(speed*33,3,13)*s/385,tx=px+Math.cos(angle)*len,ty=py+Math.sin(angle)*len;
+  const len=clamp(speed*62,6,16)*s/385,tx=px+Math.cos(angle)*len,ty=py+Math.sin(angle)*len;
   ctx.strokeStyle='rgba(244,255,247,.85)';ctx.fillStyle='rgba(244,255,247,.85)';ctx.lineWidth=Math.max(1,s/420);
   ctx.beginPath();ctx.moveTo(px-Math.cos(angle)*len*.38,py-Math.sin(angle)*len*.38);ctx.lineTo(tx,ty);ctx.stroke();
   ctx.beginPath();ctx.moveTo(tx,ty);ctx.lineTo(tx-Math.cos(angle-.53)*len*.38,ty-Math.sin(angle-.53)*len*.38);ctx.lineTo(tx-Math.cos(angle+.53)*len*.38,ty-Math.sin(angle+.53)*len*.38);ctx.fill();
@@ -28,7 +30,7 @@ function drawSlice(ctx,data,n,x,y,s,arrows=false,perpendicular=false,peakW=0){
  for(let gy=1;gy<count;gy++)for(let gx=1;gx<count;gx++){
    const ix=Math.min(n-1,Math.floor(gx*n/count)),iy=Math.min(n-1,Math.floor(gy*n/count));
    const q=iy*n+ix;if(data.solid?.[q])continue;const w=data.w?.[q]||0;
-   if(Math.abs(w)<Math.max(.002,peakW*.06))continue;
+   if(Math.abs(w)<Math.max(.0005,peakW*.055))continue;
    const r=clamp(2+4*Math.abs(w)/Math.max(peakW,.001),2,6)*s/380;
    const px=x+gx*s/count,py=y+(1-gy/count)*s;
    ctx.beginPath();ctx.arc(px,py,r,0,Math.PI*2);
@@ -42,8 +44,8 @@ function mainCanvas(){const {w,h}=fit(main),ctx=a;ctx.fillStyle='#08171e';ctx.fi
  drawSlice(ctx,slice,n,x,y,s,true,fieldMode==='cross',latest.evidence.peakW);
  const delta=(actual-latest.evidence.focus)/latest.layers;
  ctx.fillStyle='#a3d5ca';ctx.font=`${Math.max(11,Math.round(w/52))}px ui-monospace,monospace`;
- ctx.fillText(`z = ${((actual+.5)/latest.layers).toFixed(2)}   Δfocus = ${delta.toFixed(2)}`,Math.max(10,x),Math.min(h-12,y+s+24));
- $('focusLabel').textContent=`SLICE ${actual+1}/${latest.layers} ${manualFocus===null?'· AUTO':'· INSPECT'}`;
+ ctx.fillText(`z=${((actual+.5)/latest.layers).toFixed(2)} · ${displayPhase} · step ${latest.step}`,Math.max(10,x),Math.min(h-12,y+s+24));
+ $('focusLabel').textContent=`${displayPhase} · SLICE ${actual+1}/${latest.layers} ${manualFocus===null?'· AUTO':'· INSPECT'}`;
  $('sliceMeta').textContent=`Z = ${((actual+.5)/latest.layers).toFixed(2)} · |W| ${latest.evidence.peakW.toFixed(3)} · VOID ${(100*latest.evidence.voidFraction).toFixed(0)}%`; 
 }
 function miniTile(ctx,slice,n,x,y,s){const cell=s/n;for(let iy=0;iy<n;iy++)for(let ix=0;ix<n;ix++){
@@ -74,7 +76,7 @@ function stackCanvas(){const {w,h}=fit(stack),ctx=b;ctx.fillStyle='#08171e';ctx.
  $('stackMeta').textContent=`${layers} COUPLED PLANES · ΔZ ${(1/layers).toFixed(3)} · COLOURS = W`; 
 }
 function updateNotes(){if(!latest)return;const e=latest.evidence;
- $('time').textContent=`t = ${latest.time.toFixed(2)}`;
+ $('time').textContent=`STEP ${latest.step} · MODEL t=${latest.time.toFixed(3)}`;
  $('speed').textContent=`PEAK PERPENDICULAR |W| ${e.peakW.toFixed(3)} · HEAT FLUX ${e.plateHeatFlux.toFixed(5)}`;
  $('divergence').textContent=`3D ∇·u ${e.divergenceMax.toExponential(1)} · ${e.pressureSweeps} PRESSURE SWEEPS`;
  $('fieldLegend').textContent=fieldMode==='cross'?`STEP ${latest.step} · +Z AMBER • · −Z CYAN ○`:`STEP ${latest.step} · HEAT: BLUE → ORANGE`;
@@ -83,7 +85,7 @@ function updateNotes(){if(!latest)return;const e=latest.evidence;
  {type:'observed',text:`SOLID BOUNDARIES: ${(100*(1-e.voidFraction)).toFixed(1)}% solid. Zero normal fluid flow across voxel interfaces; adiabatic heat walls.`},
  ...e.signals].slice(0,7);
  for(const item of status){const node=document.createElement('div');node.className='gear'+(item.type==='limit'?' limit':'')+(item.type==='warning'?' warn':'');node.textContent=item.text;html.append(node);}
- $('status').textContent=paused?'PAUSED · WORKER IDLE':e.projectionConverged?'LIVE · MASKED 3D CFD':'WARNING · PRESSURE UNCONVERGED';
+ $('status').textContent=paused?'PAUSED · WORKER IDLE':displayPhase==='SCREENING'?'SCREENING · COMPUTED FIELD':e.projectionConverged?'LIVE · REAL PHYSICS STEPS':'WARNING · PRESSURE UNCONVERGED';
 }
 function paint(time){if(time-lastRender>44){mainCanvas();stackCanvas();lastRender=time}requestAnimationFrame(paint)}
 function paintRanking(){
@@ -96,13 +98,43 @@ function paintRanking(){
  }
 }
 worker.onmessage=ev=>{
- const {type,state,message,ranking:rows,winner,progress,total}=ev.data||{};
- if(type==='ready'){worker.postMessage({type:'start'});$('status').textContent='V10 GEOMETRY SWEEP STARTING';}
- else if(type==='screening'){ranking=rows||[];paintRanking();$('progress').textContent=`AUTO SWEEP ${progress}/${total}: ${progress<total?'testing V10 voxel masks, checking void connectivity, evolving pressure and heat…':'selecting physically admissible candidate…'}`;$('status').textContent='LOCAL GEOMETRY SCREENING';}
- else if(type==='state'){latest=state;ranking=rows||ranking;selected=winner||selected;paintRanking();$('chosen').textContent=selected?selected.label.toUpperCase():'GEOMETRY PENDING';$('progress').textContent=selected?`Selected strongest V10 membrane candidate: ${selected.label}. Against the empty cavity it has ${selected.vsEmptyPercent===null?'no valid comparison':`${selected.vsEmptyPercent>0?'+':''}${selected.vsEmptyPercent.toFixed(1)}% transient heat flux`}. Running again at 19×19×9; NOT steady-state or grid-converged.`:'Awaiting selected configuration';updateNotes()}
- else if(type==='error'){$('status').textContent='NUMERICAL ERROR · '+message;paused=true}
+ const {type,state,message,ranking:rows,winner,progress,total,activeLabel,step,steps,remaining,previous}=ev.data||{};
+ if(type==='ready'){
+  worker.postMessage({type:'start'});
+  $('status').textContent='PHYSICS WORKER STARTED';
+ }else if(type==='screening'){
+  displayPhase='SCREENING';ranking=rows||ranking;paintRanking();
+  $('progress').textContent=`CALCULATING ${Math.min((progress||0)+1,total||7)}/${total||7}: ${activeLabel||'Loading'} · ${step||0}/${steps||65} ACTUAL NUMERICAL STEPS. The changing canvases are computed trial fields, not random animation.`;
+  $('chosen').textContent='SCREENING · NO WINNER YET';
+  $('status').textContent='SCREENING · LIVE RESULTS';
+ }else if(type==='preview'){
+  displayPhase='SCREENING';latest=state;manualFocus=null;
+  $('progress').textContent=`CALCULATING ${Math.min((progress||0)+1,total||7)}/${total||7}: ${activeLabel} · ${step}/${steps} NUMERICAL STEPS. Preview only; not a selected design.`;
+  updateNotes();
+ }else if(type==='state'){
+  displayPhase='RUNNING';latest=state;ranking=rows||ranking;selected=winner||selected;
+  paintRanking();$('chosen').textContent=selected?selected.label.toUpperCase():'GEOMETRY PENDING';
+  if(selected){
+    $('progress').textContent=`CURRENT MODEL: ${selected.label}. Relative to empty reference: ${selected.vsEmptyPercent==null?'unavailable':(selected.vsEmptyPercent>0?'+':'')+selected.vsEmptyPercent.toFixed(1)+'%'} transient heat flux. STEP ${state.step} evolving · automatic nearby geometry trials run in the same Web Worker. Not a validated invention.`;
+  }
+  updateNotes();
+ }else if(type==='exploring'){
+  if(rows){ranking=rows;paintRanking()};
+  if(winner){selected=winner;$('chosen').textContent=winner.label.toUpperCase();}
+  $('progress').textContent=`AUTO GEOMETRY DISCOVERY: ${activeLabel} · ${step||0}/${steps||65} numerical steps · ${remaining||0} further neighbours queued. Incumbent stays selected unless an admissible same-horizon result improves the score.`;
+ }else if(type==='discovery'){
+  selected=winner;ranking=rows||ranking;paintRanking();
+  $('chosen').textContent=winner.label.toUpperCase();
+  $('progress').textContent=`NEW COARSE-GRID CANDIDATE: ${winner.label} replaces ${previous}. Physics field restarted for this different geometry; validation is still required.`;
+ }else if(type==='paused-screening'){
+  paused=true;$('status').textContent=message||'SCREENING PAUSED';
+ }else if(type==='error'){
+  $('status').textContent='NUMERICAL ERROR · '+message;
+  $('progress').textContent='Calculation stopped: '+message+' · The model has not produced a defensible new result.';
+  paused=true;
+ }
 };
-worker.onerror=err=>{$('status').textContent=`WORKER ERROR: ${err.message}`;paused=true};
+worker.onerror=err=>{$('status').textContent=`WORKER ERROR: ${err.message}`;$('progress').textContent='Worker failed: '+err.message+' · Unable to run numerical physics on this device.';paused=true};
 $('run').onclick=()=>{paused=!paused;worker.postMessage({type:paused?'pause':'start'});$('run').textContent=paused?'▶ RESUME':'Ⅱ PAUSE';updateNotes()};
 $('seed').onclick=()=>{manualFocus=null;selected=null;latest=null;ranking=[];paused=false;worker.postMessage({type:'reset'});$('auto').textContent='◎ AUTO FOCUS';$('run').textContent='Ⅱ PAUSE'};
 $('auto').onclick=()=>{manualFocus=null;$('auto').textContent='◎ AUTO FOCUS';mainCanvas()};
