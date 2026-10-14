@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {readFileSync} from 'node:fs';
-import {screenVoxelChannels} from '../src/lib/voxel_connectivity';
+import {screenVoxelChannels,traceVoxelThroughPath} from '../src/lib/voxel_connectivity';
 import {V9LatticeEngine} from '../src/simulations/v9_lattice';
 import {V10MeshEngine} from '../src/simulations/v10_mesh';
 import {V1Engine} from '../src/simulations/v1';
@@ -31,6 +31,12 @@ const pass=screenVoxelChannels(tube,n);
 assert.equal(pass.componentCount,1);
 assert.deepEqual(pass.spanning,{x:true,y:false,z:false});
 assert.equal(pass.shortestPathTortuosity.x,1);
+assert.deepEqual(traceVoxelThroughPath(solid,n,'y'),[]);
+const axisPath=traceVoxelThroughPath(tube,n,'x');
+assert.equal(axisPath.length,n,'Rendered path must reach the opposing face');
+for(let j=1;j<axisPath.length;j++)
+ assert.equal(Math.abs(axisPath[j]-axisPath[j-1]),n*n,
+  'Path visualization may only traverse face-adjacent open voxels');
 const bends=solid.slice();
 for(const [x,y] of [[0,1],[1,1],[1,2],[1,3],[2,3],[3,3],[4,3],[4,2],[4,1],[5,1]])
  bends[i(x,y,2)]=0;
@@ -53,6 +59,11 @@ try {
  v10.buildMesh(v9.compositeField!);
  const baselineInfo=v10.getConnectivity()!;
  assert.equal(baselineInfo.resolution,v10.getResolution());
+ assert.ok(v10.throughPath.length>0,
+  'V10 must render a real nonzero six-connected path for its current mask');
+ v10.update();
+ assert.equal(v10.throughPathLine.geometry.getAttribute('position').count,v10.throughPath.length);
+ assert.equal(v10.travelingMarker.geometry.getAttribute('position').count,1);
  assert.equal(v10.getMetrics().channelCount,baselineInfo.componentCount,
   'V10 channel count must be real six-connected void regions, not freq²*porosity');
  assert.equal(v10.getMetrics().porosity,
