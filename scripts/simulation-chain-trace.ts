@@ -94,7 +94,10 @@ try {
 
   const v8 = new V8Engine(scene);
   disposables.push(v8);
+  assert.equal(v8.isStable(),false,'V8 cannot advance before running mathematical experiments');
   for (let i = 0; i < 3; i++) v8.update('math', {}, 'cooling', 5, true, 1);
+  assert.equal(v8.isStable(),true,
+    'Real V8 spiral, waves and probes should qualify without 500 artificial updates');
   const zeta = v8.evaluateZeta(0.5, 14.134725142);
   finite(zeta.re, 'V8 zeta real component is invalid');
   finite(zeta.im, 'V8 zeta imaginary component is invalid');
