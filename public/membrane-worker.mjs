@@ -122,9 +122,9 @@ async function explore(g){
   const display=best||focus;
   send({type:'progress',done:ranking.length,total:ranking.length,stage:'REPLAYING SELECTED GEOMETRY',
     current:hydraulicEvidence(display.result),focus:concise(display),ranking:ranking.slice(),winner});
-  await followDye(g,display,display.name,9,30);
+  const lastTracer=await followDye(g,display,display.name,9,30);
   if(g!==generation)return;
-  send({type:'complete',done:ranking.length,total:ranking.length,stage:'SEARCH FINISHED',ranking:ranking.slice(),
+  send({type:'complete',transport:lastTracer?dyeSnapshot(lastTracer):null,done:ranking.length,total:ranking.length,stage:'SEARCH FINISHED',ranking:ranking.slice(),
     current:hydraulicEvidence(display.result),focus:concise(display),winner,
     message:best?`Provisional pore-network candidate: ${best.name}. Δp needed for a fixed flow ≈ ${winner.pressureAtTargetPa.toFixed(3)} Pa vs open reference ${HYDRAULICS.targetOpenFraction.toFixed(2)} Pa. Requires CFD and experimental validation.`:
       'No tested solid membrane met the preset solid fraction and flow target. No fabricated improvement.'});
