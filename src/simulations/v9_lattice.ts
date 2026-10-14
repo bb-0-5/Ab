@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type {MaterialComposite} from './v13_material';
 
 /**
  * V9 — Isotope/Element Lattice Compositor
@@ -153,6 +154,55 @@ export class V9LatticeEngine {
   latticeSize: number = 4;      // Unit cells per axis
   latticeSpacing: number = 0.3; // World units between sites
   defectRate: number = 0.05;    // Vacancy/defect probability
+  /**
+   * Provenance of an externally proposed ELEMENTAL mixture. Its V13 mixing
+   * estimates are deliberately NOT injected into the V9 material field.
+   */
+  v13Hypothesis:{
+    constituents:[string,string];
+    v13EstimatedThermalConductivityWmK:number;
+    v13EstimatedDensityKgM3:number;
+    atomicSiteRatio:number;
+    modelOnly:true;
+  }|null=null;
+
+  applyV13ElementalHypothesis(candidate:MaterialComposite):number{
+    const elements=candidate?.elements;
+    if(!Array.isArray(elements)||elements.length!==2)
+      throw Error('V9 accepts only two known elemental V13 constituents');
+    const a=elements[0],b=elements[1];
+    const sa=a.element.sym,sb=b.element.sym;
+    // V9's catalogue includes a silica aerogel and isotope shorthand;
+    // neither is interchangeable with an elemental V13 formula.
+    if(sa===sb||!ELEMENTS[sa]||!ELEMENTS[sb]
+      ||ELEMENTS[sa].atomicNumber!==a.element.z
+      ||ELEMENTS[sb].atomicNumber!==b.element.z
+      ||!(a.element.mass>0)||!(b.element.mass>0)
+      ||!(a.fraction>0)||!(b.fraction>0))
+      throw Error('No physically identified V9 elemental reference for V13 proposal');
+    const nA=a.fraction/a.element.mass,nB=b.fraction/b.element.mass;
+    const ratio=nA/(nA+nB);
+    if(!Number.isFinite(ratio)||ratio<=0||ratio>=1)
+      throw Error('Invalid mass-to-atomic-site fraction conversion');
+    const props=candidate.properties;
+    if(!Number.isFinite(props.thermalConductivity)
+      ||!Number.isFinite(props.density)
+      ||props.thermalConductivity<0||props.density<0)
+      throw Error('Invalid V13 model estimate');
+    this.primaryElement=sa;
+    this.secondaryElement=sb;
+    this.alloyRatio=ratio;
+    this.structure=(sa==='Si'||sb==='Si')?'diamond_cubic':'fcc';
+    this.defectRate=.02;
+    this.v13Hypothesis={
+      constituents:[sa,sb],
+      v13EstimatedThermalConductivityWmK:props.thermalConductivity,
+      v13EstimatedDensityKgM3:props.density*1000,
+      atomicSiteRatio:ratio,modelOnly:true,
+    };
+    this._built=false;
+    return ratio;
+  }
   /** Reproducible lattice trial. Same input + seed => same voxel material. */
   seed:number = 20261012;
   setSeed(seed:number):void{
@@ -190,6 +240,7 @@ export class V9LatticeEngine {
 
   /** Configure the lattice for a specific optimizer domain */
   configure(optimizer: string) {
+    this.v13Hypothesis=null;
     switch (optimizer) {
       case 'thermal':
         this.primaryElement = 'SiO2';
