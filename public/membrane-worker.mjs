@@ -3,6 +3,7 @@
  */
 import {createSliceEngine,advanceSlices,snapshot,sliceEvidence,MODEL} from './slice-engine.mjs?v=visible-20261015-r3';
 import {buildV10Mask,poreConnectivity,V10_CANDIDATES} from './v10-membrane-masks.mjs?v=visible-20261015-r3';
+import {selectScreeningResult,shouldPromote,compareToReference} from './discovery-gates.mjs?v=evidence-20261015-r4';
 const SMALL={n:13,layers:7},BIG={n:19,layers:9},TRIAL=65,CHUNK=5;
 const options=[{label:'Open cavity · reference',config:null},...V10_CANDIDATES.map(c=>({label:`${c.tpms.replace('_',' ')} · ${c.frequency.toFixed(1)} / ${c.threshold.toFixed(2)}`,config:c}))];
 let engine=null,ranking=[],winner=null,active=false,timer=null,epoch=0,hotspot=0,stage='idle';
@@ -50,16 +51,21 @@ async function restart(){
    await later();
   }
   if(ticket!==epoch)return;
-  const eligible=ranking.filter(x=>x.accepted&&x.config).sort((a,b)=>b.score-a.score);
+  const decision=selectScreeningResult(ranking);
+  if(decision.status==='invalid-reference')throw Error(decision.reason);
+  // Never promote a membrane whose modeled flux is worse than the open cavity.
+  const eligible=ranking.filter(x=>x.config&&compareToReference(decision.reference,x).ok).sort((a,b)=>b.score-a.score);
   for(const best of eligible){
     const fine=trialSetup(best.config,BIG);if(!fine.valid)continue;
-    engine=fine.sim;winner={...best,vsEmptyPercent:ranking[0]?.accepted?100*(best.score/ranking[0].score-1):null,
-      coarseGrid:'13×13×7',liveGrid:'19×19×9',connectedAtLiveGrid:true};break;
+    engine=fine.sim;winner={...best,vsEmptyPercent:100*(best.score/decision.reference.score-1),
+      coarseGrid:'13×13×7',liveGrid:'19×19×9',connectedAtLiveGrid:true,provisional:true};break;
   }
-  if(!engine){ // A negative result must not produce a blank screen.
-   engine=createSliceEngine({...BIG,hotspot});winner={id:-1,label:'Open cavity · no viable membrane',config:null,score:ranking[0]?.score||0,vsEmptyPercent:0};
+  if(!engine){
+   engine=createSliceEngine({...BIG,hotspot});winner=decision.incumbent;
   }
-  remaining=mutationalCandidates(winner.config);
+  // An unsuccessful geometry can still seed bounded revisions, without being called a discovery.
+  remaining=mutationalCandidates((winner.config||decision.seed?.config)??null);
+  send({type:'decision',winner,reason:decision.reason,ranking:[...ranking],remaining:remaining.length});
   stage='running';active=true;publish();loop();
  }catch(e){if(ticket!==epoch)return;stop();stage='error';send({type:'error',message:String(e)})}
 }
@@ -77,17 +83,24 @@ function evaluateMutation(){
  }
  const result=resultFor(trial.id,trial.label,trial.config,trial.connectivity,trial.sim);
  ranking.push(result);
- if(result.accepted && winner.config && result.score>winner.score+1e-9){
+ if(shouldPromote(ranking[0],winner,result).ok){
   const fine=trialSetup(result.config,BIG);
   if(fine.valid){
     const previous=winner.label;
-    winner={...result,vsEmptyPercent:ranking[0]?.accepted?100*(result.score/ranking[0].score-1):null,coarseGrid:'13×13×7',liveGrid:'19×19×9',connectedAtLiveGrid:true};
+    winner={...result,vsEmptyPercent:100*(result.score/ranking[0].score-1),coarseGrid:'13×13×7',liveGrid:'19×19×9',connectedAtLiveGrid:true,provisional:true};
     engine=fine.sim;
     send({type:'discovery',winner,previous,ranking:[...ranking]});
   }
  }
  nextTrialAt=engine.step+4;trial=null;
  send({type:'exploring',activeLabel:result.label,step:TRIAL,steps:TRIAL,remaining:remaining.length,ranking:[...ranking],winner});
+ if(!remaining.length){
+  stage='complete';publish();
+  send({type:'campaign-complete',winner,ranking:[...ranking],tested:ranking.length,
+   reason:winner.config?'A coarse numerical candidate exceeded the reference; independent validation required.':
+   'No membrane beat the open cavity; the bounded search ended without fabricating a gain.'});
+  stop();
+ }
 }
 function tick(){if(!active||!engine)return;try{
  advanceSlices(engine,2);publish();evaluateMutation();
