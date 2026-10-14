@@ -62,3 +62,6 @@ jobs:
         run: node scripts/membrane-visibility-smoke.mjs
       - name: Verify membrane worker avoids legacy sealed-cavity ranking
         run: node scripts/membrane-worker-smoke.mjs
+
+      - name: Verify pressure evidence drives bounded follow-up geometry experiments
+        run: node scripts/v10-inference-planner-smoke.mjs
