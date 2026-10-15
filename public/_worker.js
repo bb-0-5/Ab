@@ -1,38 +1,18 @@
-// AboveBound Pages advanced-mode worker.
-// The latest membrane/3D-flow laboratory is the PRIMARY site experience.
-// Preserve the original V0–V13 application at /simulator.html.
-// In particular, do not simply redirect /simulator.html to / (it would loop).
-const RELEASE = 'v10-membrane-home-20261015-r3';
-function noCache(response) {
-  const headers=new Headers(response.headers);
-  headers.set('Cache-Control','no-store, max-age=0, must-revalidate');
-  headers.set('Pragma','no-cache');
-  headers.set('X-AboveBound-Release',RELEASE);
-  return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
-}
+// AboveBound intentionally taken offline at the owner's request.
+// GitHub source remains intact as an archive; this edge handler serves no app,
+// experiments, static assets or hidden legacy routes. HTTP status is truly 404.
+const HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>404 — AboveBound</title><style>html{background:#111;color:#eee;font:16px system-ui,sans-serif}body{min-height:90vh;display:grid;place-items:center;margin:0}main{text-align:center}h1{font-size:64px;margin:0 0 8px}p{opacity:.75}</style></head><body><main><h1>404</h1><p>AboveBound is offline.</p></main></body></html>';
 export default {
-  async fetch(request, env) {
-    const url=new URL(request.url),path=url.pathname;
-    if ((request.method==='GET'||request.method==='HEAD') &&
-      (path==='/'||path==='/index.html')) {
-      const target=new URL('/membrane.html',url);
-      target.searchParams.set('release',RELEASE);
-      return new Response(null,{status:302,headers:{
-        Location:target.toString(),
-        'Cache-Control':'no-store, max-age=0, must-revalidate',
-        'X-AboveBound-Release':RELEASE
-      }});
-    }
-    if (path==='/simulator.html'||path==='/simulator') {
-      // ASSETS is the static asset binding, NOT this worker's fetch.
-      // Reuse the built root Vite HTML so its hashed asset references work.
-      const home=new URL('/',url);
-      const original=await env.ASSETS.fetch(new Request(home,request));
-      return noCache(original);
-    }
-    const response=await env.ASSETS.fetch(request);
-    if (/^\/(?:fluid|torus-v3|torus-visual|slices|slice-|membrane|v10-membrane)/.test(path))
-      return noCache(response);
-    return response;
-  }
+  async fetch(request) {
+    const headers = new Headers({
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store, max-age=0, must-revalidate',
+      'Pragma': 'no-cache',
+      'X-Robots-Tag': 'noindex, nofollow, noarchive',
+      'X-AboveBound-Status': 'offline',
+    });
+    return new Response(request.method === 'HEAD' ? null : HTML, {
+      status: 404, headers,
+    });
+  },
 };
