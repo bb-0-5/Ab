@@ -79,3 +79,8 @@ jobs:
           test -f dist/toroidal-iris.html
           test -f dist/toroidal-iris-view.mjs
           test -f dist/toroidal-iris-stack.mjs
+
+      - name: Verify two true sequential iris stages and no-flow synchronous control
+        run: node scripts/toroidal-series-loop-smoke.mjs
+      - name: Verify serial hydraulic solver included in deployed bundle
+        run: test -f dist/toroidal-series-loop.mjs
