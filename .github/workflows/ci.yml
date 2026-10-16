@@ -71,3 +71,11 @@ jobs:
 
       - name: Verify toroidal energy conservation and phased iris chronology
         run: node scripts/toroidal-energy-budget-smoke.mjs
+
+      - name: Verify moving iris stacks, cross-coil passivity and startup energy
+        run: node scripts/toroidal-iris-stack-smoke.mjs
+      - name: Verify moving iris lab is included in production build
+        run: |
+          test -f dist/toroidal-iris.html
+          test -f dist/toroidal-iris-view.mjs
+          test -f dist/toroidal-iris-stack.mjs

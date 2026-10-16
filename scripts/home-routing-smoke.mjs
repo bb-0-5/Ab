@@ -1,23 +1,28 @@
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import worker from '../public/_worker.js';
-const paths=['/','/index.html','/membrane.html','/simulator.html','/fluid.html',
- '/slices.html','/torus-v3.html','/membrane-worker.mjs','/v10-pressure-network.mjs',
- '/assets/fake.js','/404.html','/anything/nested'];
-const env={ASSETS:{fetch(){throw Error('Offline site must never expose assets')}}};
-for(const pathname of paths){
-  for(const method of ['GET','HEAD']){
-    const req=new Request('https://abovebound.org'+pathname,{method});
-    const response=await worker.fetch(req,env);
-    assert.equal(response.status,404,method+' '+pathname);
-    assert.equal(response.headers.get('X-AboveBound-Status'),'offline');
-    assert.match(response.headers.get('Cache-Control'),/no-store/);
-    assert.match(response.headers.get('X-Robots-Tag'),/noindex/);
-    const body=await response.text();
-    if(method==='GET'){
-      assert.match(body,/404/);
-      assert.match(body,/AboveBound is offline/);
-      assert.doesNotMatch(body,/script src=|iframe|fetch\(/i);
-    }else assert.equal(body,'');
-  }
+const got=[];
+const env={ASSETS:{async fetch(req){
+ const path=new URL(req.url).pathname;got.push(path);
+ return new Response('built:'+path,{status:200,headers:{'Content-Type':'text/html'}});
+}}};
+for(const path of ['/','/index.html','/simulator','/simulator.html',
+ '/toroidal-iris.html','/toroidal-iris-view.mjs','/toroidal-iris-stack.mjs',
+ '/membrane.html','/fluid.html']){
+ const response=await worker.fetch(new Request('https://abovebound.org'+path),env);
+ assert.equal(response.status,200,'Restore '+path);
+ const expected=path==='/simulator.html'||path==='/simulator'?'built:/':'built:'+path;
+ assert.equal(await response.text(),expected);
+ assert.match(response.headers.get('Cache-Control'),/no-store/);
 }
-console.log('Shutdown PASS: 404 at all known routes and assets, no app served');
+assert.ok(got.includes('/'),'old simulator must be served from true Vite index');
+const other=await worker.fetch(new Request('https://abovebound.org/assets/app-1234.js'),env);
+assert.equal(other.status,200);
+assert.equal(other.headers.get('Cache-Control'),null,'hash-named bundles can cache');
+const page=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+assert.match(page,/src\/main.tsx/,'Do not replace original V0–V13 React app');
+assert.match(page,/toroidal-iris.html/,'Make new engineering lab discoverable');
+const lab=readFileSync(new URL('../public/toroidal-iris.html',import.meta.url),'utf8');
+assert.match(lab,/toroidal-iris-view.mjs/);
+assert.match(lab,/ORIGINAL V0–V13/);
+console.log('Restored original AboveBound root plus new MHD iris workbench routes PASS');
