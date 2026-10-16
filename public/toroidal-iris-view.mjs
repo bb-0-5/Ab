@@ -1,9 +1,23 @@
 import {CONFIGURATIONS,compareIrisStacks,chamberOutputAt,irisLinkage} from './toroidal-iris-stack.mjs?v=iris-stack-r1';
 import {SERIAL_ARRANGEMENTS,simulateSerialIris} from './toroidal-series-loop.mjs?v=series-r2';
+import {resolveMembraneSource,evaluateMembraneGeometry,maskCrossSection} from './toroidal-membrane-bridge.mjs?v=v10-geometry-r3';
 const $=id=>document.getElementById(id);
-const geometry=$('geometry'),chart=$('flowchart'),geom=geometry.getContext('2d'),plot=chart.getContext('2d');
+const geometry=$('geometry'),chart=$('flowchart'),sourceCanvas=$('membraneSource'),
+ geom=geometry.getContext('2d'),plot=chart.getContext('2d'),
+ sourceCtx=sourceCanvas.getContext('2d');
+// The user's exact saved original V10 solidMask is authoritative when present.
+// Without one, use a clearly identified automatically generated V10 mask.
+const v10Source=resolveMembraneSource();
+let v10Evidence=null,v10Error=null;
+try {v10Evidence=evaluateMembraneGeometry(v10Source);}
+catch(error){v10Error=String(error);}
 const ALL_CONFIGS=[...CONFIGURATIONS,...SERIAL_ARRANGEMENTS];
-const data=[...compareIrisStacks(),...SERIAL_ARRANGEMENTS.map(x=>simulateSerialIris(x))];
+// The original flow topology alters the predicted pressure loss and the
+// chronological Q response, not merely the colours in the canvas.
+const hydraulicOptions={flowResistanceMultiplier:v10Evidence?.supported?
+ v10Evidence.resistanceMultiplier:1};
+const data=[...compareIrisStacks(hydraulicOptions),
+ ...SERIAL_ARRANGEMENTS.map(x=>simulateSerialIris(x,hydraulicOptions))];
 const byId=new Map(data.map(x=>[x.configuration.id,x]));
 let selected=SERIAL_ARRANGEMENTS[0].id,playing=true,startTime=performance.now(),pausedAt=0;
 function current(){return byId.get(selected)}
@@ -27,9 +41,11 @@ function powerStats(r){
  $('coupling').textContent=number(r.couplingCoefficient,3);
  $('error').textContent=number(r.maxRelativeEnergyError*100,4)+'%';
  $('geometryLabel').textContent=r.configuration.label;
- const cap=r.negativePressureSteps?'Model entered negative pressure (invalid cavitation regime).':
+ const cap=r.negativePressureSteps?'Pressure regime warning: inspect model limits.':
    'Energy accounted · numerically tested, not experimentally validated';
- $('assessment').textContent=(r.configuration.hydraulic==='series'?'SAME CLOSED FLUID CIRCUIT · ':'INDEPENDENT FLUID LOOPS · ')+cap+' · mechanism closure '+number(r.linkageClosureErrorM*1e9,5)+' nm';
+ $('assessment').textContent=(r.configuration.hydraulic==='series'?'SAME CLOSED FLUID CIRCUIT · ':'INDEPENDENT FLUID LOOPS · ')+
+ (v10Evidence?.supported?'V10 MASK HYDRAULIC RESISTANCE APPLIED · ':'SOURCE GEOMETRY NOT VERIFIED · ')+
+ cap+' · linkage closure '+number(r.linkageClosureErrorM*1e9,5)+' nm';
  for(const b of buttonGroup.children)b.setAttribute('aria-pressed',String(b.dataset.mode===selected));
  const tbody=$('comparison');tbody.replaceChildren();
  const rank=[...data].sort((a,b)=>b.netElectricalW-a.netElectricalW);
@@ -91,6 +107,38 @@ function drawModule(ctx,cx,cy,scale,r,moduleId,t,width){
  ctx.font='bold 11px ui-monospace,monospace';ctx.textAlign='center';ctx.fillStyle='#bde7e1';
  ctx.fillText(j===1?'MODULE B':'MODULE A',cx,cy+scale*1.22);
 }
+function paintSourceGeometry(t){
+ const {w,h}=scale(sourceCanvas,sourceCtx),ctx=sourceCtx;
+ ctx.clearRect(0,0,w,h);ctx.fillStyle='#081722';ctx.fillRect(0,0,w,h);
+ if(!v10Evidence){ctx.fillStyle='#ffd6b1';ctx.font='12px system-ui';ctx.fillText('V10 geometry unavailable',12,26);return;}
+ const e=v10Evidence,z=Math.floor(t/.11)%e.layers;
+ const cut=maskCrossSection(e,z),cell=Math.min((w-48)/e.n,(h-40)/e.n);
+ const left=Math.max(7,(w-cell*e.n)/2),top=Math.max(6,(h-cell*e.n)/2);
+ for(let y=0;y<e.n;y++)for(let x=0;x<e.n;x++){
+  const solid=cut.solid[y*e.n+x]!==0;
+  ctx.fillStyle=solid?'#d7a06b':'#236778';
+  ctx.fillRect(left+x*cell,top+y*cell,Math.max(.4,cell-.35),Math.max(.4,cell-.35));
+ }
+ ctx.strokeStyle='#b3d8d7';ctx.lineWidth=.7;ctx.strokeRect(left,top,cell*e.n,cell*e.n);
+ $('v10SliceLabel').textContent='EXACT V10 MASK · Z '+(z+1)+'/'+e.layers+' · '+e.n+'×'+e.n;
+}
+function showSourceEvidence(){
+ const e=v10Evidence;
+ $('v10Origin').textContent=e?e.source:'V10 MASK UNAVAILABLE';
+ $('v10Origin').style.color=e?.nativeSelection?'#87edbf':'#f0ba85';
+ $('v10Status').textContent=!e?'Geometry decode/pressure solve failed: '+(v10Error||'unknown problem'):
+  !e.supported?'NOT ADMISSIBLE: '+e.reason+' — torus comparisons remain unconditioned, NOT physical evidence.':
+  e.nativeSelection?
+   'Saved original V10 solidMask verified; no TPMS reconstruction. Hydraulics recalculated on the original voxel grid.':
+   'No saved original V10 geometry here. Automatically generated V10 TPMS mask used as a labeled fallback; open the original V10 simulation to replace it.';
+ $('v10Stats').textContent=e?
+  'V10 '+e.n+'×'+e.n+'×'+e.layers+' · SOLID '+number(100*e.solidFraction,1)+'% · THROUGHFLOW '+number(100*e.relativeFlow,1)+
+  '% OF MATCHED OPEN REFERENCE · TORUS DRAG PROXY ×'+(e.resistanceRatio===null?'—':number(e.resistanceRatio,2))+
+  (e.checksum?' · MASK ID '+e.checksum:'') :
+  'Cannot apply geometry: pressure evidence unavailable.';
+}
+$('reloadV10').onclick=()=>location.reload();
+showSourceEvidence();
 function drawMechanism(ctx,cx,cy,size,t){
  const k=irisLinkage(t*2*Math.PI*3);
  const factor=size/.035,x0=cx-size/2,y0=cy;
@@ -165,7 +213,7 @@ function positionSec(){
  const elapsed=(performance.now()-startTime)/1000;
  return elapsed*.26%current().simulationSeconds;
 }
-function animate(){const t=positionSec();paintGeometry(t);paintFlow(t);requestAnimationFrame(animate);}
+function animate(){const t=positionSec();paintGeometry(t);paintFlow(t);paintSourceGeometry(t);requestAnimationFrame(animate);}
 function updateUI(){powerStats(current());}
 $('motion').addEventListener('click',()=>{
  if(playing){pausedAt=positionSec();playing=false;$('motion').textContent='▶ RESUME';$('motion').setAttribute('aria-pressed','false')}
