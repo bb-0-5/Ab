@@ -45,3 +45,5 @@ The website remains deliberately OFFLINE until the owner asks for a deployment.
 ## Formula sources
 
 The supplied research documents were independently compared against IAEA's Sodium Coolant Handbook for White's curved-duct correction and published MHD generator Ohm-law/load-factor power relationships. The numerical sample inputs are test conditions, NOT measured device parameters.
+
+Automatic screening now varies circular-reference vs two diagonal windings, magnetic field and working fluid at the SAME external supply pressure and duct cross-section. Torsional geometry hypotheses are marked as unsupported by circular-coil correlation, not accepted as validated discoveries.
