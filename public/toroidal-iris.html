@@ -31,7 +31,7 @@ kbd{padding:2px 4px;background:#243b45;font-size:11px}footer{border-top:1px soli
 <div class="eyebrow">ENGINEERING EXPERIMENT 004 · MOVING MEMBRANE / MHD / MAGNETIC STACKS</div>
 <h1>Can two toroidal devices <em>help each other?</em></h1>
 <p class="summary">Real four-bar linkage closure drives changing membrane chamber volumes. Computed pressure, startup flow, electrical current, coil coupling and input/output energy are compared across five arrangements. The simulation runs on your device.</p>
-<div class="model-banner"><b>Engineering model, not a working generator.</b> The chambers are idealized check-valve diaphragm pumps, with one hydraulic loop per torus. Two units share a simplified magnetic circuit but <b>do not yet share a fluid path</b>. The 90° field coupling is a symmetry approximation; real magnets and membranes require measured properties and field/FSI solvers.</div>
+<div class="model-banner"><b>Engineering model, not a working generator.</b> The chambers are idealized check-valve diaphragm pumps, with one hydraulic loop per torus. Most paired cases are independent fluid loops. The two <b>IN SERIES</b> modes instead connect moving chambers into one closed circuit using finite-volume continuity and ideal one-way valves. The 90° field coupling is a symmetry approximation; real magnets and membranes require measured properties and field/FSI solvers.</div>
 <div class="eyebrow">CHOOSE AN ARRANGEMENT · AUTOMATICALLY CALCULATED</div>
 <div id="configButtons" class="controls" role="group" aria-label="Select arrangement"></div>
 <div class="workspace">
@@ -58,17 +58,17 @@ kbd{padding:2px 4px;background:#243b45;font-size:11px}footer{border-top:1px soli
 </section>
 <section class="panel results"><div class="panel-head"><h2>Same numerical assumptions · every arrangement tested</h2><small>RANKED BY NET ELECTRICAL RESULT · NOT BY GROSS VOLTAGE</small></div>
 <div class="scroll"><table><thead><tr><th>ARRANGEMENT</th><th>GROSS µW</th><th>MOTOR mW</th><th>NET mW</th><th>FLOW µL/s</th><th>COUPLING</th></tr></thead><tbody id="comparison"></tbody></table></div>
-<div class="legend">The two-module cases use <b>two independently powered diaphragm pumps</b>. Doubling the number of devices doubles much of the power input. A different electrical sign does not create energy.</div>
+<div class="legend">The paired independent-loop cases use two separate fluid circuits; the two IN SERIES cases share one closed flow path and test opposite versus synchronized moving walls. Every case includes two powered iris drives and motor losses. Total flow between these topologies is not directly comparable.</div>
 </section>
 <div class="explain"><section>
 <h3>What the model actually moves</h3>
-<p>The four-bar crank and coupler are solved from mechanical link lengths at each input angle. The follower drives a membrane aperture approximation, changing actual chamber volume. Each head has a calculated suction or discharge rate from its volume derivative. The generated flow drives a pressure-compliance/inertance circuit with magnetic braking.</p>
+<p>The four-bar crank and coupler are solved from mechanical link lengths at each input angle. The follower drives a membrane aperture approximation, changing actual chamber volume. Each head has a calculated suction or discharge rate from its volume derivative. In the IN SERIES experiment, two moving volumes obey separate mass conservation equations, linked by two directed ideal check valves around one closed fluid circuit. The generated flow drives hydraulic inertia and magnetic braking.</p>
 <p>Displayed membrane strokes are visually enlarged to be legible; actual radii are in the numerical receipt. A check valve is idealized, with no unresolved reverse leakage.</p>
 </section><section>
 <h3>90°, north/south and opposite rotation</h3>
 <p><b>90°:</b> The idealized coil mutual inductance approaches zero in the chosen symmetric arrangement; this can reduce coupling rather than amplify it. <b>North facing south / inverted:</b> Reverses electrical polarity and changes mutual interactions, but output still requires mechanical pumping energy. <b>Counter-rotating:</b> The second iris crank turns backwards, altering phase and pulse timing; fluid direction is separately set by the ideal check valve.</p>
-<p>The test also tracks coil magnetic stored energy, membrane compliance and fluid kinetic energy. No fictitious spin-up, self-starting energy or efficiency gain is awarded.</p>
+<p>The alternating IN SERIES pair initiates forward flow from rest in the numerical circuit; synchronized strokes provide the control. The test tracks coil magnetic energy, membrane compliance and fluid kinetic energy. No free spin-up or efficiency gain is awarded.</p>
 </section></div>
 <footer>Model: 1D hydraulic inertance + compliance, planar four-bar closure, linear reciprocal RL mutual coupling, passive electrical resistance. No 3D CFD, field map, moving-mesh elastomer FSI, pump characterization or measured fabrication.</footer>
-</main><script type="module" src="/toroidal-iris-view.mjs?v=iris-stack-r1"></script>
+</main><script type="module" src="/toroidal-iris-view.mjs?v=series-r2"></script>
 </body></html>
