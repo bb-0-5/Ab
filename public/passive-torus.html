@@ -1,0 +1,76 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#06141c">
+<meta name="description" content="AboveBound passive toroidal pressure experiment. Stationary uniform pressure versus a one-time compressive wave through V10 membrane geometry, with no motor.">
+<title>AboveBound — Passive Pressure Torus / Membrane</title>
+<style>
+:root{color-scheme:dark;--bg:#07151c;--panel:#0d2430;--line:#294955;--white:#ecf9f4;--mint:#8aecd1;--amber:#e8b27b;--muted:#afcbce}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--white);font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}button{font:inherit}a{color:var(--mint)}
+header{border-bottom:1px solid var(--line);padding:14px max(16px,calc((100vw - 1210px)/2));display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+header b{letter-spacing:.16em;font-size:12px}header nav{display:flex;gap:17px;flex-wrap:wrap}nav a{text-transform:uppercase;letter-spacing:.09em;font-size:10px}
+main{max-width:1240px;margin:auto;padding:26px 16px 70px}
+.eyebrow{color:var(--mint);letter-spacing:.19em;text-transform:uppercase;font-weight:800;font-size:10px}h1{font-size:clamp(30px,5vw,62px);line-height:1.02;letter-spacing:-.055em;max-width:950px;margin:10px 0 14px}h1 em{font-style:normal;color:var(--amber)}
+.intro{max-width:990px;color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:18px}
+.notice{background:#201c1b;border-left:3px solid #dfa96a;padding:12px 16px;color:#eed4bb;font-size:12px;line-height:1.6;margin-bottom:18px}
+.controls{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:17px 0}
+.controls button,.actions button{padding:11px 13px;border-radius:7px;background:#173540;border:1px solid #3f6570;color:#e5f8f0;cursor:pointer;font-weight:800;font-size:11px}
+.controls button[aria-pressed=true]{background:#24584e;border-color:#77d3b9;color:white}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}.head{padding:12px 15px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.head strong{font-size:12px;letter-spacing:.06em}.head span{font:10px ui-monospace,monospace;color:var(--muted)}
+.workspace{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(290px,.8fr);gap:12px}
+#torus{width:100%;height:420px;display:block;background:radial-gradient(ellipse at 52% 40%,#142a35 0%,#071721 75%)}
+.legend{display:flex;gap:13px;flex-wrap:wrap;padding:9px 14px;color:#bed4d4;background:#122b35;font-size:10px}
+.dot{display:inline-block;width:10px;height:10px;vertical-align:middle;margin-right:5px;border-radius:2px}
+.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:#294955}.metric{padding:15px 13px;background:var(--panel)}.metric span{display:block;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}.metric strong{display:block;margin-top:6px;font:800 clamp(18px,2.1vw,23px)/1.3 ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.summaryline{padding:14px;font-size:11px;color:#beddd7;line-height:1.65}
+.graph{margin-top:12px}#chart{height:230px;width:100%;display:block}#membrane{height:205px;width:100%;display:block;image-rendering:pixelated}.second{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(0,1.3fr);gap:12px;margin-top:12px}
+.detail{padding:14px 16px}.detail p{color:var(--muted);line-height:1.65;font-size:12px}.small{color:var(--muted);font:11px/1.7 ui-monospace,monospace}
+footer{border-top:1px solid var(--line);margin-top:24px;padding:22px 0;font-size:12px;color:var(--muted)}.status{color:#8debcb}.warn{color:#e7b57f}
+@media(max-width:850px){.workspace,.second{grid-template-columns:1fr}#torus{height:345px}}
+@media(max-width:440px){#torus{height:300px}main{padding:20px 10px 50px}header{padding:13px 10px}.metric{padding:12px 9px}.metric strong{font-size:18px}.controls button{padding:9px 9px;font-size:10px}}
+</style></head><body>
+<header><b>ABOVEBOUND / PRESSURE RESEARCH</b><nav><a href="/">V0–V13</a><a href="/membrane.html">V10 MEMBRANE</a><a href="/toroidal-iris.html">OLD ACTUATED MODEL</a></nav></header>
+<main>
+<div class="eyebrow">EXPERIMENT 005 · NO MOTOR · STATIC MEMBRANE · COMPRESSIBLE LIQUID</div>
+<h1>Can constrained pressure make liquid <em>flow without a motor?</em></h1>
+<p class="intro">Start with liquid under uniform high pressure in a closed angular torus and the membrane geometry selected by V10. The first run applies <strong>no pressure disturbance</strong>. The second introduces one small initial disturbance and then observes what happens when no further work is supplied. The model cannot quietly invent circulation.</p>
+<div class="notice"><b>Physical boundary:</b> Uniform static pressure cannot generate sustained circulation in a passive closed loop. A brief disturbance can travel as a pressure wave while average liquid transport remains zero. A real generator would require an ongoing energy source; this test only accounts for finite energy stored in its initial disturbed state.</div>
+<div class="controls" role="group" aria-label="Choose passive test">
+<button data-mode="uniform" type="button" aria-pressed="true">01 · UNIFORM PRESSURE / REST</button>
+<button data-mode="pulse" type="button" aria-pressed="false">02 · ONE-TIME PRESSURE PULSE</button>
+<button id="material" type="button">FLUID: WATER · SWITCH TO METAL</button>
+<button id="motion" type="button">Ⅱ PAUSE</button>
+</div>
+<div class="workspace">
+<section class="panel"><div class="head"><strong>01 / ACTUAL STATIC MEMBRANE IN TORUS</strong><span id="clock">0.000 ms · PRESSURE HELD</span></div>
+<canvas id="torus" role="img" aria-label="Torus showing static V10 membrane constrictions and computed pressure disturbances moving through the channel"></canvas>
+<div class="legend"><span><i class="dot" style="background:#d9a46d"></i>V10 SOLID / CONSTRICTION</span><span><i class="dot" style="background:#194e67"></i>FLUID FILLED</span><span><i class="dot" style="background:#80f2df"></i>POSITIVE PRESSURE WAVE</span><span><i class="dot" style="background:#7350a1"></i>NEGATIVE PERTURBATION</span></div>
+</section>
+<section class="panel"><div class="head"><strong>02 / MEASURED NUMERICAL STATE</strong><span>NO DRIVE AFTER t=0</span></div>
+<div class="metrics">
+<div class="metric"><span>Static background pressure</span><strong id="pressure">10.0 MPa</strong></div>
+<div class="metric"><span>Max local fluid flow</span><strong id="flow">0 nL/s</strong></div>
+<div class="metric"><span>Mean circulation</span><strong id="circulation">0 nL/s</strong></div>
+<div class="metric"><span>Pressure-wave speed</span><strong id="speed">— m/s</strong></div>
+<div class="metric"><span>Energy initially stored</span><strong id="initial">0 J</strong></div>
+<div class="metric"><span>Wave energy remaining</span><strong id="remaining">0 J</strong></div>
+<div class="metric"><span>Electrical energy recovered</span><strong id="electric">0 J</strong></div>
+<div class="metric"><span>Energy budget error</span><strong id="residual">0%</strong></div>
+</div><div class="summaryline" id="verdict">UNIFORM PRESSURE = ZERO MOTION. Static pressure is not a fuel.</div></section>
+</div>
+<section class="panel graph"><div class="head"><strong>03 / CHRONOLOGICAL PRESSURE FIELD</strong><span>ONE CLOSED LOOP · 96 CONSERVATIVE SECTIONS</span></div>
+<canvas id="chart" role="img" aria-label="Current calculated pressure perturbation versus distance around the toroidal ring"></canvas>
+<div class="legend">Horizontal axis: distance around the loop. Zero line: 10 MPa static pressure. Positive and negative disturbances are shown relative to that equilibrium.</div></section>
+<div class="second">
+<section class="panel"><div class="head"><strong>04 / V10 SOURCE MASK</strong><span id="sliceLabel">EXACT MATERIAL CROSS SECTION</span></div>
+<canvas id="membrane" role="img" aria-label="Real solid and void voxels imported from the V10 membrane simulation"></canvas>
+<div class="detail"><div class="small" id="source">Checking V10 mask...</div><div class="small" id="maskStats">Calculating connected pores...</div><div class="actions"><button id="reload" type="button">↻ RELOAD LATEST V10 GEOMETRY</button></div></div></section>
+<section class="panel"><div class="head"><strong>05 / WHAT THIS CAN ACTUALLY TEST</strong><span>NO CLAIM OF FREE ENERGY</span></div>
+<div class="detail"><p><b>Pressure and fluid motion are different.</b> The torus is initially full of liquid at 10 MPa, but the uniform-pressure trial leaves it at rest. In the disturbed trial, a small, initially stored acoustic disturbance propagates along a stationary channel with V10-derived constrictions, fluid inertia, compressibility and dissipative losses.</p>
+<p><b>The membrane geometry is imported, not redesigned.</b> Copper voxels come from the exact V10 solid mask when selected on this website; otherwise the V10-generated fallback is explicitly labeled. Its anisotropic geometry enters a <em>one-dimensional impedance approximation</em>, not true membrane pore-scale CFD or deformation.</p>
+<p><b>Electricity cannot emerge from static liquid.</b> For the optional conductive-metal calculation, a simplified magnetically loaded section can extract a little of the finite acoustic energy, while exerting a braking force. This is not proof that stationary magnets and a closed vessel form a self-powered generator.</p>
+<p><b>What's missing:</b> a validated 3D velocity field, pore-scale anisotropic tensor, measured materials and vessel compliance, real electromagnetic electrode geometry, grid refinement and experimental evidence.</p>
+</div></section>
+</div>
+<footer>Model: closed, 1D linear acoustic finite-volume ring; implicit-midpoint pressure/flow integration; passive viscous/MHD hydraulic impedance; finite initial compressive disturbance. NO external actuator. Absolute pressure is not counted as repeatedly available energy. <a href="https://github.com/bb-0-5/Ab" target="_blank" rel="noopener">Source code</a>.</footer>
+</main><script type="module" src="/passive-torus-view.mjs?v=passive-pressure-r1"></script></body></html>
