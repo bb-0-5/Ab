@@ -14,8 +14,10 @@ catch(error){v10Error=String(error);}
 const ALL_CONFIGS=[...CONFIGURATIONS,...SERIAL_ARRANGEMENTS];
 // The original flow topology alters the predicted pressure loss and the
 // chronological Q response, not merely the colours in the canvas.
-const hydraulicOptions={flowResistanceMultiplier:v10Evidence?.supported?
- v10Evidence.resistanceMultiplier:1};
+const hydraulicOptions={
+ flowResistanceMultiplier:v10Evidence?.supported?v10Evidence.resistanceMultiplier:1,
+ fluidOpenFraction:v10Evidence?.supported?v10Evidence.fluidOpenFraction:1
+};
 const data=[...compareIrisStacks(hydraulicOptions),
  ...SERIAL_ARRANGEMENTS.map(x=>simulateSerialIris(x,hydraulicOptions))];
 const byId=new Map(data.map(x=>[x.configuration.id,x]));
@@ -83,7 +85,9 @@ function drawModule(ctx,cx,cy,scale,r,moduleId,t,width){
   if(!h)ctx.moveTo(px,py);else ctx.lineTo(px,py);
  }
  ctx.strokeStyle='#67dac9';ctx.lineWidth=2.4;ctx.stroke();ctx.restore();
- const stroke=chamberOutputAt(t,{heads:c.hydraulic==='series'?1:4,frequencyHz:3,spin:j===1?c.spin:1,phaseRad:j===1?c.phaseRad:0});
+ const stroke=chamberOutputAt(t,{heads:c.hydraulic==='series'?1:4,frequencyHz:3,
+  spin:j===1?c.spin:1,phaseRad:j===1?c.phaseRad:0,
+  fluidOpenFraction:hydraulicOptions.fluidOpenFraction});
  for(let h=0;h<stroke.chambers.length;h++){
   const th=2*Math.PI*h/stroke.chambers.length;
   const x=Math.cos(th)*mid,y=Math.sin(th)*mid*foreshorten;
@@ -133,7 +137,7 @@ function showSourceEvidence(){
    'No saved original V10 geometry here. Automatically generated V10 TPMS mask used as a labeled fallback; open the original V10 simulation to replace it.';
  $('v10Stats').textContent=e?
   'V10 '+e.n+'×'+e.n+'×'+e.layers+' · SOLID '+number(100*e.solidFraction,1)+'% · THROUGHFLOW '+number(100*e.relativeFlow,1)+
-  '% OF MATCHED OPEN REFERENCE · TORUS DRAG PROXY ×'+(e.resistanceRatio===null?'—':number(e.resistanceRatio,2))+
+  '% OF MATCHED OPEN REFERENCE · V10 ACTIVE VOID '+number(100*e.fluidOpenFraction,1)+'% · TORUS DRAG PROXY ×'+(e.resistanceRatio===null?'—':number(e.resistanceRatio,2))+
   (e.checksum?' · MASK ID '+e.checksum:'') :
   'Cannot apply geometry: pressure evidence unavailable.';
 }
