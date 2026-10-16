@@ -43,15 +43,19 @@ export function buildPassiveRing(evidence=null,{
  // not a newly painted synthetic membrane, determine the local constriction.
  for(let i=0;i<segments;i++){
   if(!sourceMask){occupancy[i]=1;trace[i]=1;continue;}
-  const z=Math.floor(i/segments*evidence.layers);
-  const n=evidence.n,offset=z*n*n;
+  // Original V10 pressure gradient points along Y. Each new circumferential
+  // segment samples a Y-normal X/Z cross section, preserving this orientation
+  // rather than erroneously turning V10's Z axis into flow direction.
+  const y=Math.floor(i/segments*evidence.n);
+  const n=evidence.n,layers=evidence.layers;
   let open=0,transverse=0;
-  for(let y=0;y<n;y++)for(let x=0;x<n;x++){
-   const v=1-evidence.mask[offset+y*n+x];
+  for(let z=0;z<layers;z++)for(let x=0;x<n;x++){
+   const offset=z*n*n+y*n+x;
+   const v=1-evidence.mask[offset];
    open+=v;
-   if(x>0&&v&&!(evidence.mask[offset+y*n+x-1]))transverse++;
+   if(x>0&&v&&!evidence.mask[offset-1])transverse++;
   }
-  const phi=open/(n*n);
+  const phi=open/(n*layers);
   occupancy[i]=clamp(phi,.12,1);
   trace[i]=clamp((transverse/(n*n)+.02)/.4,.15,2);
  }
