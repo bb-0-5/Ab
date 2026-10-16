@@ -10,6 +10,7 @@ assert.equal(auto.nativeSelection,false);
 assert.match(auto.source,/AUTO V10/);
 assert.ok(auto.supported&&auto.relativeFlow>0&&auto.relativeFlow<1);
 assert.ok(auto.resistanceMultiplier>1&&auto.resistanceMultiplier<30);
+assert.ok(auto.fluidOpenFraction>0&&auto.fluidOpenFraction<1);
 assert.equal(maskCrossSection(auto,0).solid.length,auto.n*auto.n);
 // Emulate exact exported original-V10 receipt in expected Z-major 4-bit
 // format; never reconstruct this selected mask from TPMS parameters.
@@ -34,6 +35,7 @@ assert.equal(original.checksum,receipt.checksum);
 assert.deepEqual(original.mask,m,'Exact original stored void/solid values preserved');
 assert.ok(original.supported);
 assert.ok(original.resistanceMultiplier>1);
+assert.ok(original.fluidOpenFraction>0&&original.fluidOpenFraction<1);
 assert.deepEqual(maskCrossSection(original,3).solid,m.slice(3*n*n,4*n*n));
 // Bad checksum MUST NOT silently load a fake original geometry.
 const corrupted={getItem(){return JSON.stringify({...receipt,checksum:'deadbeef'})}};
@@ -42,19 +44,27 @@ assert.equal(rejected.nativeSelection,false,'Broken original mask cannot be admi
 // Numerical coupling: the V10 topology changes resistance, the pressure
 // field and the resulting chronological flow and electrical ledger.
 const bare=simulateSerialIris('serial-phase');
-const imported=simulateSerialIris('serial-phase',{flowResistanceMultiplier:auto.resistanceMultiplier});
+const imported=simulateSerialIris('serial-phase',{
+ flowResistanceMultiplier:auto.resistanceMultiplier,
+ fluidOpenFraction:auto.fluidOpenFraction
+});
 assert.notEqual(imported.meanTotalFlowM3S,bare.meanTotalFlowM3S);
 assert.ok(imported.meanTotalFlowM3S<bare.meanTotalFlowM3S,'More geometric pressure drag must reduce through-flow');
 assert.ok(imported.maxRelativeEnergyError<.002);
 assert.ok(imported.continuityErrorM3.every(x=>Math.abs(x)<1e-14));
-const stacked=simulateIrisStack('orthogonal',{flowResistanceMultiplier:auto.resistanceMultiplier});
+const stacked=simulateIrisStack('orthogonal',{
+ flowResistanceMultiplier:auto.resistanceMultiplier,
+ fluidOpenFraction:auto.fluidOpenFraction
+});
 assert.ok(stacked.maxRelativeEnergyError<.002);
 assert.ok(stacked.netElectricalW<0);
 assert.throws(()=>simulateSerialIris('serial-phase',{flowResistanceMultiplier:0}),/Invalid/);
 assert.throws(()=>simulateIrisStack('orthogonal',{flowResistanceMultiplier:999}),/Invalid/);
+assert.throws(()=>simulateIrisStack('orthogonal',{fluidOpenFraction:0}),/Invalid/);
 console.log('V10->TOROIDAL VERIFIED',JSON.stringify({
  origin:original.source,checksum:original.checksum,
  autoVoidRate:auto.relativeFlow,autoResistanceMultiplier:auto.resistanceMultiplier,
+ autoConnectedFluidVolumeFraction:auto.fluidOpenFraction,
  originalResistanceMultiplier:original.resistanceMultiplier,
  unconditionedFlowM3S:bare.meanTotalFlowM3S,
  importedFlowM3S:imported.meanTotalFlowM3S,
