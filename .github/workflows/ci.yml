@@ -91,3 +91,12 @@ jobs:
         run: |
           test -f dist/toroidal-membrane-bridge.mjs
           grep -q 'id="membraneSource"' dist/toroidal-iris.html
+
+      - name: Verify stationary uniform-pressure liquid and passive pressure-wave conservation
+        run: node scripts/passive-pressure-torus-smoke.mjs
+      - name: Verify passive membrane torus shown in production build
+        run: |
+          test -f dist/passive-torus.html
+          test -f dist/passive-torus-view.mjs
+          test -f dist/toroidal-passive-pressure.mjs
+          grep -q 'src/main.tsx' dist/index.html
