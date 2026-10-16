@@ -1,5 +1,5 @@
 import {buildPassiveRing,advancePassiveRing,passiveSnapshot} from './toroidal-passive-pressure.mjs?v=passive-pressure-r1';
-import {resolveMembraneSource,evaluateMembraneGeometry,maskCrossSection} from './toroidal-membrane-bridge.mjs?v=v10-geometry-r3';
+import {resolveMembraneSource,evaluateMembraneGeometry} from './toroidal-membrane-bridge.mjs?v=v10-geometry-r3';
 const $=id=>document.getElementById(id);
 const torus=$('torus'),ringCtx=torus.getContext('2d'),chart=$('chart'),chartCtx=chart.getContext('2d');
 const sourceCanvas=$('membrane'),sourceCtx=sourceCanvas.getContext('2d');
@@ -44,15 +44,17 @@ function drawMask(t){
  ctx.clearRect(0,0,w,h);ctx.fillStyle='#081722';ctx.fillRect(0,0,w,h);
  if(!geometry||!solid){ctx.fillStyle='#e0b07d';ctx.font='12px monospace';ctx.fillText('SOURCE UNAVAILABLE',14,23);return;}
  // Browse true adjacent voxel planes chronologically; the solid geometry itself never moves.
- const z=Math.floor(at/12)%geometry.layers;
- const slice=maskCrossSection(geometry,z),n=slice.n;
- const cell=Math.min((w-30)/n,(h-30)/n),x0=(w-cell*n)/2,y0=(h-cell*n)/2;
- for(let y=0;y<n;y++)for(let x=0;x<n;x++){
-  const filled=slice.solid[y*n+x]!==0;
+ // The V10 inlet/outlet pressure axis is Y, so display X/Z slices at
+ // successive Y sections in the same orientation as the torus impedance map.
+ const y=Math.floor(at/12)%geometry.n,n=geometry.n,layers=geometry.layers;
+ const cell=Math.min((w-30)/n,(h-30)/layers),
+  x0=(w-cell*n)/2,y0=(h-cell*layers)/2;
+ for(let z=0;z<layers;z++)for(let x=0;x<n;x++){
+  const filled=!!solid[z*n*n+y*n+x];
   ctx.fillStyle=filled?'#dba76e':'#1e6680';
-  ctx.fillRect(x0+x*cell,y0+y*cell,Math.max(.5,cell-.4),Math.max(.5,cell-.4));
+  ctx.fillRect(x0+x*cell,y0+z*cell,Math.max(.5,cell-.4),Math.max(.5,cell-.4));
  }
- $('sliceLabel').textContent='V10 Z '+(z+1)+'/'+geometry.layers+' · '+n+'×'+n;
+ $('sliceLabel').textContent='V10 FLOW AXIS Y '+(y+1)+'/'+n+' · X/Z SECTION';
 }
 function drawTorus(state){
  const {w,h}=scale(torus,ringCtx),ctx=ringCtx;
