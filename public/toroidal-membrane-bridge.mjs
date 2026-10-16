@@ -51,6 +51,9 @@ export function evaluateMembraneGeometry(source){
   n:source.n,layers:source.layers,
   mask:source.mask,solidFraction:flow.solidFraction,
   connectedVoidCells:flow.throughCells,
+  // An affine moving-porous-chamber occupancy hypothesis, not a solved
+  // elastic V10 wall. Retains the physical free-volume inventory.
+  fluidOpenFraction:flow.throughCells/source.mask.length,
   openReferenceFlowM3S:open.flowM3S,selectedFlowM3S:flow.flowM3S,
   relativeFlow:ratio,resistanceRatio,
   supported,converged:flow.converged,
