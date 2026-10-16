@@ -68,3 +68,6 @@ jobs:
 
       - name: Verify conservative chronological dye and geometry-dependent arrival
         run: node scripts/v10-dye-transport-smoke.mjs
+
+      - name: Verify toroidal energy conservation and phased iris chronology
+        run: node scripts/toroidal-energy-budget-smoke.mjs
