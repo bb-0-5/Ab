@@ -94,6 +94,7 @@ export function simulateIrisStack(choice='orthogonal',options={}){
   magneticFieldTesla:.45,loadOhm:.0005,internalOhm:.0005,
   inductanceH:.00012,mutualMaximum:.32,
   complianceM3PerPa:6e-10,driveEfficiency:.7,idleWPerModule:.012,
+  flowResistanceMultiplier:1,
   ...options};
  requireCondition(Number.isInteger(opts.periods)&&opts.periods>=3&&opts.periods<=14&&
   Number.isInteger(opts.stepsPerCycle)&&opts.stepsPerCycle>=300&&opts.stepsPerCycle<=1200&&
@@ -102,7 +103,8 @@ export function simulateIrisStack(choice='orthogonal',options={}){
   [opts.loadOhm,opts.internalOhm,opts.inductanceH,opts.complianceM3PerPa].every(positive)&&
   opts.mutualMaximum>=0&&opts.mutualMaximum<=.7&&
   opts.magneticFieldTesla>=0&&opts.magneticFieldTesla<=3&&
-  opts.driveEfficiency>0&&opts.driveEfficiency<=1&&opts.idleWPerModule>=0,'Invalid model bounds');
+  opts.driveEfficiency>0&&opts.driveEfficiency<=1&&opts.idleWPerModule>=0&&
+  Number.isFinite(opts.flowResistanceMultiplier)&&opts.flowResistanceMultiplier>=1&&opts.flowResistanceMultiplier<=30,'Invalid model bounds');
  const geometry=torusPath({majorRadiusM:.18,minorRadiusM:.045,
   ductDiameterM:.004,poloidalTurns:1,toroidalTurns:1});
  const fluid=FLUIDS.galinstan,areaM2=area(geometry.ductDiameterM/2);
@@ -129,14 +131,14 @@ export function simulateIrisStack(choice='orthogonal',options={}){
   let Qm=states.map((s,i)=>{
    const curve=flowAtSpeed(loopModel,s.Q/areaM2);
    const magneticLoss=coeff[i]*current[i];
-   return Math.max(0,s.Q+.5*dt*(s.P-curve.pressureViscousPa-magneticLoss)/inertance);
+   return Math.max(0,s.Q+.5*dt*(s.P-curve.pressureViscousPa*opts.flowResistanceMultiplier-magneticLoss)/inertance);
   });
   const currents=electricalCurrents(c.modules,Qm,current,dt,mutual,
    opts.inductanceH,totalResistance,coeff);
   const midI=current.map((v,i)=>(v+currents.next[i])/2);
   const midP=states.map((s,i)=>s.P+.5*dt*(chambers[i].outputM3S-s.Q)/opts.complianceM3PerPa);
   const next=states.map((s,i)=>{
-   const friction=flowAtSpeed(loopModel,Qm[i]/areaM2).pressureViscousPa;
+   const friction=flowAtSpeed(loopModel,Qm[i]/areaM2).pressureViscousPa*opts.flowResistanceMultiplier;
    const drag=coeff[i]*midI[i];
    const q=Math.max(0,s.Q+dt*(midP[i]-friction-drag)/inertance);
    const p=s.P+dt*(chambers[i].outputM3S-(s.Q+q)/2)/opts.complianceM3PerPa;
