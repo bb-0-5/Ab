@@ -31,7 +31,7 @@ kbd{padding:2px 4px;background:#243b45;font-size:11px}footer{border-top:1px soli
 <div class="eyebrow">ENGINEERING EXPERIMENT 004 · MOVING MEMBRANE / MHD / MAGNETIC STACKS</div>
 <h1>Can two toroidal devices <em>help each other?</em></h1>
 <p class="summary">Real four-bar linkage closure drives changing membrane chamber volumes. Computed pressure, startup flow, electrical current, coil coupling and input/output energy are compared across five arrangements. The simulation runs on your device.</p>
-<div class="model-banner"><b>Engineering model, not a working generator.</b> The chambers are idealized check-valve diaphragm pumps, with one hydraulic loop per torus. Most paired cases are independent fluid loops. The two <b>IN SERIES</b> modes instead connect moving chambers into one closed circuit using finite-volume continuity and ideal one-way valves. The 90° field coupling is a symmetry approximation; real magnets and membranes require measured properties and field/FSI solvers.</div>
+<div class="model-banner"><b>Engineering model, not a working generator.</b> The chambers use simplified check-valve diaphragm pumping. Most paired cases have one hydraulic loop per torus. The two <b>IN SERIES</b> modes instead connect moving chambers into one closed circuit using finite-volume continuity and ideal one-way valves. The 90° field coupling is a symmetry approximation; real magnets and membranes require measured properties and field/FSI solvers.</div>
 <div class="eyebrow">CHOOSE AN ARRANGEMENT · AUTOMATICALLY CALCULATED</div>
 <div id="configButtons" class="controls" role="group" aria-label="Select arrangement"></div>
 <div class="workspace">
@@ -54,7 +54,7 @@ kbd{padding:2px 4px;background:#243b45;font-size:11px}footer{border-top:1px soli
 <section class="panel timeline">
 <div class="chart-head"><h2>Flow starts from rest, then responds to the iris strokes</h2><button id="motion" type="button" aria-pressed="true">Ⅱ PAUSE</button></div>
 <canvas id="flowchart" role="img" aria-label="Numerically computed startup flow against elapsed time"></canvas>
-<div class="legend"><span>Solid line: module 1 flow</span><span>Dashed line: module 2 flow</span><span>Time advances using precomputed conservative energy-accounted integration steps.</span></div>
+<div class="legend"><span>Solid line: module 1 flow</span><span>Dashed line: module 2 flow</span><span>Chronological fields are computed from changing chamber volume and the hydraulic/electrical equations—not decorative particles.</span></div>
 </section>
 <section class="panel results"><div class="panel-head"><h2>Same numerical assumptions · every arrangement tested</h2><small>RANKED BY NET ELECTRICAL RESULT · NOT BY GROSS VOLTAGE</small></div>
 <div class="scroll"><table><thead><tr><th>ARRANGEMENT</th><th>GROSS µW</th><th>MOTOR mW</th><th>NET mW</th><th>FLOW µL/s</th><th>COUPLING</th></tr></thead><tbody id="comparison"></tbody></table></div>
