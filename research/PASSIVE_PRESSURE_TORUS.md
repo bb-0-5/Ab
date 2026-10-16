@@ -22,7 +22,7 @@ Uniform 10 MPa or 40 MPa at zero initial velocity: exactly zero flow forever in 
 
 ## Real V10 membrane
 
-The imported solid mask is the exact selected V10 solid/void voxel grid if present and checksum verified on the same origin. Otherwise the app explicitly labels a V10-generated fallback. The frozen grid's z-plane local void occupancy constricts each equivalent toroidal segment. The matched-grid V10 reference conductance ratio provides a bounded resistance proxy. This is a reduced-order projection, not a physical transformation of a cube into a deforming toroidal elastomer, a measured permeability tensor, or a validated metal-pore coupling. No fictitious vortex or circulation source is inserted.
+The imported solid mask is the exact selected V10 solid/void voxel grid if present and checksum verified on the same origin. Otherwise the app explicitly labels a V10-generated fallback. The V10 pressure gradient points along Y; each Y-normal X/Z cross-section's void occupancy now maps to the corresponding torus segment. Joining the original inlet and outlet into a ring is an unvalidated connection. The matched-grid V10 reference conductance ratio provides a bounded resistance proxy. This is a reduced-order projection, not a physical transformation of a cube into a deforming toroidal elastomer, a measured permeability tensor, or a validated metal-pore coupling. No fictitious vortex or circulation source is inserted.
 
 ## Scientific limitations
 
