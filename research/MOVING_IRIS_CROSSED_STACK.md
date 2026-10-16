@@ -22,7 +22,7 @@ For each electrical circuit, Faraday EMF is proportional to B*d*U and an RL load
 
 Budget: externally supplied hydraulic pressure-volume work = viscous heat + load electrical heat + internal conductor heat + stored fluid kinetic, membrane compliance and magnetic energy, to the declared integration tolerance. Motor efficiency and a nonzero per-device idle load are counted in electrical net power.
 
-## Cases screened (independent loops)
+## Cases screened (independent loops and genuine serial loop)
 
 - One module baseline.
 - Two aligned toroids, nominal N/S alignment.
@@ -30,7 +30,7 @@ Budget: externally supplied hydraulic pressure-volume work = viscous heat + load
 - Two parallel-axis devices, second electrode polarity and drive phase inverted.
 - Two devices 90 degrees apart with counter-rotating *crank*, not magically reversed flow.
 
-**Important:** The two stacked loops are hydraulically independent. This first model does NOT claim that fluid is passing through both pumps sequentially. A hydraulic series model needs extra shared inlet/outlet pressure states, valve leakage, transient interfaces, pipe connectors and an experimentally calibrated full-circuit pressure loss map. Joining pressure sources by addition without volume continuity would manufacture energy.
+**Two distinct topologies, never conflated:** The original five stacked cases are hydraulically independent. Two new "IN SERIES" cases now put a moving diaphragm cavity at each of TWO nodes in the SAME closed circuit. They are coupled by two directed hydraulic branches with ideal nonreturn valves. The pair follows finite-volume continuity: C dp_i/dt = Q_in,i - Q_out,i - dV_i/dt. The shared fluid loop conserves mass at both moving walls, instead of adding invented pressures or injecting liquid twice. This is a credible reduced-order topology, NOT measured valve geometry, transient curved-duct CFD, flow separation or an experimentally calibrated pipe connector.
 
 **No net electrical amplification is claimed:** Gross output is not the objective. For each case, the summed external motor power and coil/bulk losses are included. Permanent-magnet orientations may shape flux and currents but cannot create continuous work without an external energy source. A steady field does not provide ongoing magnetic fuel.
 
@@ -43,3 +43,13 @@ Budget: externally supplied hydraulic pressure-volume work = viscous heat + load
 5. Verify design safety for electrically conductive liquid metals; real oxidation, chemistry and membrane compatibility are not modeled.
 
 The website is deliberately restored on the owner’s request, preserving the original V0–V13 code. This lab is a separate research route.
+
+## Actual sequential-flow experiment
+
+New source: public/toroidal-series-loop.mjs. It solves two chamber gauge pressures, the two forward-directed inter-chamber volume flows, two iris wall-volume histories, coupled currents and stored fluid/diaphragm/magnetic energy. Both chambers start at zero velocity and zero gauge pressure. One case shifts the second crank by half a cycle (traveling compress/expand motion); the control drives both in phase. The alternating strokes initiate circulation; synchronous strokes do not, under identical simplified model assumptions. No initial kinetic current, external spinning rotor or zero-cost magnetic work is injected.
+
+Controls: ideal check valves are assumed on BOTH branches. Negative gauge pressure is not synonymous with cavitation: vapor-pressure/absolute-pressure bounds are checked separately. Finite-volume continuity and full energy budgets are tested, including reversible membrane compliance storage and electrical Joule/load losses. Drive cost counts positive wall work and nonzero electrical idle power. Negative wall work is NOT automatically credited as regenerated electricity.
+
+Mathematical caution: with only two cell volumes, this model cannot predict secondary Dean vortices, dynamic pressure across the valves, actual toroidal branch lengths, 3-D swirling magnetic currents, or membrane stress. The cosine-law mutual inductance is a symmetry-dependent circuit approximation, not proof that physical orthogonal magnets always decouple.
+
+This is now offered in the website workbench as two additional arrangements; do not compare the SUM of two independent loop flows directly with the ONE common serial loop flow as an engineering efficiency claim.
