@@ -46,11 +46,13 @@ export function flowAtSpeed(model,speed){
  if(speed===0)return {velocityMPerS:0,flowM3S:0,Re:0,De:0,
   pressureViscousPa:0,pressureMagneticPa:0,pressureTotalPa:0,
   hydraulicViscousW:0,lorentzWorkW:0,loadElectricalW:0,jouleHeatW:0,
-  electricalBalanceErrorW:0,openCircuitV:0,validCurvature:true};
+  electricalBalanceErrorW:0,openCircuitV:0,validCurvature:g.poloidalTurns===0};
  const Re=f.rho*speed*g.ductDiameterM/f.mu;
  const De=Re*Math.sqrt(g.ductDiameterM/(2*g.meanCurvatureRadiusM));
  let friction=whiteDarcy(Re,De,g.relativeCurvature);
- const validCurvature=friction!==null;
+ // White's calibration assumes a uniformly curved circular duct. Actual
+ // diagonal torus knots have torsion and varying curvature: flag unsupported.
+ const validCurvature=friction!==null&&g.poloidalTurns===0;
  // Straight-duct extrapolation is a DIAGNOSTIC only, never a validated win.
  if(friction===null)friction=Re<2300?64/Re:0.3164/Re**.25;
  const pressureViscousPa=friction*L/g.ductDiameterM*f.rho*speed**2/2;
