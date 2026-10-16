@@ -142,8 +142,19 @@ export function simulatePhasedDrive(point,{heads=4,hertz=2,periods=5,stepsPerPer
 export function automaticToroidalAudit(){
  const input={majorRadiusM:.18,minorRadiusM:.045,ductDiameterM:.004,
   poloidalTurns:1,toroidalTurns:1,actuatorHeadPa:1500,pumpEfficiency:.7,driveParasiticW:.1};
- const variations=[0,.25,.75,1.5].map(B=>({fluid:'galinstan',magneticFieldTesla:B}))
-   .concat([{fluid:'water20C',magneticFieldTesla:.75}]);
- return {input,rows:variations.map(v=>operatingPoint({...input,...v})),
-  purpose:'Reject energy claims that omit externally supplied pump power and MHD braking'};
+ // Reference circle and two alternative diagonal channel arrangements.
+ // Compare all cases at exactly the same external pressure head and duct size.
+ const paths=[
+  {poloidalTurns:0,toroidalTurns:1},
+  {poloidalTurns:1,toroidalTurns:1},
+  {poloidalTurns:1,toroidalTurns:2}
+ ];
+ const variations=paths.flatMap(path=>[0,.25,.75,1.5].map(B=>({
+  ...path,fluid:'galinstan',magneticFieldTesla:B
+ }))).concat([{poloidalTurns:1,toroidalTurns:1,fluid:'water20C',magneticFieldTesla:.75}]);
+ const rows=variations.map(v=>operatingPoint({...input,...v}));
+ return {input,rows,
+  modeledReference:rows.filter(r=>r.geometry.poloidalTurns===0),
+  diagonalHypotheses:rows.filter(r=>r.geometry.poloidalTurns>0),
+  purpose:'Conserve energy and vary route winding, field and working fluid at the same externally supplied pressure head. Diagonal torsion remains unvalidated.'};
 }
