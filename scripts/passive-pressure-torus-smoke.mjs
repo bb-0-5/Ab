@@ -42,6 +42,10 @@ assert.ok(out.remainingStoredJ+out.viscousHeatJ+out.electricalJ+out.mhdJouleHeat
 almost(pulse.pressure.reduce((sum,p,i)=>sum+p*pulse.C[i],0),startMass,1e-14);
 assert.ok(captured.some(s=>s.pressurePerturbationPa[12]!==captured[0].pressurePerturbationPa[12]),
  'Initially localized pressure must evolve');
+const directional=new Uint8Array(7*7*7);
+for(let z=0;z<7;z++)for(let x=2;x<7;x++)directional[z*49+x]=1;
+const mapped=buildPassiveRing({n:7,layers:7,mask:directional,supported:false},{segments:56,mode:'uniform'});
+assert.ok(mapped.occupancy[0]<mapped.occupancy[20], 'V10 original Y-normal cross-section should constrain first torus arc');
 const noSource=buildPassiveRing(null,{mode:'pulse'});
 assert.equal(noSource.sourceMask,false);
 const withSource=buildPassiveRing(membrane,{mode:'pulse'});
