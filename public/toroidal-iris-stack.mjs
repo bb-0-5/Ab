@@ -34,16 +34,18 @@ const range=(()=>{
  return {min,max};
 })();
 export function irisLinkage(angle){return solveFourBar(angle)}
-export function irisMembrane(angle,{radiusM=.002,strokeFraction=.11,chamberLengthM=.008}={}){
- requireCondition(positive(radiusM)&&strokeFraction>0&&strokeFraction<.35&&positive(chamberLengthM),'Bad membrane dimensions');
+export function irisMembrane(angle,{radiusM=.002,strokeFraction=.11,chamberLengthM=.008,fluidOpenFraction=1}={}){
+ requireCondition(positive(radiusM)&&strokeFraction>0&&strokeFraction<.35&&positive(chamberLengthM)&&
+  positive(fluidOpenFraction)&&fluidOpenFraction<=1,'Bad membrane dimensions');
  const gamma=solveFourBar(angle).followerAngle;
  const position=2*(gamma-range.min)/(range.max-range.min)-1;
  const r=radiusM*(1+strokeFraction*position);
  const delta=1e-4;
  const displacementRate=radiusM*strokeFraction*2/(range.max-range.min)*
   (solveFourBar(angle+delta).followerAngle-solveFourBar(angle-delta).followerAngle)/(2*delta);
- return {radiusM:r,referenceRadiusM:radiusM,position,volumeM3:area(r)*chamberLengthM,
-  dVolumeDangleM3:2*Math.PI*r*chamberLengthM*displacementRate,
+ return {radiusM:r,referenceRadiusM:radiusM,position,fluidOpenFraction,
+  volumeM3:area(r)*chamberLengthM*fluidOpenFraction,
+  dVolumeDangleM3:2*Math.PI*r*chamberLengthM*displacementRate*fluidOpenFraction,
   closureErrorM:solveFourBar(angle).closureErrorM};
 }
 export const CONFIGURATIONS=Object.freeze([
@@ -60,7 +62,7 @@ export function validateConfiguration(choice){
   Number.isFinite(c.phaseRad),'Invalid stack arrangement');
  return c;
 }
-export function chamberOutputAt(timeS,{heads=4,frequencyHz=3,spin=1,phaseRad=0}={}){
+export function chamberOutputAt(timeS,{heads=4,frequencyHz=3,spin=1,phaseRad=0,fluidOpenFraction=1}={}){
  requireCondition(Number.isFinite(timeS)&&timeS>=0&&Number.isInteger(heads)&&heads>=1&&heads<=12&&
   positive(frequencyHz)&&frequencyHz<=30,'Invalid iris chronology');
  const omega=TAU*frequencyHz*spin;
@@ -68,7 +70,7 @@ export function chamberOutputAt(timeS,{heads=4,frequencyHz=3,spin=1,phaseRad=0}=
  const chambers=[];
  for(let h=0;h<heads;h++){
   const angle=omega*timeS+phaseRad-h*TAU/heads;
-  const mem=irisMembrane(angle);
+  const mem=irisMembrane(angle,{fluidOpenFraction});
   const dVdt=mem.dVolumeDangleM3*omega;
   const out=Math.max(0,-dVdt),intake=Math.max(0,dVdt);
   outputM3S+=out;intakeM3S+=intake;volumeM3+=mem.volumeM3;
@@ -94,7 +96,7 @@ export function simulateIrisStack(choice='orthogonal',options={}){
   magneticFieldTesla:.45,loadOhm:.0005,internalOhm:.0005,
   inductanceH:.00012,mutualMaximum:.32,
   complianceM3PerPa:6e-10,driveEfficiency:.7,idleWPerModule:.012,
-  flowResistanceMultiplier:1,
+  flowResistanceMultiplier:1,fluidOpenFraction:1,
   ...options};
  requireCondition(Number.isInteger(opts.periods)&&opts.periods>=3&&opts.periods<=14&&
   Number.isInteger(opts.stepsPerCycle)&&opts.stepsPerCycle>=300&&opts.stepsPerCycle<=1200&&
@@ -104,7 +106,8 @@ export function simulateIrisStack(choice='orthogonal',options={}){
   opts.mutualMaximum>=0&&opts.mutualMaximum<=.7&&
   opts.magneticFieldTesla>=0&&opts.magneticFieldTesla<=3&&
   opts.driveEfficiency>0&&opts.driveEfficiency<=1&&opts.idleWPerModule>=0&&
-  Number.isFinite(opts.flowResistanceMultiplier)&&opts.flowResistanceMultiplier>=1&&opts.flowResistanceMultiplier<=30,'Invalid model bounds');
+  Number.isFinite(opts.flowResistanceMultiplier)&&opts.flowResistanceMultiplier>=1&&opts.flowResistanceMultiplier<=30&&
+  positive(opts.fluidOpenFraction)&&opts.fluidOpenFraction<=1,'Invalid model bounds');
  const geometry=torusPath({majorRadiusM:.18,minorRadiusM:.045,
   ductDiameterM:.004,poloidalTurns:1,toroidalTurns:1});
  const fluid=FLUIDS.galinstan,areaM2=area(geometry.ductDiameterM/2);
@@ -126,7 +129,8 @@ export function simulateIrisStack(choice='orthogonal',options={}){
   const t=(step+.5)*dt;
   const chambers=states.map((_,j)=>chamberOutputAt(t,{
    heads:opts.heads,frequencyHz:opts.frequencyHz,
-   spin:j===1?c.spin:1,phaseRad:j===1?c.phaseRad:0
+   spin:j===1?c.spin:1,phaseRad:j===1?c.phaseRad:0,
+   fluidOpenFraction:opts.fluidOpenFraction
   }));
   let Qm=states.map((s,i)=>{
    const curve=flowAtSpeed(loopModel,s.Q/areaM2);
