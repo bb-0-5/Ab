@@ -25,6 +25,15 @@ h2{font-size:18px;margin:0;letter-spacing:-.02em}h3{font-size:13px;text-transfor
 kbd{padding:2px 4px;background:#243b45;font-size:11px}footer{border-top:1px solid var(--line);margin-top:25px;padding-top:20px;font-size:12px;color:var(--muted)}
 @media(max-width:950px){.workspace{grid-template-columns:1fr}.canvas-wrap{min-height:300px}#geometry{height:340px}}
 @media(max-width:570px){main{padding:19px 12px 58px}header .inner{padding:12px}.controls{gap:5px}.controls button{font-size:10px;padding:9px 9px}.metric{padding:12px}.metric strong{font-size:18px}.explain{grid-template-columns:1fr}#geometry{height:350px}.chart-info span{font-size:10px;padding:8px}.model-banner{margin-bottom:14px}}
+.geometry-handoff{margin-top:14px;display:grid;grid-template-columns: minmax(180px,.48fr) minmax(0,1fr);gap:0}
+.geometry-handoff .section-canvas{min-height:230px;padding:12px;background:#091b26}
+#membraneSource{display:block;width:100%;height:205px;image-rendering:pixelated}
+.geometry-handoff .section-copy{padding:17px;display:flex;flex-direction:column;justify-content:center;gap:11px}
+.source-name{font:800 12px/1.4 ui-monospace,monospace;color:#84e8c8;letter-spacing:.05em}
+#v10Status{font-size:12px;line-height:1.6;color:#bacfd0}
+#v10Stats{font:11px/1.7 ui-monospace,monospace;color:#edc59e}
+#reloadV10{align-self:flex-start;background:#18353b;border:1px solid #457474;color:#ecf8f3;padding:9px 12px;cursor:pointer;border-radius:6px;font-size:11px;font-weight:700}
+@media(max-width:570px){.geometry-handoff{grid-template-columns:1fr}.geometry-handoff .section-canvas{min-height:230px}.geometry-handoff .section-copy{padding:13px}}
 </style></head>
 <body><header><div class="inner"><a href="/simulator.html" class="brand">ABOVEBOUND <span>↗</span> RESEARCH</a><nav><a href="/simulator.html">ORIGINAL V0–V13</a><a href="/membrane.html">MEMBRANE FLOW</a><a href="https://github.com/bb-0-5/Ab" target="_blank" rel="noopener">SOURCE CODE ↗</a></nav></div></header>
 <main>
@@ -51,6 +60,23 @@ kbd{padding:2px 4px;background:#243b45;font-size:11px}footer{border-top:1px soli
 <div class="metric"><small>Energy budget error</small><strong id="error">—</strong></div>
 </div><div class="legend"><span id="assessment">Computing physical constraints...</span></div></section>
 </div>
+<section class="panel geometry-handoff" aria-label="Exact membrane geometry inherited from V10 membrane flow simulator">
+ <div class="section-canvas">
+   <div class="eyebrow" id="v10SliceLabel">ORIGINAL V10 MEMBRANE SOLID / VOID</div>
+   <canvas id="membraneSource" role="img" aria-label="Actual voxel-by-voxel solid and void cross-section inherited from the V10 membrane pressure-flow simulator"></canvas>
+ </div>
+ <div class="section-copy">
+   <div class="eyebrow">03 / GEOMETRY SOURCE · MEMBRANE COMPRESSION / FLOW</div>
+   <div class="source-name" id="v10Origin">READING ORIGINAL V10 GEOMETRY</div>
+   <div id="v10Status" aria-live="polite">Checking selected V10 voxel mask on the same origin.</div>
+   <div id="v10Stats">Computing same-grid hydraulic reference...</div>
+   <p class="subtle"><strong>Copper</strong> voxels are actual V10 solid material; <strong>blue</strong> voxels are voids. The displayed slices are the source's static 3D topology, not a new synthetic torus mesh. Their modeled through-flow resistance now changes the torus calculations. Iris compression is applied separately to the outer moving chamber; a combined deforming 3D membrane/CFD model is <strong>not</strong> solved yet.</p>
+   <div><button id="reloadV10" type="button">↻ LOAD LATEST V10 MASK</button>
+    <a href="/simulator.html" style="font-size:11px;margin-left:13px">Original V0–V13 →</a>
+    <a href="/membrane.html" style="font-size:11px;margin-left:13px">V10 membrane flow →</a>
+   </div>
+ </div>
+</section>
 <section class="panel timeline">
 <div class="chart-head"><h2>Flow starts from rest, then responds to the iris strokes</h2><button id="motion" type="button" aria-pressed="true">Ⅱ PAUSE</button></div>
 <canvas id="flowchart" role="img" aria-label="Numerically computed startup flow against elapsed time"></canvas>
@@ -62,13 +88,13 @@ kbd{padding:2px 4px;background:#243b45;font-size:11px}footer{border-top:1px soli
 </section>
 <div class="explain"><section>
 <h3>What the model actually moves</h3>
-<p>The four-bar crank and coupler are solved from mechanical link lengths at each input angle. The follower drives a membrane aperture approximation, changing actual chamber volume. Each head has a calculated suction or discharge rate from its volume derivative. In the IN SERIES experiment, two moving volumes obey separate mass conservation equations, linked by two directed ideal check valves around one closed fluid circuit. The generated flow drives hydraulic inertia and magnetic braking.</p>
+<p>The four-bar crank and coupler are solved from mechanical link lengths at each input angle. The follower drives a membrane aperture approximation, changing actual chamber volume. Each head has a calculated suction or discharge rate from its volume derivative. In the IN SERIES experiment, two moving volumes obey separate mass conservation equations, linked by two directed ideal check valves around one closed fluid circuit. The imported original V10 solid/void geometry (or labeled V10 fallback) now supplies a matched-grid hydraulic conductance ratio, which modifies the simulated torus resistance. The generated flow drives hydraulic inertia and magnetic braking.</p>
 <p>Displayed membrane strokes are visually enlarged to be legible; actual radii are in the numerical receipt. A check valve is idealized, with no unresolved reverse leakage.</p>
 </section><section>
 <h3>90°, north/south and opposite rotation</h3>
 <p><b>90°:</b> The idealized coil mutual inductance approaches zero in the chosen symmetric arrangement; this can reduce coupling rather than amplify it. <b>North facing south / inverted:</b> Reverses electrical polarity and changes mutual interactions, but output still requires mechanical pumping energy. <b>Counter-rotating:</b> The second iris crank turns backwards, altering phase and pulse timing; fluid direction is separately set by the ideal check valve.</p>
 <p>The alternating IN SERIES pair initiates forward flow from rest in the numerical circuit; synchronized strokes provide the control. The test tracks coil magnetic energy, membrane compliance and fluid kinetic energy. No free spin-up or efficiency gain is awarded.</p>
 </section></div>
-<footer>Model: 1D hydraulic inertance + compliance, planar four-bar closure, linear reciprocal RL mutual coupling, passive electrical resistance. No 3D CFD, field map, moving-mesh elastomer FSI, pump characterization or measured fabrication.</footer>
-</main><script type="module" src="/toroidal-iris-view.mjs?v=series-r2"></script>
+<footer>Model: 1D hydraulic inertance + compliance, planar four-bar closure, linear reciprocal RL mutual coupling, passive electrical resistance. No 3D CFD, field map, moving-mesh elastomer FSI, pump characterization or measured fabrication. Source V10 pores are static; their conductance ratio is an unvalidated proxy for the torus channel, not proof that the porous scaffold is an elastic wall.</footer>
+</main><script type="module" src="/toroidal-iris-view.mjs?v=v10-import-r3"></script>
 </body></html>
