@@ -110,7 +110,8 @@ export function simulateIrisStack(choice='orthogonal',options={}){
  const coeff=Array.from({length:c.modules},(_,i)=>opts.magneticFieldTesla*geometry.ductDiameterM/areaM2*
    (i===1?c.polarity:1));
  // cos(theta) is a coaxial/dipole *proxy*, not a full field map.
- const mutual=c.modules===1?0:opts.inductanceH*opts.mutualMaximum*Math.cos(c.angleDeg*Math.PI/180);
+ const orientation=Math.cos(c.angleDeg*Math.PI/180);
+ const mutual=c.modules===1||Math.abs(orientation)<1e-12?0:opts.inductanceH*opts.mutualMaximum*orientation;
  const totalResistance=opts.loadOhm+opts.internalOhm;
  const dt=1/(opts.frequencyHz*opts.stepsPerCycle),total=opts.periods*opts.stepsPerCycle;
  const states=Array.from({length:c.modules},()=>({Q:0,P:0}));
