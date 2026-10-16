@@ -51,7 +51,14 @@ for(const result of [one,four]){
  assert.ok(result.history.every(x=>x.flowM3S>=0&&x.storedKineticJ>=0));
 }
 const rows=automaticToroidalAudit().rows;
-assert.equal(rows.length,5);
+assert.equal(rows.length,13);
+assert.ok(rows.some(x=>x.geometry.poloidalTurns===0&&x.correlationApplicable));
+assert.ok(rows.some(x=>x.geometry.poloidalTurns===1&&x.geometry.toroidalTurns===2));
+assert.ok(rows.filter(x=>x.geometry.poloidalTurns>0).every(x=>!x.correlationApplicable),
+ 'A diagonal path with torsion is NOT validated by uniform-coil White correlation');
+const noB=rows.filter(x=>x.model.magneticFieldTesla===0&&x.model.fluid.name===FLUIDS.galinstan.name);
+assert.ok(new Set(noB.map(x=>x.geometry.lengthM.toFixed(5))).size>=2,
+ 'Different diagonal channel arrangements must not collapse to the same geometry');
 assert.ok(rows.every(x=>x.validated===false&&x.netElectricW<0));
 assert.ok(rows.some(x=>x.model.fluid.name===FLUIDS.water20C.name));
 console.log('TOROIDAL ENERGY TESTS PASS',JSON.stringify({
