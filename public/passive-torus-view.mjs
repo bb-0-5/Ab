@@ -43,7 +43,8 @@ function drawMask(t){
  const {w,h}=scale(sourceCanvas,sourceCtx),ctx=sourceCtx;
  ctx.clearRect(0,0,w,h);ctx.fillStyle='#081722';ctx.fillRect(0,0,w,h);
  if(!geometry||!solid){ctx.fillStyle='#e0b07d';ctx.font='12px monospace';ctx.fillText('SOURCE UNAVAILABLE',14,23);return;}
- const z=Math.min(geometry.layers-1,Math.floor(t*1000/140)%geometry.layers);
+ // Browse true adjacent voxel planes chronologically; the solid geometry itself never moves.
+ const z=Math.floor(at/12)%geometry.layers;
  const slice=maskCrossSection(geometry,z),n=slice.n;
  const cell=Math.min((w-30)/n,(h-30)/n),x0=(w-cell*n)/2,y0=(h-cell*n)/2;
  for(let y=0;y<n;y++)for(let x=0;x<n;x++){
