@@ -1,16 +1,18 @@
 import {CONFIGURATIONS,compareIrisStacks,chamberOutputAt,irisLinkage} from './toroidal-iris-stack.mjs?v=iris-stack-r1';
+import {SERIAL_ARRANGEMENTS,simulateSerialIris} from './toroidal-series-loop.mjs?v=series-r2';
 const $=id=>document.getElementById(id);
 const geometry=$('geometry'),chart=$('flowchart'),geom=geometry.getContext('2d'),plot=chart.getContext('2d');
-const data=compareIrisStacks();
+const ALL_CONFIGS=[...CONFIGURATIONS,...SERIAL_ARRANGEMENTS];
+const data=[...compareIrisStacks(),...SERIAL_ARRANGEMENTS.map(x=>simulateSerialIris(x))];
 const byId=new Map(data.map(x=>[x.configuration.id,x]));
-let selected=CONFIGURATIONS[2].id,playing=true,startTime=performance.now(),pausedAt=0;
+let selected=SERIAL_ARRANGEMENTS[0].id,playing=true,startTime=performance.now(),pausedAt=0;
 function current(){return byId.get(selected)}
 function number(x,d=2){return Number.isFinite(x)?x.toFixed(d):'—'}
 function milliW(x){return number(x*1e3,3)+' mW'}
 function microW(x){return number(x*1e6,2)+' µW'}
 function scale(canvas,ctx){const rect=canvas.getBoundingClientRect(),d=Math.min(2,window.devicePixelRatio||1),w=Math.round(rect.width*d),h=Math.round(rect.height*d);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}ctx.setTransform(d,0,0,d,0,0);return {w:rect.width,h:rect.height}}
 const buttonGroup=$('configButtons');
-for(const c of CONFIGURATIONS){
+for(const c of ALL_CONFIGS){
  const b=document.createElement('button');
  b.textContent=c.label;b.type='button';b.dataset.mode=c.id;
  b.onclick=()=>{selected=c.id;startTime=performance.now();pausedAt=0;playing=true;$('motion').textContent='Ⅱ PAUSE';updateUI()};
@@ -27,7 +29,7 @@ function powerStats(r){
  $('geometryLabel').textContent=r.configuration.label;
  const cap=r.negativePressureSteps?'Model entered negative pressure (invalid cavitation regime).':
    'Energy accounted · numerically tested, not experimentally validated';
- $('assessment').textContent=cap+' · mechanism closure '+number(r.linkageClosureErrorM*1e9,5)+' nm';
+ $('assessment').textContent=(r.configuration.hydraulic==='series'?'SAME CLOSED FLUID CIRCUIT · ':'INDEPENDENT FLUID LOOPS · ')+cap+' · mechanism closure '+number(r.linkageClosureErrorM*1e9,5)+' nm';
  for(const b of buttonGroup.children)b.setAttribute('aria-pressed',String(b.dataset.mode===selected));
  const tbody=$('comparison');tbody.replaceChildren();
  const rank=[...data].sort((a,b)=>b.netElectricalW-a.netElectricalW);
@@ -65,7 +67,7 @@ function drawModule(ctx,cx,cy,scale,r,moduleId,t,width){
   if(!h)ctx.moveTo(px,py);else ctx.lineTo(px,py);
  }
  ctx.strokeStyle='#67dac9';ctx.lineWidth=2.4;ctx.stroke();ctx.restore();
- const stroke=chamberOutputAt(t,{heads:4,frequencyHz:3,spin:j===1?c.spin:1,phaseRad:j===1?c.phaseRad:0});
+ const stroke=chamberOutputAt(t,{heads:c.hydraulic==='series'?1:4,frequencyHz:3,spin:j===1?c.spin:1,phaseRad:j===1?c.phaseRad:0});
  for(let h=0;h<stroke.chambers.length;h++){
   const th=2*Math.PI*h/stroke.chambers.length;
   const x=Math.cos(th)*mid,y=Math.sin(th)*mid*foreshorten;
