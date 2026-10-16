@@ -24,12 +24,15 @@ export function simulateSerialIris(selected='serial-phase',user={}){
   throw RangeError('Invalid serial arrangement');
  const o={frequencyHz:3,periods:7,stepsPerCycle:640,fieldTesla:.45,
   complianceM3PerPa:2e-10,loadOhm:.0005,internalOhm:.0005,
-  inductanceH:.00012,mutualMax:.32,motorEfficiency:.7,idleWPerModule:.012,...user};
+  inductanceH:.00012,mutualMax:.32,motorEfficiency:.7,idleWPerModule:.012,
+  flowResistanceMultiplier:1,fluidOpenFraction:1,...user};
  if(!good(o.frequencyHz)||o.frequencyHz>25||!Number.isInteger(o.periods)||o.periods<3||o.periods>14||
   !Number.isInteger(o.stepsPerCycle)||o.stepsPerCycle<300||o.stepsPerCycle>1500||
   ![o.complianceM3PerPa,o.loadOhm,o.internalOhm,o.inductanceH,o.motorEfficiency].every(good)||
   o.motorEfficiency>1||!Number.isFinite(o.mutualMax)||o.mutualMax<0||o.mutualMax>.7||
-  !Number.isFinite(o.fieldTesla)||o.fieldTesla<0||o.fieldTesla>3||!good(o.idleWPerModule))
+  !Number.isFinite(o.fieldTesla)||o.fieldTesla<0||o.fieldTesla>3||!good(o.idleWPerModule)||
+  !Number.isFinite(o.flowResistanceMultiplier)||o.flowResistanceMultiplier<1||o.flowResistanceMultiplier>30||
+  !good(o.fluidOpenFraction)||o.fluidOpenFraction>1)
   throw RangeError('Invalid serial model parameters');
  const geometry=torusPath({majorRadiusM:.18,minorRadiusM:.045,ductDiameterM:.004,poloidalTurns:1,toroidalTurns:1});
  const fluid=FLUIDS.galinstan,A=Math.PI*(geometry.ductDiameterM/2)**2,hydraulicL=fluid.rho*geometry.lengthM/(2*A);
@@ -38,8 +41,11 @@ export function simulateSerialIris(selected='serial-phase',user={}){
  const mutual=Math.abs(tilt)<1e-12?0:o.inductanceH*o.mutualMax*tilt;
  const dt=1/(o.frequencyHz*o.stepsPerCycle),steps=o.periods*o.stepsPerCycle,duration=steps*dt;
  const model={geometry,fluid,magneticFieldTesla:0,loadFactor:.5};
- const friction=q=>flowAtSpeed(model,Math.max(0,q)/A).pressureViscousPa/2;
- const radius=(i,t)=>irisMembrane(TAU*o.frequencyHz*t+(i===1?c.phaseRad:0),{chamberLengthM:.028});
+ // The V10 matched-grid Poiseuille Q_open/Q_mask ratio is an explicitly
+ // unvalidated multiplier of curved-duct drag, NOT validated toroidal CFD.
+ const friction=q=>flowAtSpeed(model,Math.max(0,q)/A).pressureViscousPa/2*o.flowResistanceMultiplier;
+ const radius=(i,t)=>irisMembrane(TAU*o.frequencyHz*t+(i===1?c.phaseRad:0),{
+  chamberLengthM:.028,fluidOpenFraction:o.fluidOpenFraction});
  let P=[0,0],Q=[0,0],I=[0,0],wallWorkJ=0,positiveWallJ=0,viscJ=0,loadJ=0,copperJ=0,magneticWorkJ=0;
  let clampedSteps=0,cavitationRiskSteps=0,flowSamples=0,lateCount=0,maximumFlowM3S=0;
  const massIn=[0,0],massOut=[0,0],wallVolumeChanges=[0,0],samples=[];

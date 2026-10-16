@@ -84,3 +84,10 @@ jobs:
         run: node scripts/toroidal-series-loop-smoke.mjs
       - name: Verify serial hydraulic solver included in deployed bundle
         run: test -f dist/toroidal-series-loop.mjs
+
+      - name: Verify exact original V10 geometry controls toroidal flow and retains checksum
+        run: node scripts/toroidal-v10-membrane-handoff-smoke.mjs
+      - name: Verify V10-to-iris source and render assets exist in the built site
+        run: |
+          test -f dist/toroidal-membrane-bridge.mjs
+          grep -q 'id="membraneSource"' dist/toroidal-iris.html
